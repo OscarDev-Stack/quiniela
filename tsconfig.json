@@ -15,6 +15,10 @@
     "target": "ES2022",
     "module": "preserve"
   },
+  "exclude": [
+    "functions",
+    "node_modules"
+  ],
   "angularCompilerOptions": {
     "enableI18nLegacyMessageIdFormat": false,
     "strictInjectionParameters": true,

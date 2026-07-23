@@ -1,12 +1,53 @@
-import { Component, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
+import { filter } from 'rxjs/operators';
+import { ConfirmarDialogComponent } from './shared/confirmar-dialog.component';
+import { NovedadesComponent } from './shared/novedades.component';
+import { NovedadesService } from './shared/novedades.service';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
+  imports: [RouterOutlet, ConfirmarDialogComponent, NovedadesComponent],
   templateUrl: './app.html',
-  styleUrl: './app.scss'
+  styleUrl: './app.scss',
 })
 export class App {
   protected readonly title = signal('quiniela');
+
+  private readonly updates = inject(SwUpdate);
+  private readonly novedades = inject(NovedadesService);
+
+  /** Hay una versión nueva descargada y lista para usarse. */
+  readonly hayActualizacion = signal(false);
+
+  constructor() {
+    // Si la versión cambió desde la última visita, se muestran las novedades.
+    this.novedades.revisarAlEntrar();
+
+    if (!this.updates.isEnabled) return;
+
+    const sub = this.updates.versionUpdates
+      .pipe(filter((e): e is VersionReadyEvent => e.type === 'VERSION_READY'))
+      .subscribe(() => this.hayActualizacion.set(true));
+
+    // Busca actualizaciones al abrir y cada vez que se vuelve a la app.
+    const buscar = () => {
+      if (document.visibilityState === 'visible') {
+        this.updates.checkForUpdate().catch(() => undefined);
+      }
+    };
+    buscar();
+    document.addEventListener('visibilitychange', buscar);
+
+    inject(DestroyRef).onDestroy(() => {
+      sub.unsubscribe();
+      document.removeEventListener('visibilitychange', buscar);
+    });
+  }
+
+  /** Activa la versión nueva y reinicia la app. */
+  recargar(): void {
+    this.updates.activateUpdate().then(() => location.reload());
+  }
 }

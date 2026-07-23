@@ -1,0 +1,43 @@
+import { Injectable, inject } from '@angular/core';
+import { Functions, httpsCallable } from '@angular/fire/functions';
+import {
+    Auth,
+    user,
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    signOut,
+} from '@angular/fire/auth';
+
+@Injectable({ providedIn: 'root' })
+export class AuthService {
+    private readonly auth = inject(Auth);
+    private readonly fns = inject(Functions);
+
+    /** Observable del usuario autenticado (emite null si no hay sesión). */
+    readonly user$ = user(this.auth);
+
+    login(email: string, password: string) {
+        return signInWithEmailAndPassword(this.auth, email, password);
+    }
+
+    register(email: string, password: string) {
+        return createUserWithEmailAndPassword(this.auth, email, password);
+    }
+
+    logout() {
+        return signOut(this.auth);
+    }
+
+    /** Avisa a los administradores que hay una cuenta nueva. */
+    async avisarRegistro(): Promise<void> {
+        try {
+            const fn = httpsCallable<Record<string, never>, { ok: boolean }>(
+                this.fns,
+                'avisarRegistro',
+            );
+            await fn({} as Record<string, never>);
+        } catch {
+            // Si falla el aviso no pasa nada: la cuenta ya quedó creada.
+        }
+    }
+}

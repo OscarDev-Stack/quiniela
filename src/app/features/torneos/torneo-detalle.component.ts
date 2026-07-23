@@ -1,0 +1,1062 @@
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { Auth, user } from '@angular/fire/auth';
+import { map, switchMap } from 'rxjs/operators';
+import { of, Subscription } from 'rxjs';
+import { ActivatedRoute } from '@angular/router';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
+import { NavComponent } from '../../shared/nav.component';
+import { ReglasTorneoComponent } from './reglas-torneo.component';
+import { PartidosJornadaComponent } from './partidos-jornada.component';
+import { TablaPosicionesComponent } from './tabla-posiciones.component';
+import { CartonesJornadaComponent } from './cartones-jornada.component';
+import { TorneosService } from '../../core/services/torneos.service';
+import {
+  Torneo,
+  Participante,
+  Pick,
+  Quiniela,
+  fechaInscripcion,
+} from '../../core/models/torneo.model';
+import { Jornada, fechaJornada, equiposDeJornada } from '../../core/models/competicion.model';
+import { CompeticionesService } from '../../core/services/competiciones.service';
+import { ConfirmarService } from '../../shared/confirmar.service';
+
+@Component({
+  selector: 'app-torneo-detalle',
+  standalone: true,
+  imports: [CommonModule, FormsModule, NavComponent, ReglasTorneoComponent,
+    PartidosJornadaComponent,
+    TablaPosicionesComponent,
+    CartonesJornadaComponent,
+  ],
+  template: `
+    <div class="screen">
+      <app-nav [back]="true" [title]="torneo()?.nombre ?? 'Torneo'" />
+
+      @if (torneo(); as t) {
+        <div class="flujo" [class.flujo--cerrada]="revelarPicks()">
+        <div class="franja">
+          <span class="pill" [class.pill--vivo]="t.estado === 'en-curso'">
+            {{ etiquetaEstado(t.estado) }}
+          </span>
+
+          @if (t.estado !== 'finalizado') {
+            <span class="pill">
+              @if (t.estado === 'inscripcion') {
+                Inicia J{{ t.jornadaInicial }}
+              } @else {
+                Jornada {{ t.jornadaActual }}
+              }
+            </span>
+          }
+
+          <span class="pill">
+            <i class="ti ti-users"></i>
+            @if (esQuiniela()) {
+              {{ participantes().length }}
+            } @else {
+              {{ vivos().length }}/{{ participantes().length }}
+            }
+          </span>
+
+          @if (yo()) {
+            @if (esQuiniela()) {
+              <span class="pill pill--premio">{{ yo()!.puntosTorneo ?? 0 }} pts</span>
+            } @else if (yo()!.vidasRestantes > 0) {
+              <span class="pill"><i class="ti ti-heart-filled corazon"></i></span>
+            } @else {
+              <span class="pill pill--gastada">Sin vida</span>
+            }
+          }
+
+          @if (t.costoEntrada > 0) {
+            <span class="pill pill--premio">
+              <i class="ti ti-coins"></i>
+              {{ (t.premioPagado ?? t.bolsa) | number }}
+              @if (t.premioPagado) { <small>entregada</small> }
+            </span>
+          }
+        </div>
+
+
+        @if (t.estado === 'finalizado' && yo()) {
+          @if (soyGanador()) {
+            <div class="final final--gano">
+              <div class="trofeo"><i class="ti ti-trophy"></i></div>
+              <h2>¡Felicidades, ganaste!</h2>
+              @if (esQuiniela()) {
+                <p>
+                  Terminaste primero con {{ yo()!.puntosTorneo ?? 0 }} puntos
+                  entre {{ participantes().length }} jugador(es).
+                </p>
+              } @else {
+                <p>Fuiste el último en pie de {{ participantes().length }} participantes.</p>
+              }
+              @if (miPremio() > 0) {
+                <div class="premio-grande">+{{ miPremio() | number }} pts</div>
+                <p class="detalle">Ya están en tu saldo.</p>
+              }
+            </div>
+          } @else {
+            <div class="final final--perdio">
+              <div class="trofeo"><i class="ti ti-confetti"></i></div>
+              <h2>Torneo terminado</h2>
+              @if (esQuiniela()) {
+                <p>
+                  Ganó <strong>{{ t.ganadorAlias }}</strong>.
+                  Cerraste con {{ yo()!.puntosTorneo ?? 0 }} puntos.
+                </p>
+              } @else {
+                <p>
+                  Ganó <strong>{{ t.ganadorAlias }}</strong>.
+                  Caíste en la jornada {{ yo()!.eliminadoEn }}.
+                </p>
+              }
+            </div>
+          }
+        }
+
+        @if (mensaje()) {
+          <div class="msg" (click)="mensaje.set('')">{{ mensaje() }}</div>
+        }
+
+        @if (!yo() && !soyGestor()) {
+          <div class="aviso aviso--fuera">
+            <i class="ti ti-lock"></i> No participas en este torneo.
+          </div>
+        } @else if (!esQuiniela() && yo() && !yo()!.vivo) {
+          <div class="aviso aviso--fuera">
+            <i class="ti ti-skull"></i> Quedaste eliminado en la jornada {{ yo()!.eliminadoEn }}.
+          </div>
+        }
+
+        @if (pickEnEspera(); as p) {
+          <div class="aviso">
+            <i class="ti ti-clock-pause"></i>
+            Tu elección de la jornada {{ p.jornada }} (<strong>{{ p.equipo }}</strong>)
+            quedó en espera: ese partido se aplazó. Se definirá cuando se juegue.
+          </div>
+        }
+
+        @if (t.estado === 'inscripcion') {
+          <section class="panel panel--arranque">
+            <div class="panel-head">
+              <h3><i class="ti ti-hourglass-high"></i> Inscripciones abiertas</h3>
+            </div>
+
+            <p class="ayuda">
+              El torneo arranca en la jornada <strong>{{ t.jornadaInicial }}</strong>
+              de {{ t.competicionNombre }}.
+              @if (esQuiniela()) {
+                Hasta entonces no hay nada que pronosticar.
+              } @else {
+                Hasta entonces no hay que elegir equipo.
+              }
+            </p>
+
+            @if (cierreInscripcion(); as ci) {
+              <div class="arranque-dato plazo">
+                <span class="etq">Se puede entrar hasta</span>
+                <span class="val">{{ ci | date: "dd 'de' MMMM, h:mm a" }}</span>
+                @if (restanteInscripcion(); as r) {
+                  <span class="falta">Faltan {{ r }} · después arranca solo</span>
+                } @else {
+                  <span class="falta falta--vencida">Plazo vencido</span>
+                }
+              </div>
+            }
+
+            @if (jornadaActual(); as j) {
+              <div class="arranque">
+                <div class="arranque-dato">
+                  <span class="etq">Primera jornada</span>
+                  <span class="val">Jornada {{ j.numero }}</span>
+                </div>
+                @if (cierre(j); as c) {
+                  <div class="arranque-dato">
+                    <span class="etq">Cierra</span>
+                    <span class="val">{{ c | date: "dd 'de' MMMM, h:mm a" }}</span>
+                    @if (restante(j); as r) {
+                      <span class="falta">Faltan {{ r }}</span>
+                    } @else {
+                      <span class="falta falta--vencida">Ya cerró</span>
+                    }
+                  </div>
+                }
+              </div>
+
+              <p class="listado-partidos">
+                @for (p of j.partidos; track $index) {
+                  <span class="mini">{{ p.local }} vs {{ p.visitante }}</span>
+                }
+              </p>
+            } @else {
+              <p class="sin-catalogo">
+                Esa jornada todavía no se publica en {{ t.competicionNombre }}.
+              </p>
+            }
+          </section>
+        }
+
+        @if (t.estado === 'en-curso' && !jornadaActual()) {
+          <div class="aviso">
+            <i class="ti ti-calendar-question"></i>
+            La jornada {{ t.jornadaActual }} de {{ t.competicionNombre }} todavía no se publica.
+            @if (esQuiniela()) {
+              En cuanto esté, podrás capturar tus marcadores.
+            } @else {
+              En cuanto esté, podrás elegir tu equipo.
+            }
+          </div>
+        }
+
+        @if (esQuiniela() && t.estado === 'en-curso' && jornadaActual(); as j) {
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Jornada {{ j.numero }}</h3>
+              @if (cierre(j); as c) {
+                <span class="cierra">
+                  <i class="ti ti-clock"></i>
+                  @if (restante(j); as r) { Cierra en {{ r }} } @else { Cerrada }
+                </span>
+              }
+            </div>
+
+            @if (miQuinielaEnviada()) {
+              <div class="elegido">
+                <i class="ti ti-check"></i> Ya enviaste tus pronósticos
+              </div>
+              <p class="ayuda">Puedes cambiarlos mientras la jornada siga abierta.</p>
+            }
+
+            @if (puedeElegir()) {
+              <p class="ayuda">
+                Marcador exacto: <strong>5 puntos</strong>.
+                Solo acertar quién gana: <strong>3 puntos</strong>.
+              </p>
+
+              @for (p of j.partidos; track $index) {
+                <div class="pronostico">
+                  <span class="equipo-nombre">{{ p.local }}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="20"
+                    class="goles"
+                    [ngModel]="marcadores()[$index]?.local"
+                    (ngModelChange)="ponerGol($index, 'local', $event)"
+                    [attr.aria-label]="'Goles de ' + p.local"
+                  />
+                  <span class="guion">–</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="20"
+                    class="goles"
+                    [ngModel]="marcadores()[$index]?.visitante"
+                    (ngModelChange)="ponerGol($index, 'visitante', $event)"
+                    [attr.aria-label]="'Goles de ' + p.visitante"
+                  />
+                  <span class="equipo-nombre equipo-nombre--der">{{ p.visitante }}</span>
+                </div>
+              }
+
+              <button class="btn btn--primary" [disabled]="guardando()" (click)="enviarQuiniela(j)">
+                {{ guardando() ? 'Guardando…' : 'Guardar pronósticos' }}
+              </button>
+            }
+          </section>
+        }
+
+        @if (!esQuiniela() && t.estado === 'en-curso' && jornadaActual(); as j) {
+          <section class="panel p-jornada">
+            <div class="panel-head">
+              <h3>Jornada {{ j.numero }}</h3>
+              @if (cierre(j); as c) {
+                <span class="cierra">
+                  <i class="ti ti-clock"></i>
+                  @if (restante(j); as r) {
+                    Cierra en {{ r }}
+                  } @else {
+                    Cerrada · {{ c | date: 'dd/MM, h:mm a' }}
+                  }
+                </span>
+              }
+            </div>
+
+            @if (miPick(); as p) {
+              <div class="elegido">
+                <i class="ti ti-check"></i> Elegiste <strong>{{ p.equipo }}</strong>
+              </div>
+            } @else if (puedeElegir()) {
+              <p class="ayuda">
+                Elige un equipo que gane. El empate te cuesta la vida y la derrota te elimina.
+              </p>
+
+              @if (disponibles().length === 0) {
+                <div class="aviso">
+                  <i class="ti ti-alert-circle"></i>
+                  Ya usaste a todos los equipos que juegan en esta jornada.
+                </div>
+              } @else {
+                <div class="equipos">
+                  @for (e of disponibles(); track e) {
+                    <button class="equipo" [disabled]="guardando()" (click)="elegir(e)">
+                      {{ e }}
+                    </button>
+                  }
+                </div>
+              }
+            }
+          </section>
+        }
+
+        @if (t.estado === 'en-curso' && jornadaActual(); as j) {
+          <app-partidos-jornada
+            class="p-partidos"
+            [jornada]="j"
+            [miEquipo]="miPick()?.equipo ?? null"
+          />
+        }
+
+        @if (!esQuiniela() && yo() && yo()!.vivo) {
+          <section class="panel p-equipos">
+            <button class="panel-head panel-head--boton" (click)="verEquipos.set(!verEquipos())">
+              <i class="ti chevron"
+                [class.ti-chevron-down]="!verEquipos()"
+                [class.ti-chevron-up]="verEquipos()"></i>
+              <h3>Mis equipos</h3>
+              <span class="restantes">{{ disponiblesTotales().length }} disponibles</span>
+            </button>
+
+            @if (verEquipos()) {
+
+            @if (disponiblesTotales().length > 0) {
+              <div class="chips">
+                @for (e of disponiblesTotales(); track e) {
+                  <span class="chip">{{ e }}</span>
+                }
+              </div>
+            } @else if (comprometidos().length === 0) {
+              <p class="sin-catalogo">
+                El administrador todavía no ha capturado los equipos de la competición.
+              </p>
+            }
+
+            @if (comprometidos().length > 0) {
+              <p class="usados-titulo">Ya no disponibles</p>
+              <div class="chips">
+                @for (e of comprometidos(); track e) {
+                  <span class="chip chip--usado">{{ e }}</span>
+                }
+              </div>
+            }
+            }
+          </section>
+        }
+
+        @if (soyGestor()) {
+          <section class="panel panel--gestion">
+            <div class="panel-head">
+              <h3><i class="ti ti-settings"></i> Administración del torneo</h3>
+              <span class="etiqueta">Admin</span>
+            </div>
+
+            @if (t.estado === 'inscripcion') {
+              <p class="ayuda">Las inscripciones siguen abiertas.</p>
+              <button class="btn btn--primary" (click)="iniciar()">Iniciar torneo</button>
+            }
+
+            @if (t.estado === 'en-curso') {
+              <p class="ayuda">
+                Las jornadas y resultados los publica quien administra
+                <strong>{{ t.competicionNombre }}</strong>. Aquí solo cierras el torneo
+                si ya no habrá más jornadas.
+              </p>
+              <button class="btn" (click)="finalizar()">Cerrar torneo y repartir</button>
+            }
+          </section>
+        }
+
+        @if (esQuiniela() && revelarQuinielas() && jornadaActual(); as j) {
+          <app-cartones-jornada
+            [jornada]="j"
+            [quinielas]="quinielasJornada()"
+            [miUid]="miUid()"
+          />
+        }
+
+        @if (esQuiniela()) {
+          <app-tabla-posiciones
+            class="p-jugadores"
+            [participantes]="participantes()"
+            [miUid]="miUid()"
+          />
+        } @else {
+        <section class="panel p-jugadores">
+          <div class="panel-head">
+            <h3>Participantes</h3>
+            @if (revelarPicks()) {
+              <span class="nota-equipos">Jornada cerrada · elecciones a la vista</span>
+            } @else {
+              <span class="nota-equipos">Equipos ya gastados</span>
+            }
+          </div>
+
+          @for (p of ordenados(); track p.id) {
+            <div class="participante" [class.participante--fuera]="!p.vivo">
+              <div class="fila">
+                <span class="avatar">{{ inicial(p.alias) }}</span>
+                <span class="alias">{{ p.alias }}</span>
+                @if (p.vivo) {
+                  <span class="vidas">
+                    @if (p.vidasRestantes > 0) {
+                      <i class="ti ti-heart-filled"></i>
+                    } @else {
+                      <span class="sin-vida">sin vida</span>
+                    }
+                  </span>
+                  <span class="estado estado--vivo">Vivo</span>
+                } @else {
+                  <span class="estado">Fuera · J{{ p.eliminadoEn }}</span>
+                }
+              </div>
+
+              @if (revelarPicks() && eligio(p.id); as equipo) {
+                <div class="usados-fila">
+                  <span class="chip chip--actual">
+                    <i class="ti ti-arrow-badge-right"></i> {{ equipo }}
+                  </span>
+                  @for (e of p.equiposUsados; track e) {
+                    <span class="chip chip--usado">{{ e }}</span>
+                  }
+                </div>
+              } @else if (revelarPicks() && p.vivo) {
+                <div class="usados-fila">
+                  <span class="chip chip--nada">No eligió</span>
+                  @for (e of p.equiposUsados; track e) {
+                    <span class="chip chip--usado">{{ e }}</span>
+                  }
+                </div>
+              } @else if (p.equiposUsados.length > 0) {
+                <div class="usados-fila">
+                  @for (e of p.equiposUsados; track e) {
+                    <span class="chip chip--usado">{{ e }}</span>
+                  }
+                </div>
+              } @else {
+                <p class="sin-usados">Todavía no ha gastado ningún equipo.</p>
+              }
+            </div>
+          }
+        </section>
+        }
+
+        <details class="panel reglas-panel">
+          <summary><i class="ti ti-book"></i> Cómo se juega</summary>
+          <app-reglas-torneo [costo]="t.costoEntrada" [modo]="t.modo ?? 'supervivencia'" />
+        </details>
+        </div>
+      }
+    </div>
+  `,
+  styles: [
+    `
+      /*
+       * El orden de los paneles cambia según el momento del torneo.
+       * Con la jornada abierta manda tu elección; ya cerrada, mandan
+       * los resultados y lo que eligieron los demás.
+       */
+      .flujo { display: flex; flex-direction: column; }
+      .flujo > * { order: 5; }
+      .flujo > .franja { order: 0; }
+      .flujo > .p-jornada { order: 1; }
+      .flujo > .p-partidos { order: 2; }
+      .flujo > .p-equipos { order: 3; }
+      .flujo > .p-jugadores { order: 6; }
+      .flujo > .reglas-panel { order: 9; }
+
+      .flujo--cerrada > .p-partidos { order: 1; }
+      .flujo--cerrada > .p-jugadores { order: 2; }
+      .flujo--cerrada > .p-jornada { order: 3; }
+      .flujo--cerrada > .p-equipos { order: 4; }
+
+      .franja {
+        display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;
+      }
+      .pill {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 12px; font-weight: 600; padding: 6px 11px; border-radius: 999px;
+        background: var(--surface-1); color: var(--text-secondary); white-space: nowrap;
+      }
+      .pill--vivo { background: var(--success-bg); color: var(--success-text); }
+      .pill--premio { background: var(--accent-bg); color: var(--accent-text); }
+      .pill--gastada { background: var(--warning-bg); color: var(--warning-text); }
+      .pill small { font-weight: 500; opacity: 0.75; }
+      .pill .corazon { font-size: 13px; }
+
+      @media (min-width: 480px) {
+      }
+      .dato { background: var(--surface-1); border-radius: var(--radius); padding: 10px 12px; }
+      .etq { display: block; font-size: 11px; color: var(--text-muted); }
+      .val { font-size: 15px; font-weight: 600; line-height: 1.3; }
+      .corazon { color: var(--danger-text); }
+      .gastada { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+      .reglas-panel summary {
+        cursor: pointer; font-size: 14px; font-weight: 600;
+        display: flex; align-items: center; gap: 8px;
+      }
+      .reglas-panel[open] summary { margin-bottom: 8px; }
+      .premio { color: var(--success-text); }
+      .premio small { font-size: 11px; color: var(--text-muted); font-weight: 400; }
+
+      .final {
+        text-align: center; padding: 26px 20px; margin-bottom: 16px;
+        border-radius: var(--radius-lg); border: 1px solid var(--border);
+      }
+      .final--gano {
+        background: linear-gradient(160deg, var(--success-bg), var(--surface-2));
+        border-color: var(--success-text);
+      }
+      .final--perdio { background: var(--surface-2); }
+      .final h2 { font-size: 21px; font-weight: 700; margin: 0 0 6px; }
+      .final--gano h2 { color: var(--success-text); }
+      .final p { font-size: 13px; color: var(--text-secondary); margin: 0; }
+      .trofeo { font-size: 44px; line-height: 1; margin-bottom: 10px; }
+      .final--gano .trofeo { color: var(--warning-text); animation: brinca 1.4s ease-in-out infinite; }
+      .premio-grande {
+        font-size: 32px; font-weight: 700; color: var(--success-text); margin: 14px 0 2px;
+      }
+      .detalle { font-size: 12px; color: var(--text-muted); }
+
+      @keyframes brinca {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-6px); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .final--gano .trofeo { animation: none; }
+      }
+
+      .msg { background: var(--success-bg); color: var(--success-text); font-size: 13px;
+        padding: 10px 12px; border-radius: var(--radius); margin-bottom: 14px; cursor: pointer; }
+      .aviso { background: var(--warning-bg); color: var(--warning-text); font-size: 13px;
+        padding: 11px 13px; border-radius: var(--radius); margin-bottom: 14px; }
+      .aviso--fuera { background: var(--danger-bg); color: var(--danger-text); }
+
+      .panel { background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); padding: 15px; margin-bottom: 14px; }
+      .panel-head { display: flex; align-items: center; justify-content: space-between; }
+      h3 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+      .cierra { font-size: 12px; color: var(--text-secondary); }
+      .ayuda { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; }
+
+      .restantes { font-size: 12px; color: var(--text-muted); }
+      .panel-head--boton {
+        width: 100%; cursor: pointer; text-align: left; gap: 8px;
+        background: transparent; border: none; padding: 0; color: inherit;
+      }
+      .panel-head--boton:hover h3 { color: var(--accent-text); }
+      .panel-head--boton .restantes { margin-left: auto; }
+      .chevron { font-size: 17px; color: var(--text-muted); flex-shrink: 0; }
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip {
+        font-size: 12px; padding: 5px 11px; border-radius: 999px;
+        background: var(--surface-1); color: var(--text-secondary);
+      }
+      .chip--usado { opacity: 0.5; text-decoration: line-through; }
+      .sin-catalogo { font-size: 12px; color: var(--text-muted); margin: 0; }
+
+      .participante { padding: 10px 0; border-bottom: 1px solid var(--border); }
+      .participante:last-of-type { border-bottom: none; }
+      .participante--fuera { opacity: 0.55; }
+      .participante .fila { border-bottom: none; padding: 0; }
+      .nota-equipos { font-size: 11px; color: var(--text-muted); }
+      .usados-fila { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0 0 38px; }
+      .sin-usados { font-size: 11px; color: var(--text-muted); margin: 6px 0 0 38px; }
+      .sin-vida { font-size: 11px; color: var(--text-muted); }
+
+      .chip--actual {
+        background: var(--accent-bg); color: var(--accent-text);
+        font-weight: 600; opacity: 1; text-decoration: none;
+      }
+      .chip--nada {
+        background: var(--danger-bg); color: var(--danger-text);
+        opacity: 1; text-decoration: none;
+      }
+      .usados-titulo {
+        font-size: 11px; color: var(--text-muted); text-transform: uppercase;
+        letter-spacing: 0.4px; margin: 14px 0 8px;
+      }
+      .pronostico {
+        display: flex; align-items: center; gap: 8px; padding: 8px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .pronostico:last-of-type { border-bottom: none; }
+      .equipo-nombre { flex: 1; font-size: 13px; text-align: right; min-width: 0; }
+      .equipo-nombre--der { text-align: left; }
+      .goles {
+        width: 46px; min-height: 40px; text-align: center; font-size: 16px;
+        padding: 6px; border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-1); color: var(--text-primary);
+      }
+      .guion { color: var(--text-muted); }
+
+      .equipos { display: flex; flex-wrap: wrap; gap: 8px; }
+      .equipo {
+        flex: 1 1 calc(50% - 4px); padding: 12px 10px; cursor: pointer;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: transparent; font-size: 14px; font-weight: 600;
+      }
+      .equipo:hover:not(:disabled) { border-color: var(--accent-fill); background: var(--accent-bg); }
+      .equipo:disabled { opacity: 0.5; }
+      .usados { font-size: 11px; color: var(--text-muted); margin: 12px 0 0; }
+
+      .elegido { display: flex; align-items: center; gap: 8px; font-size: 14px;
+        background: var(--accent-bg); color: var(--accent-text);
+        padding: 12px; border-radius: var(--radius); }
+
+      .panel--arranque { border-color: var(--warning-text); }
+      .arranque {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;
+      }
+      .arranque-dato { background: var(--surface-1); border-radius: var(--radius); padding: 10px 12px; }
+      .plazo { margin-bottom: 12px; }
+      .falta { display: block; font-size: 11px; color: var(--warning-text); margin-top: 2px; }
+      .falta--vencida { color: var(--danger-text); }
+      .listado-partidos { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+      .mini {
+        font-size: 11px; padding: 4px 9px; border-radius: 999px;
+        background: var(--surface-1); color: var(--text-muted);
+      }
+
+      .panel--gestion { border-color: var(--accent-fill); }
+      .etiqueta {
+        font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
+        padding: 3px 9px; border-radius: 999px;
+        background: var(--accent-bg); color: var(--accent-text);
+      }
+      textarea {
+        width: 100%; font-family: inherit; font-size: 16px; padding: 11px 12px;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-2); color: var(--text-primary);
+      }
+      .captura { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 12px; }
+      .btn {
+        padding: 10px 16px; margin-top: 6px; cursor: pointer;
+        border: 1px solid var(--border-strong); border-radius: var(--radius);
+        background: transparent; font-size: 14px;
+      }
+      .btn--primary { background: var(--accent-fill); color: #fff; border-color: transparent; font-weight: 600; }
+      .btn:disabled { opacity: 0.6; cursor: default; }
+
+      .fila { display: flex; align-items: center; gap: 10px; padding: 10px 0;
+        border-bottom: 1px solid var(--border); }
+      .fila:last-child { border-bottom: none; }
+      .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--surface-1);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+      .alias { flex: 1; font-size: 14px; font-weight: 600; }
+      .vidas { color: var(--danger-text); font-size: 12px; }
+      .estado { font-size: 11px; color: var(--text-muted); }
+      .estado--vivo { color: var(--success-text); font-weight: 600; }
+    `,
+  ],
+})
+export class TorneoDetalleComponent {
+  private readonly route = inject(ActivatedRoute);
+  private readonly service = inject(TorneosService);
+  private readonly auth = inject(Auth);
+  private readonly competiciones = inject(CompeticionesService);
+  private readonly confirmar = inject(ConfirmarService);
+
+  private readonly id = this.route.snapshot.paramMap.get('id')!;
+
+  readonly torneo = toSignal(this.service.torneo(this.id), { initialValue: null });
+  readonly participantes = toSignal(this.service.participantes(this.id), {
+    initialValue: [] as Participante[],
+  });
+  /** Jornada en curso, tomada de la competición. */
+  private readonly jornada = toSignal(
+    toObservable(computed(() => this.torneo())).pipe(
+      switchMap((t) =>
+        t ? this.competiciones.jornadaPorNumero(t.competicionId, t.jornadaActual) : of(null),
+      ),
+    ),
+    { initialValue: null as Jornada | null },
+  );
+  readonly yo = toSignal(this.service.miParticipacion(this.id), { initialValue: null });
+
+  readonly guardando = signal(false);
+  readonly mensaje = signal('');
+  /** Reloj interno para refrescar la cuenta regresiva. */
+  private readonly ahora = signal(Date.now());
+
+  /** Tiempo que falta para el cierre, en texto. */
+  restante(j: Jornada): string {
+    const f = fechaJornada(j);
+    if (!f) return '';
+    return this.enTexto(f.getTime() - this.ahora());
+  }
+
+  /** Convierte milisegundos restantes a algo legible. */
+  private enTexto(ms: number): string {
+    if (ms <= 0) return '';
+
+    const min = Math.floor(ms / 60000);
+    const dias = Math.floor(min / 1440);
+    const horas = Math.floor((min % 1440) / 60);
+    const mins = min % 60;
+
+    if (dias > 0) return `${dias}d ${horas}h`;
+    if (horas > 0) return `${horas}h ${mins}m`;
+    return `${mins}m`;
+  }
+
+  readonly jornadaActual = computed<Jornada | null>(() => this.jornada());
+
+  private readonly pickSignal = signal<Pick | null>(null);
+  readonly miPick = computed(() => this.pickSignal());
+
+  constructor() {
+    const reloj = setInterval(() => this.ahora.set(Date.now()), 30000);
+
+    // Mi elección de la jornada en curso: cambia la jornada, cambia la escucha.
+    let sub: Subscription | null = null;
+    let subQ: Subscription | null = null;
+    let jornadaEscuchada = -1;
+
+    effect(() => {
+      const numero = this.torneo()?.jornadaActual;
+      if (numero === undefined || numero === jornadaEscuchada) return;
+
+      untracked(() => {
+        jornadaEscuchada = numero;
+        sub?.unsubscribe();
+        subQ?.unsubscribe();
+
+        sub = this.service.miPick(this.id, numero).subscribe((p) => this.pickSignal.set(p));
+        subQ = this.service.miQuiniela(this.id, numero).subscribe((q) => {
+          this.quinielaSignal.set(q);
+          // Precarga lo enviado para poder corregirlo.
+          if (q?.marcadores?.length) this.marcadores.set([...q.marcadores]);
+        });
+      });
+    });
+
+    // Las elecciones ajenas solo se piden cuando la jornada ya cerró.
+    let subPicks: Subscription | null = null;
+    let jornadaPicks = -1;
+
+    effect(() => {
+      const abierta = this.revelarPicks();
+      const numero = untracked(() => this.jornadaActual()?.numero ?? -1);
+
+      if (!abierta || numero < 0) {
+        subPicks?.unsubscribe();
+        subPicks = null;
+        jornadaPicks = -1;
+        this.picksJornada.set([]);
+        return;
+      }
+      if (numero === jornadaPicks) return;
+
+      jornadaPicks = numero;
+      subPicks?.unsubscribe();
+      subPicks = this.service
+        .picksJornada(this.id, numero)
+        .subscribe((lista) => this.picksJornada.set(lista));
+    });
+
+    // Los cartones ajenos solo se piden cuando la jornada ya cerró.
+    let subCartones: Subscription | null = null;
+    let jornadaCartones = -1;
+
+    effect(() => {
+      const visible = this.revelarQuinielas();
+      const numero = untracked(() => this.jornadaActual()?.numero ?? -1);
+
+      if (!visible || numero < 0) {
+        subCartones?.unsubscribe();
+        subCartones = null;
+        jornadaCartones = -1;
+        this.quinielasSignal.set([]);
+        return;
+      }
+      if (numero === jornadaCartones) return;
+
+      jornadaCartones = numero;
+      subCartones?.unsubscribe();
+      subCartones = this.service
+        .quinielasJornada(this.id, numero)
+        .subscribe((lista) => this.quinielasSignal.set(lista));
+    });
+
+    inject(DestroyRef).onDestroy(() => {
+      clearInterval(reloj);
+      sub?.unsubscribe();
+      subQ?.unsubscribe();
+      subPicks?.unsubscribe();
+      subCartones?.unsubscribe();
+    });
+  }
+
+  readonly vivos = computed(() => this.participantes().filter((p) => p.vivo));
+
+  readonly ordenados = computed(() =>
+    [...this.participantes()].sort((a, b) => {
+      if (a.vivo !== b.vivo) return a.vivo ? -1 : 1;
+      return a.alias.localeCompare(b.alias, 'es');
+    }),
+  );
+
+  /** Ganadores: los que siguen vivos, o quienes cayeron en la última jornada. */
+  private readonly ganadores = computed<Participante[]>(() => {
+    const vivos = this.vivos();
+    if (vivos.length > 0) return vivos;
+
+    const ultima = Math.max(0, ...this.participantes().map((p) => p.eliminadoEn ?? 0));
+    return this.participantes().filter((p) => p.eliminadoEn === ultima);
+  });
+
+  readonly soyGanador = computed(() => {
+    const yo = this.yo();
+    return !!yo && this.ganadores().some((g) => g.id === yo.id);
+  });
+
+  /** Lo que me tocó de la bolsa. */
+  readonly miPremio = computed(() => {
+    const t = this.torneo();
+    if (!t || !this.soyGanador()) return 0;
+    return t.premioPagado ?? 0;
+  });
+
+  /** ¿Puedo gestionar este torneo? */
+  readonly miUid = toSignal(user(this.auth).pipe(map((u) => u?.uid ?? null)), {
+    initialValue: null,
+  });
+
+  readonly soyGestor = computed(() => {
+    const uid = this.miUid();
+    return !!uid && (this.torneo()?.gestores ?? []).includes(uid);
+  });
+
+
+  async iniciar(): Promise<void> {
+    const ok = await this.confirmar.pedir({
+      titulo: 'Iniciar el torneo',
+      mensaje: 'Se cierran las inscripciones y ya nadie más podrá entrar.',
+      aceptar: 'Iniciar',
+    });
+    if (!ok) return;
+    await this.service.cambiarEstado(this.id, 'en-curso');
+    this.mensaje.set('Torneo iniciado.');
+  }
+
+
+
+  async finalizar(): Promise<void> {
+    const vivos = this.vivos().length;
+    const ok = await this.confirmar.pedir({
+      titulo: 'Cerrar el torneo',
+      mensaje: `${vivos} sobreviviente(s) se repartirán la bolsa en partes iguales.`,
+      aceptar: 'Cerrar y repartir',
+      peligro: true,
+    });
+    if (!ok) return;
+    try {
+      const r = await this.service.finalizar(this.id);
+      this.mensaje.set(
+        `Torneo cerrado: ${r.ganadores} ganador(es)` +
+        (r.premioPorCabeza > 0 ? ` · ${r.premioPorCabeza} pts cada uno.` : '.'),
+      );
+    } catch (e: unknown) {
+      this.mensaje.set((e as Error)?.message ?? 'No se pudo cerrar.');
+    }
+  }
+
+
+
+  /** Elecciones mías que siguen sin definirse por un aplazamiento. */
+  private readonly pendientes = toSignal(this.service.misPicksPendientes(this.id), {
+    initialValue: [] as Pick[],
+  });
+
+  /**
+   * Solo cuentan como "en espera" las elecciones de jornadas ya pasadas:
+   * las de la jornada en curso están pendientes porque aún no se juega.
+   */
+  readonly pickEnEspera = computed(() => {
+    const actual = this.torneo()?.jornadaActual ?? 0;
+    return this.pendientes().find((p) => p.jornada < actual) ?? null;
+  });
+
+  /**
+   * ¿Ya se pueden ver las elecciones de los demás?
+   * Solo cuando el plazo de la jornada venció: antes sería copiarse.
+   */
+  readonly revelarPicks = computed(() => {
+    if (this.esQuiniela()) return false;
+    const j = this.jornadaActual();
+    if (!j) return false;
+
+    const cierre = fechaJornada(j);
+    if (!cierre) return false;
+    return cierre.getTime() <= this.ahora();
+  });
+
+  /** ¿Se pueden ver ya los cartones de todos? */
+  readonly revelarQuinielas = computed(() => {
+    if (!this.esQuiniela()) return false;
+    const j = this.jornadaActual();
+    if (!j) return false;
+
+    const cierre = fechaJornada(j);
+    if (!cierre) return false;
+    return cierre.getTime() <= this.ahora();
+  });
+
+  /** Cartones de todos en la jornada. El tablero los ordena. */
+  private readonly quinielasSignal = signal<Quiniela[]>([]);
+  readonly quinielasJornada = this.quinielasSignal.asReadonly();
+
+  /** Elecciones de la jornada en curso, una vez cerrada. */
+  private readonly picksJornada = signal<Pick[]>([]);
+
+  /** Qué eligió alguien en la jornada en curso. */
+  eligio(uid: string): string | null {
+    return this.picksJornada().find((p) => p.uid === uid)?.equipo ?? null;
+  }
+
+  /** Los equipos disponibles se consultan de vez en cuando: nacen ocultos. */
+  readonly verEquipos = signal(false);
+
+  /** ¿Este torneo se juega pronosticando marcadores? */
+  readonly esQuiniela = computed(() => this.torneo()?.modo === 'quiniela');
+
+  /** Mi quiniela de la jornada en curso. */
+  private readonly quinielaSignal = signal<Quiniela | null>(null);
+  readonly miQuinielaEnviada = computed(() => !!this.quinielaSignal());
+
+  /** Marcadores que estoy capturando. */
+  readonly marcadores = signal<Array<{ local: number | null; visitante: number | null }>>([]);
+
+  ponerGol(indice: number, lado: 'local' | 'visitante', valor: unknown): void {
+    const n = valor === null || valor === '' ? null : Math.trunc(Number(valor));
+    this.marcadores.update((lista) => {
+      const copia = [...lista];
+      while (copia.length <= indice) copia.push({ local: null, visitante: null });
+      copia[indice] = { ...copia[indice], [lado]: n };
+      return copia;
+    });
+  }
+
+  async enviarQuiniela(j: Jornada): Promise<void> {
+    const lista = this.marcadores();
+    const completos = j.partidos.every(
+      (_, i) =>
+        typeof lista[i]?.local === 'number' && typeof lista[i]?.visitante === 'number',
+    );
+    if (!completos) {
+      this.mensaje.set('Falta capturar algún marcador.');
+      return;
+    }
+
+    this.guardando.set(true);
+    this.mensaje.set('');
+    try {
+      await this.service.guardarQuiniela(
+        this.id,
+        lista.slice(0, j.partidos.length).map((m) => ({
+          local: Number(m.local),
+          visitante: Number(m.visitante),
+        })),
+      );
+      this.mensaje.set('Pronósticos guardados.');
+    } catch (e: unknown) {
+      this.mensaje.set((e as Error)?.message ?? 'No se pudieron guardar.');
+    } finally {
+      this.guardando.set(false);
+    }
+  }
+
+  readonly usados = computed(() => [...(this.yo()?.equiposUsados ?? [])].sort());
+
+  /** Catálogo de equipos de la competición. */
+  private readonly competicion = toSignal(
+    toObservable(computed(() => this.torneo()?.competicionId)).pipe(
+      switchMap((id) => (id ? this.competiciones.competicion(id) : of(null))),
+    ),
+    { initialValue: null },
+  );
+
+  /** Equipos comprometidos: los ya resueltos más los que están en juego. */
+  readonly comprometidos = computed(() => {
+    const resueltos = this.usados();
+    const enJuego = this.pendientes().map((p) => p.equipo);
+    return [...new Set([...resueltos, ...enJuego])].sort();
+  });
+
+  /** Equipos que todavía puedo usar en el resto del torneo. */
+  readonly disponiblesTotales = computed(() => {
+    const catalogo = this.competicion()?.equipos ?? [];
+    const comprometidos = this.comprometidos();
+    return catalogo.filter((e) => !comprometidos.includes(e));
+  });
+
+  readonly disponibles = computed(() => {
+    const equipos = equiposDeJornada(this.jornadaActual());
+    const comprometidos = this.comprometidos();
+    return equipos
+      .filter((e) => !comprometidos.includes(e))
+      .sort((a, b) => a.localeCompare(b));
+  });
+
+  readonly puedeElegir = computed(() => {
+    const j = this.jornadaActual();
+    const f = fechaJornada(j);
+    return !!this.yo()?.vivo && j?.estado === 'abierta' && (!f || f.getTime() > Date.now());
+  });
+
+  cierre(j: Jornada): Date | null {
+    return fechaJornada(j);
+  }
+
+  /** Hasta cuándo se puede entrar al torneo. */
+  readonly cierreInscripcion = computed(() => fechaInscripcion(this.torneo()));
+
+  /** Cuánto falta para que cierren las inscripciones. */
+  readonly restanteInscripcion = computed(() => {
+    const f = this.cierreInscripcion();
+    if (!f) return '';
+    return this.enTexto(f.getTime() - this.ahora());
+  });
+
+  etiquetaEstado(e: Torneo['estado']): string {
+    return e === 'inscripcion' ? 'Inscripciones' : e === 'en-curso' ? 'En curso' : 'Finalizado';
+  }
+
+  inicial(alias: string): string {
+    return (alias?.[0] ?? '?').toUpperCase();
+  }
+
+  async elegir(equipo: string): Promise<void> {
+    const ok = await this.confirmar.pedir({
+      titulo: `Elegir a ${equipo}`,
+      mensaje: 'No podrás usarlo de nuevo en el resto del torneo.',
+      aceptar: 'Confirmar',
+    });
+    if (!ok) return;
+    this.guardando.set(true);
+    this.mensaje.set('');
+    try {
+      await this.service.elegir(this.id, equipo);
+      this.mensaje.set(`Elegiste ${equipo}.`);
+    } catch (e: unknown) {
+      this.mensaje.set((e as Error)?.message ?? 'No se pudo guardar tu elección.');
+    } finally {
+      this.guardando.set(false);
+    }
+  }
+}

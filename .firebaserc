@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "quinelav1-e23eb"
+  },
+  "targets": {
+    "quinelav1-e23eb": {
+      "hosting": {
+        "principal": [
+          "automatepowerv1"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

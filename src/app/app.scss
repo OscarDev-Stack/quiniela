@@ -1,0 +1,35 @@
+/* Aviso de versión nueva. Flota sobre la barra de navegación. */
+.update {
+    position: fixed;
+    z-index: 100;
+    left: 12px;
+    right: 12px;
+    bottom: calc(78px + env(safe-area-inset-bottom));
+
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    background: var(--accent-fill);
+    color: #fff;
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    font-size: 13px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+
+    span {
+        flex: 1;
+    }
+
+    button {
+        flex-shrink: 0;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        border: none;
+        border-radius: var(--radius);
+        padding: 7px 14px;
+        background: #fff;
+        color: var(--accent-fill);
+    }
+}

@@ -1,0 +1,183 @@
+import { Injectable, inject } from '@angular/core';
+import {
+    Firestore,
+    collection,
+    collectionData,
+    addDoc,
+    doc,
+    updateDoc,
+    docData,
+} from '@angular/fire/firestore';
+import { Functions, httpsCallable } from '@angular/fire/functions';
+import { Observable, of, combineLatest } from 'rxjs';
+import { switchMap, map, shareReplay } from 'rxjs/operators';
+import { UserService } from './user.service';
+import { Partido } from '../models/partido.model';
+import { Bolsa } from '../models/bolsa.model';
+import { AppUser } from '../models/user.model';
+
+export interface ResultadoLiquidacion {
+    ok: boolean;
+    participantes: number;
+    ganadores: number;
+    bolsa: number;
+    sobrante: number;
+}
+
+@Injectable({ providedIn: 'root' })
+export class AdminService {
+    private readonly db = inject(Firestore);
+    private readonly fns = inject(Functions);
+    private readonly userSvc = inject(UserService);
+
+    // ---------- Partidos ----------
+
+    getPartidos(): Observable<Partido[]> {
+        return collectionData(collection(this.db, 'partidos'), {
+            idField: 'id',
+        }) as Observable<Partido[]>;
+    }
+
+    /** Acumulados globales: reserva, puntos repartidos y partidos liquidados. */
+    getSistema(): Observable<{ total?: number; repartido?: number; liquidados?: number } | null> {
+        return docData(doc(this.db, 'sistema', 'reserva')) as Observable<{
+            total?: number;
+            repartido?: number;
+            liquidados?: number;
+        } | null>;
+    }
+
+    /**
+     * Número de asuntos que requieren atención del administrador:
+     * resultados precargados por la API y alertas de partidos.
+     * Solo consulta si el usuario es administrador.
+     */
+    readonly pendientes$: Observable<number> = this.userSvc.isAdmin$.pipe(
+        switchMap((esAdmin) => {
+            if (!esAdmin) return of([0, 0] as [number, number]);
+            return combineLatest([this.getPartidos(), this.getUsers()]).pipe(
+                map(([partidos, usuarios]): [number, number] => [
+                    partidos.filter((p) => !p.liquidado && (!!p.resultadoPropuesto || !!p.alertaApi))
+                        .length,
+                    usuarios.filter((u) => !u.validada).length,
+                ]),
+            );
+        }),
+        map(([resultados, sinValidar]) => resultados + sinValidar),
+        // Se recuerda el último valor para que la barra no parpadee al navegar.
+        shareReplay({ bufferSize: 1, refCount: false }),
+    );
+
+    /** Totales apostados por partido (colección privada). */
+    getBolsas(): Observable<Bolsa[]> {
+        return collectionData(collection(this.db, 'bolsas'), {
+            idField: 'id',
+        }) as Observable<Bolsa[]>;
+    }
+
+    crearPartido(data: Omit<Partido, 'id'>) {
+        return addDoc(collection(this.db, 'partidos'), data);
+    }
+
+    /** Cancela el partido y devuelve los puntos a cada participante. */
+    async cancelarPartido(partidoId: string): Promise<{ devoluciones: number; puntosDevueltos: number }> {
+        const fn = httpsCallable<
+            { partidoId: string },
+            { ok: boolean; devoluciones: number; puntosDevueltos: number }
+        >(this.fns, 'cancelarPartido');
+        const res = await fn({ partidoId });
+        return res.data;
+    }
+
+    /** Busca partidos reales en football-data.org. */
+    async buscarFixtures(competicion: string, desde: string, hasta: string) {
+        const fn = httpsCallable<
+            { competicion: string; desde: string; hasta: string },
+            {
+                ok: boolean;
+                partidos: Array<{
+                    apiFixtureId: number;
+                    fecha: string;
+                    homeTeam: string;
+                    awayTeam: string;
+                    competition: string;
+                }>;
+            }
+        >(this.fns, 'buscarFixtures');
+        const res = await fn({ competicion, desde, hasta });
+        return res.data.partidos;
+    }
+
+    /** Reconstruye las bolsas desde los pronósticos reales. */
+    async recalcularBolsas(): Promise<{ partidos: number }> {
+        const fn = httpsCallable<Record<string, never>, { ok: boolean; partidos: number }>(
+            this.fns,
+            'recalcularBolsas',
+        );
+        const res = await fn({} as Record<string, never>);
+        return res.data;
+    }
+
+    /** Regenera la colección pública del ranking. */
+    /** Iguala los puntos históricos con el saldo. Uso excepcional. */
+    async sincronizarHistoricos(): Promise<{ corregidos: number }> {
+        const fn = httpsCallable<Record<string, never>, { ok: boolean; corregidos: number }>(
+            this.fns,
+            'sincronizarHistoricos',
+        );
+        const res = await fn({} as Record<string, never>);
+        return res.data;
+    }
+
+    async recalcularRanking(): Promise<{ jugadores: number }> {
+        const fn = httpsCallable<Record<string, never>, { ok: boolean; jugadores: number }>(
+            this.fns,
+            'recalcularRanking',
+        );
+        const res = await fn({} as Record<string, never>);
+        return res.data;
+    }
+
+    /**
+     * Registra el resultado y liquida el partido.
+     * Toda la lógica corre en Cloud Functions: reparto proporcional,
+     * redondeo hacia abajo, sobrante a la reserva y devoluciones.
+     */
+    async liquidar(partidoId: string, resultadoOficial: string): Promise<ResultadoLiquidacion> {
+        const fn = httpsCallable<
+            { partidoId: string; resultadoOficial: string },
+            ResultadoLiquidacion
+        >(this.fns, 'liquidarPartido');
+        const res = await fn({ partidoId, resultadoOficial });
+        return res.data;
+    }
+
+    // ---------- Usuarios ----------
+
+    getUsers(): Observable<AppUser[]> {
+        return collectionData(collection(this.db, 'users'), {
+            idField: 'id',
+        }) as Observable<AppUser[]>;
+    }
+
+    async validarUsuario(uid: string): Promise<void> {
+        await updateDoc(doc(this.db, 'users', uid), { validada: true });
+        await this.recalcularRanking();
+    }
+
+    /** Elimina cuentas sin validar (Authentication + documentos). */
+    async eliminarUsuarios(uids: string[]): Promise<{ borrados: number; omitidos: string[] }> {
+        const fn = httpsCallable<
+            { uids: string[] },
+            { ok: boolean; borrados: number; omitidos: string[] }
+        >(this.fns, 'eliminarUsuarios');
+        const res = await fn({ uids });
+        return res.data;
+    }
+
+    async reiniciarPuntos(uid: string): Promise<void> {
+        await updateDoc(doc(this.db, 'users', uid), { puntos: 0, bloqueado: false });
+        await this.recalcularRanking();
+    }
+
+}
