@@ -25,6 +25,8 @@ export interface Torneo {
 
     /* Fallos permitidos antes de quedar fuera. Solo en supervivencia. */
     vidas: number;
+    /* Qué salva una vida: 'empate' o 'tropiezo' (también derrotas). */
+    vidaCubre?: 'empate' | 'tropiezo';
     /* Puntos que cuesta inscribirse. 0 = gratis. */
     costoEntrada: number;
     /* Acumulado de las inscripciones. */

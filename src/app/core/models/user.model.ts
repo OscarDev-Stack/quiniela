@@ -32,6 +32,9 @@ export interface AppUser {
     /* Avisos por Telegram. */
     telegramChatId?: string;
     notificaciones?: boolean;
+
+    /* Cuenta de puro administrador: no aparece en el ranking. */
+    noParticipa?: boolean;
     /* Código temporal mientras se conecta Telegram. */
     vinculoTelegram?: { codigo: string } | null;
 

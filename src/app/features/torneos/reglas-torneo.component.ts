@@ -73,21 +73,40 @@ import { ModoTorneo } from '../../core/models/torneo.model';
         </div>
       </li>
 
-      <li>
-        <span class="icono icono--warn"><i class="ti ti-heart-broken"></i></span>
-        <div>
-          <strong>Si empata, gastas tu vida</strong>
-          <p>Tienes una sola vida. El empate la consume y sigues jugando sin ella.</p>
-        </div>
-      </li>
+      @if (vidas() > 0) {
+        <li>
+          <span class="icono icono--warn"><i class="ti ti-heart"></i></span>
+          <div>
+            <strong>Tienes {{ vidas() === 1 ? 'una vida' : vidas() + ' vidas' }}</strong>
+            @if (vidaCubre() === 'tropiezo') {
+              <p>Cada empate o derrota gasta una vida. Cuando se acaben, el siguiente tropiezo te elimina.</p>
+            } @else {
+              <p>El empate gasta una vida y sigues jugando. La derrota siempre elimina, tengas vidas o no.</p>
+            }
+          </div>
+        </li>
 
-      <li>
-        <span class="icono icono--danger"><i class="ti ti-x"></i></span>
-        <div>
-          <strong>Si pierde, quedas eliminado</strong>
-          <p>La derrota te saca de inmediato, aunque conserves tu vida.</p>
-        </div>
-      </li>
+        <li>
+          <span class="icono icono--danger"><i class="ti ti-x"></i></span>
+          <div>
+            @if (vidaCubre() === 'tropiezo') {
+              <strong>Sin vidas, quedas fuera</strong>
+              <p>Una vez agotadas las vidas, cualquier empate o derrota te saca del torneo.</p>
+            } @else {
+              <strong>Si pierde, quedas eliminado</strong>
+              <p>La derrota te saca de inmediato, aunque conserves tu vida.</p>
+            }
+          </div>
+        </li>
+      } @else {
+        <li>
+          <span class="icono icono--danger"><i class="ti ti-x"></i></span>
+          <div>
+            <strong>Sin margen: un tropiezo y fuera</strong>
+            <p>No hay vidas. Empate o derrota te elimina de inmediato. Solo la victoria te mantiene.</p>
+          </div>
+        </li>
+      }
 
       <li>
         <span class="icono"><i class="ti ti-repeat-off"></i></span>
@@ -150,8 +169,8 @@ import { ModoTorneo } from '../../core/models/torneo.model';
   ],
 })
 export class ReglasTorneoComponent {
-  /** Costo de entrada, para mencionarlo en la última regla. */
   readonly costo = input<number>(0);
-  /** Qué reglas mostrar. */
   readonly modo = input<ModoTorneo>('supervivencia');
+  readonly vidas = input<number>(1);
+  readonly vidaCubre = input<'empate' | 'tropiezo'>('empate');
 }

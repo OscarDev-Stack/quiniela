@@ -52,7 +52,7 @@ import { ConfirmarService } from '../../shared/confirmar.service';
       <div class="grid">
         <label class="field">
           <span>Nombre</span>
-          <input type="text" [(ngModel)]="form.nombre" placeholder="AutomatePower" />
+          <input type="text" [(ngModel)]="form.nombre" placeholder="Los del jueves, La Oficina…" />
           <small class="pista">Como le van a decir entre ustedes.</small>
         </label>
         <label class="field">
@@ -65,8 +65,35 @@ import { ConfirmarService } from '../../shared/confirmar.service';
         @if (form.modo === 'quiniela') {
           <label class="field">
             <span>Jornadas que dura</span>
-            <input type="number" min="1" max="40" [(ngModel)]="form.jornadas" />
+            <input type="number" min="1" max="20" [(ngModel)]="form.jornadas" />
           </label>
+        } @else {
+          <label class="field">
+            <span>Vidas por jugador</span>
+            <select [(ngModel)]="form.vidas">
+              <option [ngValue]="0">Sin vidas (un tropiezo y fuera)</option>
+              <option [ngValue]="1">1 vida</option>
+              <option [ngValue]="2">2 vidas</option>
+              <option [ngValue]="3">3 vidas</option>
+            </select>
+          </label>
+
+          @if (form.vidas > 0) {
+            <label class="field">
+              <span>¿Qué salva una vida?</span>
+              <select [(ngModel)]="form.vidaCubre">
+                <option value="empate">Solo empates</option>
+                <option value="tropiezo">Empates y derrotas</option>
+              </select>
+              <small class="pista">
+                @if (form.vidaCubre === 'empate') {
+                  El empate gasta una vida; la derrota siempre elimina.
+                } @else {
+                  Cualquier tropiezo, empate o derrota, gasta una vida.
+                }
+              </small>
+            </label>
+          }
         }
         <label class="field">
           <span>Competición</span>
@@ -373,6 +400,8 @@ export class AdminTorneosComponent {
     nombre: '',
     modo: 'supervivencia' as ModoTorneo,
     jornadas: 5,
+    vidas: 1,
+    vidaCubre: 'empate' as 'empate' | 'tropiezo',
     competicionId: '',
     jornadaInicial: 1,
     costoEntrada: 0,
@@ -527,16 +556,19 @@ export class AdminTorneosComponent {
         competicionId: comp.id,
         competicionNombre: comp.nombre,
         jornadaInicial: Number(this.form.jornadaInicial) || 1,
-        vidas: 1,
         costoEntrada: Number(this.form.costoEntrada),
         cierreInscripcion: cierre,
         modo: this.form.modo,
         jornadas: this.form.modo === 'quiniela' ? Number(this.form.jornadas) || 1 : 0,
+        vidas: this.form.modo === 'supervivencia' ? Number(this.form.vidas) : 0,
+        vidaCubre: this.form.vidaCubre,
       });
       this.form = {
         nombre: '',
         modo: 'supervivencia',
         jornadas: 5,
+        vidas: 1,
+        vidaCubre: 'empate',
         competicionId: '',
         jornadaInicial: 1,
         costoEntrada: 0,

@@ -44,7 +44,12 @@ interface Outcome {
     </div>
 
     <section class="panel">
-      <h2 class="panel-title">Buscar partido por API</h2>
+      <button class="panel-title panel-title--boton" (click)="verApi.set(!verApi())">
+        <i class="ti" [class.ti-chevron-down]="!verApi()" [class.ti-chevron-up]="verApi()"></i>
+        Buscar partido por API
+      </button>
+
+      @if (verApi()) {
       <div class="grid">
         <label class="field">
           <span>Competición</span>
@@ -85,15 +90,21 @@ interface Outcome {
         <div class="row">
           <div class="row-main">
             <div class="row-title">{{ f.homeTeam }} vs {{ f.awayTeam }}</div>
-            <div class="row-sub">{{ f.competition }} · {{ f.fecha | date: 'dd/MM HH:mm' }}</div>
+            <div class="row-sub">{{ f.competition }} · {{ f.fecha | date: 'dd/MM, h:mm a' }}</div>
           </div>
           <button class="btn-primary sm" (click)="crearDesdeApi(f)">Crear</button>
         </div>
       }
+      }
     </section>
 
     <section class="panel">
-      <h2 class="panel-title">Crear partido manualmente</h2>
+      <button class="panel-title panel-title--boton" (click)="verManual.set(!verManual())">
+        <i class="ti" [class.ti-chevron-down]="!verManual()" [class.ti-chevron-up]="verManual()"></i>
+        Crear partido manualmente
+      </button>
+
+      @if (verManual()) {
       <div class="grid">
         <label class="field">
           <span>Equipo local</span>
@@ -123,6 +134,7 @@ interface Outcome {
       <button class="btn-primary" [disabled]="saving()" (click)="crear()">
         {{ saving() ? 'Guardando…' : 'Crear partido' }}
       </button>
+      }
     </section>
 
     <section class="panel">
@@ -141,7 +153,7 @@ interface Outcome {
             <div class="row-title">{{ p.homeTeam }} vs {{ p.awayTeam }}</div>
             <div class="row-sub">
               {{ p.competition }} · {{ typeLabel(p.type) }}
-              @if (cierre(p); as c) { · cierra {{ c | date: 'dd/MM HH:mm' }} }
+              @if (cierre(p); as c) { · cierra {{ c | date: 'dd/MM, h:mm a' }} }
             </div>
           </div>
           <span class="tag tag--{{ p.status }}">{{ p.status }}</span>
@@ -218,6 +230,13 @@ interface Outcome {
         border-radius: 12px; padding: 16px 18px; margin-bottom: 18px;
       }
       .panel-title { font-size: 15px; font-weight: 600; margin: 0 0 14px; }
+      .panel-title--boton {
+        display: flex; align-items: center; gap: 8px; width: 100%;
+        cursor: pointer; text-align: left; margin: 0;
+        background: transparent; border: none; padding: 0; color: inherit;
+      }
+      .panel-title--boton i { font-size: 17px; color: var(--text-muted); }
+      .panel-title--boton:hover { color: var(--accent-text); }
       .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
       .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
       .field { display: block; margin-bottom: 12px; }
@@ -355,6 +374,11 @@ export class AdminPartidosComponent {
   readonly resultFor = signal<string | null>(null);
   readonly liquidando = signal(false);
   readonly recalculando = signal(false);
+
+  /* Los formularios se usan de vez en cuando: nacen cerrados
+     para que la lista de partidos quede a la vista al entrar. */
+  readonly verApi = signal(false);
+  readonly verManual = signal(false);
   readonly buscando = signal(false);
   readonly encontrados = signal<
     Array<{ apiFixtureId: number; fecha: string; homeTeam: string; awayTeam: string; competition: string }>

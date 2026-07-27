@@ -98,7 +98,13 @@ async function actualizarRanking(uids: string[]): Promise<void> {
         const batch = db.batch();
         for (const sn of snaps) {
             const rankRef = db.doc(`ranking/${sn.id}`);
-            if (!sn.exists || sn.data()?.['validada'] !== true) {
+            // Fuera del ranking: cuentas sin validar y cuentas de puro
+            // administrador que no compiten (marcadas noParticipa).
+            if (
+                !sn.exists ||
+                sn.data()?.['validada'] !== true ||
+                sn.data()?.['noParticipa'] === true
+            ) {
                 batch.delete(rankRef);
                 continue;
             }
@@ -638,7 +644,9 @@ export const recalcularRanking = onCall(opcionesCall, async (req) => {
 
     users.docs.forEach((d) => {
         const u = d.data();
-        if (u['validada'] !== true) {
+        // Mismo criterio que actualizarRanking: fuera los no validados
+        // y las cuentas de puro administrador que no compiten.
+        if (u['validada'] !== true || u['noParticipa'] === true) {
             batch.delete(db.doc(`ranking/${d.id}`));
             return;
         }
@@ -1040,8 +1048,8 @@ export const unirseTorneo = onCall(opcionesCall, async (req) => {
             puntosTorneo: 0,
             exactos: 0,
             vivo: true,
-            // Regla fija: una vida, que se gasta al empatar.
-            vidasRestantes: 1,
+            // Las vidas las define el torneo al crearse (una por omisión).
+            vidasRestantes: Number(t['vidas'] ?? 1),
             equiposUsados: [],
             pago: costo,
             createdAt: FieldValue.serverTimestamp(),
@@ -1248,6 +1256,8 @@ export const resolverJornadaCompeticion = onCall(
             const pickPorUid = new Map(picks.docs.map((d) => [String(d.data()['uid']), d]));
 
             const batch = db.batch();
+            /* A quien cae le llega un aviso propio; el genérico ya no le sirve. */
+            const caidos: Array<{ uid: string; equipo: string; motivo: string }> = [];
 
             for (const part of participantes.docs) {
                 const datos = part.data() as Record<string, unknown>;
@@ -1255,6 +1265,10 @@ export const resolverJornadaCompeticion = onCall(
                 const usados = (datos['equiposUsados'] as string[]) ?? [];
                 const equipo = pick ? String(pick.data()['equipo']) : '';
                 let vidas = Number(datos['vidasRestantes'] ?? 0);
+
+                // Qué salva una vida en este torneo: 'empate' (por omisión, como
+                // siempre) o 'tropiezo' (también cubre derrotas).
+                const cubre = String(torneo['vidaCubre'] ?? 'empate');
 
                 // Sin elección se considera derrota.
                 const resultado = pick ? suerte(equipo) : 'pierde';
@@ -1272,14 +1286,15 @@ export const resolverJornadaCompeticion = onCall(
                     totalSobreviven++;
                     batch.update(part.ref, { equiposUsados: nuevosUsados });
                     if (pick) batch.update(pick.ref, { estado: 'sobrevive' });
-                } else if (resultado === 'empata' && vidas > 0) {
-                    // Empate: cuesta la vida, pero sigue con vida gastada.
+                } else if (vidas > 0 && (resultado === 'empata' || cubre === 'tropiezo')) {
+                    // Tropezó (empate, o derrota si las vidas cubren todo), pero
+                    // le quedaba vida: sigue con una menos.
                     vidas -= 1;
                     totalSobreviven++;
                     batch.update(part.ref, { vidasRestantes: vidas, equiposUsados: nuevosUsados });
                     if (pick) batch.update(pick.ref, { estado: 'sobrevive' });
                 } else {
-                    // Derrota (o empate sin vida): fuera del torneo.
+                    // Fuera del torneo: perdió sin vida que lo cubra, o empató sin vida.
                     totalEliminados++;
                     batch.update(part.ref, {
                         vivo: false,
@@ -1287,6 +1302,12 @@ export const resolverJornadaCompeticion = onCall(
                         equiposUsados: nuevosUsados,
                     });
                     if (pick) batch.update(pick.ref, { estado: 'eliminado' });
+
+                    caidos.push({
+                        uid: part.id,
+                        equipo,
+                        motivo: !pick ? 'sin-elegir' : resultado === 'empata' ? 'empate' : 'derrota',
+                    });
                 }
             }
 
@@ -1294,6 +1315,23 @@ export const resolverJornadaCompeticion = onCall(
 
             // ¿Cómo quedó este torneo?
             const vivos = await torneoRef.collection('participantes').where('vivo', '==', true).get();
+
+            // Aviso personal a quien quedó fuera. Es el último que recibe de este torneo.
+            for (const c of caidos) {
+                const razon =
+                    c.motivo === 'sin-elegir'
+                        ? 'No elegiste equipo en esta jornada.'
+                        : c.motivo === 'empate'
+                            ? `${c.equipo} empató y ya no te quedaba vida.`
+                            : `${c.equipo} perdió.`;
+
+                await avisar(
+                    [c.uid],
+                    `😔 <b>${String(torneo['nombre'] ?? 'Torneo')}</b>\n` +
+                    `Quedaste fuera en la jornada ${j.numero}. ${razon}\n\n` +
+                    `Siguen ${vivos.size} en pie. Puedes ver cómo termina en la app.`,
+                );
+            }
             const bolsa = Number(torneo['bolsa'] ?? 0);
             const nombreTorneo = String(torneo['nombre'] ?? 'Torneo');
             const competicion = String(torneo['competicionNombre'] ?? '');
@@ -1376,8 +1414,9 @@ export const resolverJornadaCompeticion = onCall(
                 });
                 cerrados.push(nombreTorneo);
 
+                // Solo a quienes llegaron al final: los eliminados ya se despidieron.
                 await avisar(
-                    (await torneoRef.collection('participantes').get()).docs.map((d) => d.id),
+                    [...new Set([...vivos.docs.map((d) => d.id), ...lista.map((g) => g.uid)])],
                     `<b>${nombreTorneo}</b>\n` +
                     `¡Terminó el torneo! Ganó ${lista.map((g) => g.alias).join(', ')}.` +
                     (premio > 0 ? `\nPremio: ${premio} pts por cabeza.` : ''),
@@ -1387,7 +1426,7 @@ export const resolverJornadaCompeticion = onCall(
 
                 const sobreviven = vivos.size;
                 await avisar(
-                    (await torneoRef.collection('participantes').get()).docs.map((d) => d.id),
+                    vivos.docs.map((d) => d.id),
                     `<b>${nombreTorneo}</b>\n` +
                     `Jornada ${j.numero} resuelta. Quedan ${sobreviven} en pie.\n` +
                     `Ya puedes elegir tu equipo para la jornada ${j.numero + 1}.`,
@@ -2051,6 +2090,8 @@ export const consultarTorneo = onCall(opcionesCall, async (req) => {
         costoEntrada: Number(t['costoEntrada'] ?? 0),
         jornadaInicial: Number(t['jornadaInicial'] ?? 1),
         jornadas: Number(t['jornadas'] ?? 0),
+        vidas: Number(t['vidas'] ?? 1),
+        vidaCubre: String(t['vidaCubre'] ?? 'empate'),
         estado: String(t['estado'] ?? 'inscripcion'),
         inscritos: participantes.data().count,
     };
@@ -2378,5 +2419,93 @@ export const solicitarReinicio = onCall(
         );
 
         return { ok: true };
+    },
+);
+
+/* ============================================================
+   RECORDATORIO ANTES DE QUE CIERRE LA JORNADA
+   Avisa solo a quien todavía no ha elegido, un par de horas
+   antes del primer partido. En supervivencia, no elegir cuesta
+   la eliminación: este es el aviso que más partidas salva.
+   ============================================================ */
+
+/** Cuánto antes del cierre se manda el recordatorio. */
+const AVISO_HORAS_ANTES = 2;
+
+export const recordarJornada = onSchedule(
+    {
+        /* Cada hora basta: con una ventana de dos, el aviso siempre
+           alcanza a caer dentro con margen suficiente. */
+        schedule: 'every 1 hours',
+        timeZone: 'America/Mexico_City',
+        secrets: [telegramToken],
+    },
+    async () => {
+        const ahora = Date.now();
+        const limite = ahora + AVISO_HORAS_ANTES * 60 * 60 * 1000;
+
+        const torneos = await db.collection('torneos').where('estado', '==', 'en-curso').get();
+        if (torneos.empty) return;
+
+        let avisados = 0;
+
+        for (const torneoDoc of torneos.docs) {
+            const t = torneoDoc.data() as Record<string, unknown>;
+            const numero = Number(t['jornadaActual'] ?? 1);
+
+            // Un solo recordatorio por jornada.
+            if (Number(t['recordatorioJornada'] ?? 0) === numero) continue;
+
+            const jornadaDoc = await jornadaDeCompeticion(String(t['competicionId'] ?? ''), numero);
+            if (!jornadaDoc) continue;
+
+            const j = jornadaDoc.data() as JornadaDoc;
+            if (j.estado !== 'abierta' || !j.cierraAt) continue;
+
+            // Solo dentro de la ventana: ni antes de tiempo ni cuando ya cerró.
+            const cierra = j.cierraAt.toMillis();
+            if (cierra <= ahora || cierra > limite) continue;
+
+            const esQuiniela = t['modo'] === 'quiniela';
+            const coleccion = esQuiniela ? 'quinielas' : 'picks';
+
+            const dentro = await torneoDoc.ref
+                .collection('participantes')
+                .where('vivo', '==', true)
+                .get();
+
+            const enviados = await torneoDoc.ref
+                .collection(coleccion)
+                .where('jornada', '==', numero)
+                .get();
+            const yaMandaron = new Set(enviados.docs.map((d) => String(d.data()['uid'])));
+
+            const faltantes = dentro.docs.filter((d) => !yaMandaron.has(d.id)).map((d) => d.id);
+
+            // Se marca aunque no falte nadie: la jornada ya quedó revisada.
+            await torneoDoc.ref.update({ recordatorioJornada: numero });
+            if (faltantes.length === 0) continue;
+
+            const minutos = Math.max(1, Math.round((cierra - ahora) / 60000));
+            const falta =
+                minutos >= 60
+                    ? `${Math.floor(minutos / 60)}h ${minutos % 60}m`
+                    : `${minutos} minutos`;
+
+            await avisar(
+                faltantes,
+                `⏰ <b>${String(t['nombre'] ?? 'Torneo')}</b>\n` +
+                `Cierra en ${falta} y todavía no ` +
+                (esQuiniela ? 'envías tus marcadores' : 'eliges equipo') +
+                ` para la jornada ${numero}.\n\n` +
+                (esQuiniela
+                    ? 'Si no los mandas, esta jornada te quedas en ceros.'
+                    : 'Si no eliges, quedas eliminado.'),
+            );
+
+            avisados += faltantes.length;
+        }
+
+        if (avisados > 0) logger.info(`Recordatorio enviado a ${avisados} jugador(es).`);
     },
 );

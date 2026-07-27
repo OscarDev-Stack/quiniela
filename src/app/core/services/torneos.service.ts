@@ -10,7 +10,6 @@ import {
     updateDoc,
     query,
     where,
-    orderBy,
     serverTimestamp,
     arrayUnion,
     arrayRemove,
@@ -61,14 +60,6 @@ export class TorneosService {
         return collectionData(collection(this.db, `torneos/${torneoId}/participantes`), {
             idField: 'id',
         }) as Observable<Participante[]>;
-    }
-
-    picksDeJornada(torneoId: string, jornada: number): Observable<Pick[]> {
-        const q = query(
-            collection(this.db, `torneos/${torneoId}/picks`),
-            where('jornada', '==', jornada),
-        );
-        return collectionData(q, { idField: 'id' }) as Observable<Pick[]>;
     }
 
     /** Mi elección de la jornada indicada. */
@@ -201,6 +192,7 @@ export class TorneosService {
         cierreInscripcion: Date;
         modo: ModoTorneo;
         jornadas: number;
+        vidaCubre: 'empate' | 'tropiezo';
     }): Promise<unknown> {
         const codigo = this.generarCodigo();
         return addDoc(collection(this.db, 'torneos'), {
@@ -235,6 +227,8 @@ export class TorneosService {
         costoEntrada: number;
         jornadaInicial: number;
         jornadas: number;
+        vidas: number;
+        vidaCubre: 'empate' | 'tropiezo';
         estado: string;
         inscritos: number;
     }> {
@@ -248,6 +242,8 @@ export class TorneosService {
                 costoEntrada: number;
                 jornadaInicial: number;
                 jornadas: number;
+                vidas: number;
+                vidaCubre: 'empate' | 'tropiezo';
                 estado: string;
                 inscritos: number;
             }

@@ -38,23 +38,19 @@ import { APP_VERSION } from '../../core/version';
 
       <section class="tarjetas">
         <div class="tarjeta">
-          <span class="etq">% de acierto</span>
-          <span class="val acento">{{ porcentaje() }}%</span>
-        </div>
-        <div class="tarjeta">
-          <span class="etq">Aciertos</span>
-          <span class="val">{{ aciertos() }} <small>/ {{ resueltos() }}</small></span>
-        </div>
-        <div class="tarjeta">
-          <span class="etq">Racha actual</span>
-          <span class="val">
-            {{ racha() }}
-            @if (racha() >= 3) { <span class="fuego">🔥</span> }
+          <span class="etq">Acierto</span>
+          <span class="val acento">
+            {{ porcentaje() }}%
+            <small>{{ aciertos() }}/{{ resueltos() }}</small>
           </span>
         </div>
         <div class="tarjeta">
-          <span class="etq">Mejor racha</span>
-          <span class="val">{{ mejorRacha() }}</span>
+          <span class="etq">Racha</span>
+          <span class="val">
+            {{ racha() }}
+            @if (racha() >= 3) { <span class="fuego">🔥</span> }
+            <small>mejor {{ mejorRacha() }}</small>
+          </span>
         </div>
         <div class="tarjeta">
           <span class="etq">Puntos históricos</span>
@@ -84,11 +80,9 @@ import { APP_VERSION } from '../../core/version';
         </section>
       }
 
+      @if (trofeos().length > 0) {
       <section class="panel">
         <h2>Trofeos</h2>
-        @if (trofeos().length === 0) {
-          <p class="vacio">Todavía no hay torneos ganados.</p>
-        }
         @for (t of trofeos(); track t.id) {
           <div class="trofeo">
             <span class="copa"><i class="ti ti-trophy"></i></span>
@@ -105,6 +99,7 @@ import { APP_VERSION } from '../../core/version';
           </div>
         }
       </section>
+      }
 
       @if (esMio() && validada()) {
         <section class="panel">
@@ -229,7 +224,7 @@ import { APP_VERSION } from '../../core/version';
       .tarjeta { background: var(--surface-2); border: 1px solid var(--border);
         border-radius: var(--radius); padding: 12px 14px; }
       .etq { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 3px; }
-      .val { font-size: 20px; font-weight: 700; }
+      .val { font-size: 20px; font-weight: 700; display: flex; align-items: baseline; gap: 5px; }
       .val small { font-size: 12px; font-weight: 400; color: var(--text-muted); }
       .acento { color: var(--accent-text); }
       .dorado { color: var(--warning-text); }
@@ -243,7 +238,6 @@ import { APP_VERSION } from '../../core/version';
         font-size: 14px; padding: 7px 0; color: var(--text-secondary); }
       .linea strong { color: var(--text-primary); }
       .verde { color: var(--success-text); }
-      .vacio { font-size: 13px; color: var(--text-muted); margin: 0; }
 
       .trofeo { display: flex; align-items: center; gap: 12px; padding: 10px 0;
         border-bottom: 1px solid var(--border); }
@@ -339,6 +333,7 @@ export class PerfilComponent {
   private readonly router = inject(Router);
   private readonly confirmar = inject(ConfirmarService);
 
+  /** uid del perfil que se muestra: el de la ruta, o el mío. */
   private readonly uidRuta = this.route.snapshot.paramMap.get('uid');
   private readonly miUid = toSignal(user(this.auth), { initialValue: null });
 
@@ -391,17 +386,29 @@ export class PerfilComponent {
 
   readonly version = APP_VERSION;
 
+  /* --- Solicitud de reinicio --- */
   readonly pidiendo = signal(false);
   readonly mensajeReinicio = signal('');
   readonly errorReinicio = signal(false);
 
+  /** Hasta que un administrador valide la cuenta no hay nada que configurar. */
   readonly validada = computed(() => this.me()?.validada === true);
 
   readonly saldo = computed(() => this.me()?.puntos ?? 0);
 
-  readonly yaSolicitado = computed(
-    () => this.me()?.solicitudReinicio?.saldo === this.saldo(),
-  );
+  /**
+   * Saldo con el que acabamos de enviar la solicitud. Se guarda aquí
+   * para que el botón reaccione al toque, sin esperar a que Firestore
+   * propague el cambio. Si el saldo se mueve, deja de coincidir y el
+   * botón vuelve solo.
+   */
+  private readonly saldoEnviado = signal<number | null>(null);
+
+  /** Ya se pidió con este mismo saldo: no tiene caso repetirla. */
+  readonly yaSolicitado = computed(() => {
+    const actual = this.saldo();
+    return this.saldoEnviado() === actual || this.me()?.solicitudReinicio?.saldo === actual;
+  });
 
   async pedirReinicio(): Promise<void> {
     const ok = await this.confirmar.pedir({
@@ -423,6 +430,7 @@ export class PerfilComponent {
 
     try {
       await this.perfil.solicitarReinicio();
+      this.saldoEnviado.set(this.saldo());
       this.mensajeReinicio.set('Listo, ya le avisamos al administrador.');
     } catch (e: unknown) {
       this.errorReinicio.set(true);
@@ -432,7 +440,6 @@ export class PerfilComponent {
     }
   }
 
-  /** Abre el historial de novedades. */
   verNovedades(): void {
     this.novedadesSrv.abrirHistorial();
   }

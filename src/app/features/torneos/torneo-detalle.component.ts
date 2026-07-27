@@ -456,7 +456,8 @@ import { ConfirmarService } from '../../shared/confirmar.service';
 
         <details class="panel reglas-panel">
           <summary><i class="ti ti-book"></i> Cómo se juega</summary>
-          <app-reglas-torneo [costo]="t.costoEntrada" [modo]="t.modo ?? 'supervivencia'" />
+          <app-reglas-torneo [costo]="t.costoEntrada" [modo]="t.modo ?? 'supervivencia'"
+            [vidas]="t.vidas" [vidaCubre]="t.vidaCubre ?? 'empate'" />
         </details>
         </div>
       }

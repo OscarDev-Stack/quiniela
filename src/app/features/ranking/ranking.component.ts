@@ -77,13 +77,12 @@ type Vista = 'puntos' | 'porcentaje';
       @for (f of podio(); track f.id) {
         <div
           class="row row--podio"
+          [class.row--lider]="f.posicion === 1"
           [class.row--me]="f.id === miUid()"
           [class.row--clic]="isAdmin()"
           (click)="verPerfil(f)"
         >
-          <span class="medalla" [class]="'medalla--' + f.posicion">
-            <i class="ti ti-medal"></i>
-          </span>
+          <span class="medalla" [class]="'medalla--' + f.posicion">{{ f.posicion }}</span>
           <span class="avatar">{{ inicial(f.alias) }}</span>
           <span class="alias">{{ f.id === miUid() ? 'Tú' : f.alias }}</span>
 
@@ -206,13 +205,37 @@ type Vista = 'puntos' | 'porcentaje';
       .row--clic { cursor: pointer; }
       .row--podio { padding: 13px 8px; }
 
+      /*
+       * Disco con el número dentro. Un icono de medalla se veía casi
+       * igual en los tres puestos; con fondo sólido y contraste alto,
+       * el oro, la plata y el bronce se distinguen de un vistazo.
+       */
       .medalla {
-        width: 26px; display: flex; align-items: center; justify-content: center;
-        font-size: 21px; flex-shrink: 0;
+        width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 13px; font-weight: 800; color: #1c1c1e;
+        box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.18);
       }
-      .medalla--1 { color: #e8b44a; }
-      .medalla--2 { color: #b9c2cc; }
-      .medalla--3 { color: #c98b56; }
+      .medalla--1 {
+        background: linear-gradient(160deg, #ffdf7a 0%, #f0b429 55%, #c98a06 100%);
+      }
+      .medalla--2 {
+        background: linear-gradient(160deg, #f2f6fa 0%, #c3ccd8 55%, #94a1b2 100%);
+      }
+      .medalla--3 {
+        background: linear-gradient(160deg, #f0b184 0%, #cd7f45 55%, #9c5a29 100%);
+        color: #fff;
+      }
+
+      /* El líder se lleva un realce discreto en toda su fila. */
+      .row--lider {
+        background: linear-gradient(
+          90deg,
+          rgba(240, 180, 41, 0.13) 0%,
+          rgba(240, 180, 41, 0) 70%
+        );
+        border-radius: var(--radius);
+      }
 
       .separador {
         display: flex; align-items: center; gap: 10px;
