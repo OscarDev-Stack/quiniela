@@ -25,6 +25,8 @@ export interface AppUser {
     torneosGanados?: number;
     /* Ids de los torneos en los que participo. */
     torneos?: string[];
+    /* Ids de las eliminatorias en las que participo. */
+    brackets?: string[];
 
     /* Con qué saldo se pidió el último reinicio. Evita repetirla. */
     solicitudReinicio?: { saldo: number } | null;

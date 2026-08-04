@@ -4,7 +4,9 @@ import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavComponent } from '../../shared/nav.component';
 import { TorneosService } from '../../core/services/torneos.service';
+import { BracketsService } from '../../core/services/brackets.service';
 import { Torneo } from '../../core/models/torneo.model';
+import { Bracket } from '../../core/models/bracket.model';
 
 @Component({
   selector: 'app-torneos-list',
@@ -14,7 +16,7 @@ import { Torneo } from '../../core/models/torneo.model';
     <div class="screen">
       <app-nav title="Torneos" />
 
-      @if (visibles().length === 0) {
+      @if (visibles().length === 0 && brackets().length === 0) {
         <div class="vacio">
           <i class="ti ti-tournament"></i>
           <p>No participas en ningún torneo.</p>
@@ -59,6 +61,33 @@ import { Torneo } from '../../core/models/torneo.model';
           </div>
         </article>
       }
+
+      @if (brackets().length > 0) {
+        <h3 class="seccion">Eliminatorias</h3>
+        @for (b of brackets(); track b.id) {
+          <article class="card card--bracket" (click)="abrirBracket(b)">
+            <div class="top">
+              <span class="competicion">Eliminatoria</span>
+              @switch (b.estado) {
+                @case ('inscripcion') { <span class="tag tag--ok">Abierta</span> }
+                @case ('en-curso') { <span class="tag tag--warn">En juego</span> }
+                @case ('finalizado') { <span class="tag">Finalizada</span> }
+              }
+            </div>
+            <h2>{{ b.nombre }}</h2>
+            <div class="meta">
+              <span><i class="ti ti-sitemap"></i> {{ tipoBracket(b) }}</span>
+              <span><i class="ti ti-users"></i> {{ b.config.equipos }} equipos</span>
+              @if (b.costoEntrada > 0) {
+                <span class="bolsa"><i class="ti ti-coins"></i> Bolsa {{ b.bolsa | number }} pts</span>
+              }
+              @if (b.ganadorAlias) {
+                <span class="ganador"><i class="ti ti-trophy"></i> {{ b.ganadorAlias }}</span>
+              }
+            </div>
+          </article>
+        }
+      }
     </div>
   `,
   styles: [
@@ -85,14 +114,21 @@ import { Torneo } from '../../core/models/torneo.model';
         background: var(--surface-1); color: var(--text-secondary); }
       .tag--ok { color: var(--success-text); background: var(--success-bg); }
       .tag--warn { color: var(--warning-text); background: var(--warning-bg); }
+      .seccion {
+        font-size: 13px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+        color: var(--text-muted); margin: 22px 0 12px;
+      }
+      .card--bracket { border-left: 3px solid var(--accent-fill); }
     `,
   ],
 })
 export class TorneosListComponent {
   private readonly service = inject(TorneosService);
+  private readonly bracketsService = inject(BracketsService);
   private readonly router = inject(Router);
 
   private readonly torneos = toSignal(this.service.misTorneos$, { initialValue: [] as Torneo[] });
+  readonly brackets = toSignal(this.bracketsService.misBrackets(), { initialValue: [] as Bracket[] });
 
   readonly visibles = computed(() =>
     [...this.torneos()].sort((a, b) => a.estado.localeCompare(b.estado)),
@@ -100,5 +136,15 @@ export class TorneosListComponent {
 
   abrir(t: Torneo): void {
     this.router.navigate(['/torneos', t.id]);
+  }
+
+  abrirBracket(b: Bracket): void {
+    this.router.navigate(['/eliminatorias', b.id]);
+  }
+
+  /** Describe el tipo de eliminatoria: formato y cruces. */
+  tipoBracket(b: Bracket): string {
+    const rondas = b.config.formatoRondas === 'ida-vuelta' ? 'ida y vuelta' : 'partido único';
+    return b.config.avance === 'reordena' ? `Liguilla · ${rondas}` : `Copa · ${rondas}`;
   }
 }

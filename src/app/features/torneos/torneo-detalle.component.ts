@@ -130,6 +130,24 @@ import { ConfirmarService } from '../../shared/confirmar.service';
           <div class="aviso aviso--fuera">
             <i class="ti ti-skull"></i> Quedaste eliminado en la jornada {{ yo()!.eliminadoEn }}.
           </div>
+
+          @if (puedeRevivir()) {
+            <section class="panel panel--revivir">
+              <div class="panel-head">
+                <h3><i class="ti ti-heart-plus"></i> ¿Una última oportunidad?</h3>
+              </div>
+              <p class="ayuda">
+                Puedes volver solo en esta jornada, con las mismas vidas que
+                tenías al caer. Una sola vez por torneo.
+              </p>
+              <button class="btn btn--principal" [disabled]="reviviendo()" (click)="revivir()">
+                {{ reviviendo() ? 'Reviviendo…' : 'Revivir por ' + (costoRevivir() | number) + ' pts' }}
+              </button>
+              @if (mensajeRevivir()) {
+                <p class="aviso-tg" [class.aviso-tg--error]="errorRevivir()">{{ mensajeRevivir() }}</p>
+              }
+            </section>
+          }
         }
 
         @if (pickEnEspera(); as p) {
@@ -290,10 +308,18 @@ import { ConfirmarService } from '../../shared/confirmar.service';
               <div class="elegido">
                 <i class="ti ti-check"></i> Elegiste <strong>{{ p.equipo }}</strong>
               </div>
-            } @else if (puedeElegir()) {
-              <p class="ayuda">
-                Elige un equipo que gane. El empate te cuesta la vida y la derrota te elimina.
-              </p>
+            }
+
+            @if (puedeElegir()) {
+              @if (!miPick()) {
+                <p class="ayuda">
+                  Elige un equipo que gane. El empate te cuesta la vida y la derrota te elimina.
+                </p>
+              } @else {
+                <p class="ayuda">
+                  Puedes cambiar tu elección mientras la jornada siga abierta.
+                </p>
+              }
 
               @if (disponibles().length === 0) {
                 <div class="aviso">
@@ -303,7 +329,12 @@ import { ConfirmarService } from '../../shared/confirmar.service';
               } @else {
                 <div class="equipos">
                   @for (e of disponibles(); track e) {
-                    <button class="equipo" [disabled]="guardando()" (click)="elegir(e)">
+                    <button
+                      class="equipo"
+                      [class.equipo--activo]="e === miPick()?.equipo"
+                      [disabled]="guardando()"
+                      (click)="elegir(e)"
+                    >
                       {{ e }}
                     </button>
                   }
@@ -349,7 +380,10 @@ import { ConfirmarService } from '../../shared/confirmar.service';
               <p class="usados-titulo">Ya no disponibles</p>
               <div class="chips">
                 @for (e of comprometidos(); track e) {
-                  <span class="chip chip--usado">{{ e }}</span>
+                  <span class="chip chip--usado">
+                    @if (jornadaLabel(e); as j) { <span class="chip-j">{{ j }}</span> }
+                    {{ e }}
+                  </span>
                 }
               </div>
             }
@@ -386,6 +420,46 @@ import { ConfirmarService } from '../../shared/confirmar.service';
             [quinielas]="quinielasJornada()"
             [miUid]="miUid()"
           />
+        }
+
+        <!-- Historial: cartones y resultados de jornadas ya jugadas. -->
+        @if (esQuiniela() && jornadasPasadas().length > 0) {
+          <section class="panel">
+            <button class="panel-toggle" (click)="verHistorial.set(!verHistorial())">
+              <span><i class="ti ti-history"></i> Historial de jornadas</span>
+              <i class="ti" [class.ti-chevron-down]="!verHistorial()" [class.ti-chevron-up]="verHistorial()"></i>
+            </button>
+
+            @if (verHistorial()) {
+              <div class="hist-cuerpo">
+                <p class="hist-nota">
+                  Revisa cualquier jornada pasada para hacer tus propias cuentas.
+                </p>
+
+                <div class="hist-jornadas">
+                  @for (n of jornadasPasadas(); track n) {
+                    <button
+                      class="hist-chip"
+                      [class.hist-chip--activa]="jornadaHistorial() === n"
+                      (click)="verJornadaHistorial(n)"
+                    >
+                      J{{ n }}
+                    </button>
+                  }
+                </div>
+
+                @if (jornadaHistorialData(); as jh) {
+                  <app-cartones-jornada
+                    [jornada]="jh"
+                    [quinielas]="cartonesHistorial()"
+                    [miUid]="miUid()"
+                  />
+                } @else if (jornadaHistorial()) {
+                  <p class="hist-cargando">Cargando jornada {{ jornadaHistorial() }}…</p>
+                }
+              </div>
+            }
+          </section>
         }
 
         @if (esQuiniela()) {
@@ -457,7 +531,8 @@ import { ConfirmarService } from '../../shared/confirmar.service';
         <details class="panel reglas-panel">
           <summary><i class="ti ti-book"></i> Cómo se juega</summary>
           <app-reglas-torneo [costo]="t.costoEntrada" [modo]="t.modo ?? 'supervivencia'"
-            [vidas]="t.vidas" [vidaCubre]="t.vidaCubre ?? 'empate'" />
+            [vidas]="t.vidas" [vidaCubre]="t.vidaCubre ?? 'empate'"
+            [permiteRevivir]="t.permiteRevivir ?? false" />
         </details>
         </div>
       }
@@ -544,6 +619,7 @@ import { ConfirmarService } from '../../shared/confirmar.service';
         padding: 10px 12px; border-radius: var(--radius); margin-bottom: 14px; cursor: pointer; }
       .aviso { background: var(--warning-bg); color: var(--warning-text); font-size: 13px;
         padding: 11px 13px; border-radius: var(--radius); margin-bottom: 14px; }
+      .panel--revivir { border-color: var(--accent-fill); }
       .aviso--fuera { background: var(--danger-bg); color: var(--danger-text); }
 
       .panel { background: var(--surface-2); border: 1px solid var(--border);
@@ -559,6 +635,26 @@ import { ConfirmarService } from '../../shared/confirmar.service';
         background: transparent; border: none; padding: 0; color: inherit;
       }
       .panel-head--boton:hover h3 { color: var(--accent-text); }
+
+      .panel-toggle {
+        display: flex; align-items: center; justify-content: space-between; width: 100%;
+        background: transparent; border: none; padding: 0; cursor: pointer;
+        color: inherit; font-size: 15px; font-weight: 600;
+      }
+      .panel-toggle i { color: var(--text-muted); }
+      .hist-cuerpo { margin-top: 14px; }
+      .hist-nota { font-size: 12px; color: var(--text-secondary); margin: 0 0 12px; }
+      .hist-jornadas { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+      .hist-chip {
+        min-width: 42px; padding: 7px 10px; cursor: pointer;
+        border: 1px solid var(--border); border-radius: 999px;
+        background: var(--surface-1); color: var(--text-secondary);
+        font-size: 13px; font-weight: 600;
+      }
+      .hist-chip--activa {
+        border-color: var(--accent-fill); background: var(--accent-bg); color: var(--accent-text);
+      }
+      .hist-cargando { font-size: 13px; color: var(--text-muted); }
       .panel-head--boton .restantes { margin-left: auto; }
       .chevron { font-size: 17px; color: var(--text-muted); flex-shrink: 0; }
       .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -567,6 +663,11 @@ import { ConfirmarService } from '../../shared/confirmar.service';
         background: var(--surface-1); color: var(--text-secondary);
       }
       .chip--usado { opacity: 0.5; text-decoration: line-through; }
+      .chip-j {
+        display: inline-block; text-decoration: none; opacity: 1;
+        font-size: 10px; font-weight: 700; color: var(--accent-text);
+        background: var(--accent-bg); border-radius: 4px; padding: 0 4px; margin-right: 3px;
+      }
       .sin-catalogo { font-size: 12px; color: var(--text-muted); margin: 0; }
 
       .participante { padding: 10px 0; border-bottom: 1px solid var(--border); }
@@ -605,6 +706,12 @@ import { ConfirmarService } from '../../shared/confirmar.service';
       .guion { color: var(--text-muted); }
 
       .equipos { display: flex; flex-wrap: wrap; gap: 8px; }
+      .equipo--activo {
+        border-color: var(--accent-fill);
+        background: var(--accent-bg);
+        color: var(--accent-text);
+        font-weight: 700;
+      }
       .equipo {
         flex: 1 1 calc(50% - 4px); padding: 12px 10px; cursor: pointer;
         border: 1px solid var(--border); border-radius: var(--radius);
@@ -880,6 +987,26 @@ export class TorneoDetalleComponent {
 
 
   /** Elecciones mías que siguen sin definirse por un aplazamiento. */
+  /** Todos mis picks, para saber en qué jornada usé cada equipo. */
+  private readonly misPicksTodos = toSignal(this.service.misPicks(this.id), {
+    initialValue: [] as Pick[],
+  });
+
+  /** Mapa equipo → jornada en que lo usé. */
+  readonly jornadaDeEquipo = computed(() => {
+    const mapa = new Map<string, number>();
+    for (const p of this.misPicksTodos()) {
+      if (p.equipo) mapa.set(p.equipo, p.jornada);
+    }
+    return mapa;
+  });
+
+  /** Etiqueta "J3" para un equipo, si sé en qué jornada se usó. */
+  jornadaLabel(equipo: string): string {
+    const j = this.jornadaDeEquipo().get(equipo);
+    return j ? `J${j}` : '';
+  }
+
   private readonly pendientes = toSignal(this.service.misPicksPendientes(this.id), {
     initialValue: [] as Pick[],
   });
@@ -921,6 +1048,44 @@ export class TorneoDetalleComponent {
   /** Cartones de todos en la jornada. El tablero los ordena. */
   private readonly quinielasSignal = signal<Quiniela[]>([]);
   readonly quinielasJornada = this.quinielasSignal.asReadonly();
+
+  /* ---- Historial de jornadas ---- */
+  readonly verHistorial = signal(false);
+  readonly jornadaHistorial = signal<number | null>(null);
+
+  /** Jornadas ya jugadas: de la inicial hasta la anterior a la actual. */
+  readonly jornadasPasadas = computed(() => {
+    const t = this.torneo();
+    if (!t) return [];
+    const inicio = t.jornadaInicial ?? 1;
+    const actual = t.jornadaActual ?? inicio;
+    const fin = actual - 1; // la actual se ve arriba, no en historial
+    const lista: number[] = [];
+    for (let n = inicio; n <= fin; n++) lista.push(n);
+    return lista.reverse(); // más reciente primero
+  });
+
+  /** Datos de la jornada de historial elegida (para nombres y resultados). */
+  readonly jornadaHistorialData = toSignal(
+    toObservable(computed(() => ({ t: this.torneo(), n: this.jornadaHistorial() }))).pipe(
+      switchMap(({ t, n }) =>
+        t && n ? this.competiciones.jornadaPorNumero(t.competicionId, n) : of(null),
+      ),
+    ),
+    { initialValue: null },
+  );
+
+  /** Cartones de la jornada de historial elegida. */
+  readonly cartonesHistorial = toSignal(
+    toObservable(this.jornadaHistorial).pipe(
+      switchMap((n) => (n ? this.service.quinielasJornada(this.id, n) : of([]))),
+    ),
+    { initialValue: [] },
+  );
+
+  verJornadaHistorial(n: number): void {
+    this.jornadaHistorial.set(this.jornadaHistorial() === n ? null : n);
+  }
 
   /** Elecciones de la jornada en curso, una vez cerrada. */
   private readonly picksJornada = signal<Pick[]>([]);
@@ -1008,11 +1173,60 @@ export class TorneoDetalleComponent {
 
   readonly disponibles = computed(() => {
     const equipos = equiposDeJornada(this.jornadaActual());
-    const comprometidos = this.comprometidos();
+    // El equipo elegido esta jornada sigue disponible: así se puede
+    // cambiar mientras el plazo no cierre.
+    const actual = this.miPick()?.equipo;
+    const bloqueados = this.comprometidos().filter((e) => e !== actual);
     return equipos
-      .filter((e) => !comprometidos.includes(e))
+      .filter((e) => !bloqueados.includes(e))
       .sort((a, b) => a.localeCompare(b));
   });
+
+  /* --- Revivir --- */
+  readonly reviviendo = signal(false);
+  readonly mensajeRevivir = signal('');
+  readonly errorRevivir = signal(false);
+
+  /** ¿Puede revivir ahora? Solo en la jornada siguiente a su caída. */
+  readonly puedeRevivir = computed(() => {
+    const t = this.torneo();
+    const yo = this.yo();
+    if (!t?.permiteRevivir || t.estado !== 'en-curso') return false;
+    if (!yo || yo.vivo || yo.revivioEn) return false;
+    const cayo = yo.eliminadoEn ?? 0;
+    return cayo > 0 && (t.jornadaActual ?? 0) === cayo + 1;
+  });
+
+  /** Costo de revivir: (jornada ÷ 2) × entrada, decimal tal cual. */
+  readonly costoRevivir = computed(() => {
+    const t = this.torneo();
+    if (!t) return 0;
+    return Math.round(((t.jornadaActual ?? 0) / 2) * (t.costoEntrada ?? 0));
+  });
+
+  async revivir(): Promise<void> {
+    const ok = await this.confirmar.pedir({
+      titulo: 'Revivir',
+      mensaje:
+        `Te costará ${this.costoRevivir()} pts y regresas con las mismas vidas ` +
+        'que tenías al caer. Es tu única oportunidad.',
+      aceptar: 'Revivir',
+    });
+    if (!ok) return;
+
+    this.reviviendo.set(true);
+    this.mensajeRevivir.set('');
+    this.errorRevivir.set(false);
+    try {
+      await this.service.revivir(this.id);
+      this.mensajeRevivir.set('¡Estás de vuelta! Elige con cuidado.');
+    } catch (e: unknown) {
+      this.errorRevivir.set(true);
+      this.mensajeRevivir.set((e as Error)?.message ?? 'No se pudo revivir.');
+    } finally {
+      this.reviviendo.set(false);
+    }
+  }
 
   readonly puedeElegir = computed(() => {
     const j = this.jornadaActual();
@@ -1044,16 +1258,17 @@ export class TorneoDetalleComponent {
 
   async elegir(equipo: string): Promise<void> {
     const ok = await this.confirmar.pedir({
-      titulo: `Elegir a ${equipo}`,
+      titulo: this.miPick() ? `Cambiar a ${equipo}` : `Elegir a ${equipo}`,
       mensaje: 'No podrás usarlo de nuevo en el resto del torneo.',
       aceptar: 'Confirmar',
     });
     if (!ok) return;
+    const yaTenia = !!this.miPick();
     this.guardando.set(true);
     this.mensaje.set('');
     try {
       await this.service.elegir(this.id, equipo);
-      this.mensaje.set(`Elegiste ${equipo}.`);
+      this.mensaje.set(yaTenia ? `Cambiaste a ${equipo}.` : `Elegiste ${equipo}.`);
     } catch (e: unknown) {
       this.mensaje.set((e as Error)?.message ?? 'No se pudo guardar tu elección.');
     } finally {

@@ -52,7 +52,7 @@ import { ConfirmarService } from '../../shared/confirmar.service';
       <div class="grid">
         <label class="field">
           <span>Nombre</span>
-          <input type="text" [(ngModel)]="form.nombre" placeholder="Los del jueves, La Oficina…" />
+          <input type="text" [(ngModel)]="form.nombre" placeholder="AutomatePower" />
           <small class="pista">Como le van a decir entre ustedes.</small>
         </label>
         <label class="field">
@@ -94,6 +94,18 @@ import { ConfirmarService } from '../../shared/confirmar.service';
               </small>
             </label>
           }
+
+          <label class="switch">
+            <span class="switch-texto">
+              Permitir revivir
+              <small class="pista">
+                Quien caiga puede volver una vez, solo en la jornada siguiente,
+                a muerte súbita. Cuesta (jornada ÷ 2) × la entrada.
+              </small>
+            </span>
+            <input type="checkbox" class="switch-input" [(ngModel)]="form.permiteRevivir" />
+            <span class="switch-pista" aria-hidden="true"></span>
+          </label>
         }
         <label class="field">
           <span>Competición</span>
@@ -135,7 +147,7 @@ import { ConfirmarService } from '../../shared/confirmar.service';
               Gana quien más acumule.
             </p>
           } @else {
-            <p>Una vida por jugador. El empate la consume; la derrota elimina.</p>
+            <p>{{ resumenSupervivencia() }}</p>
           }
         </div>
       </div>
@@ -284,7 +296,33 @@ import { ConfirmarService } from '../../shared/confirmar.service';
       h2 { font-size: 16px; font-weight: 600; margin: 0; }
       .sub { font-size: 12px; color: var(--text-muted); }
       .pista { display: block; font-size: 11px; color: var(--text-muted); margin-top: 4px; }
-      .pista { display: block; font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+      .switch {
+        display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
+        cursor: pointer; margin-top: 4px;
+      }
+      .switch-texto { flex: 1; font-size: 14px; }
+      .switch-input { position: absolute; opacity: 0; width: 0; height: 0; }
+      .switch-pista {
+        position: relative; flex-shrink: 0; margin-top: 2px;
+        width: 46px; height: 26px; border-radius: 999px;
+        background: var(--surface-1); border: 1px solid var(--border);
+        transition: background 0.18s ease, border-color 0.18s ease;
+      }
+      .switch-pista::after {
+        content: ''; position: absolute; top: 2px; left: 2px;
+        width: 20px; height: 20px; border-radius: 50%;
+        background: var(--text-muted);
+        transition: transform 0.18s ease, background 0.18s ease;
+      }
+      .switch-input:checked + .switch-pista {
+        background: var(--accent-fill); border-color: transparent;
+      }
+      .switch-input:checked + .switch-pista::after {
+        transform: translateX(20px); background: #fff;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .switch-pista, .switch-pista::after { transition: none; }
+      }
       .regla-fija p { font-size: 12px; color: var(--text-muted); margin: 0;
         background: var(--surface-1); border-radius: var(--radius); padding: 10px 12px; }
       .bolsa { font-size: 13px; color: var(--success-text); margin-top: 4px; }
@@ -402,6 +440,7 @@ export class AdminTorneosComponent {
     jornadas: 5,
     vidas: 1,
     vidaCubre: 'empate' as 'empate' | 'tropiezo',
+    permiteRevivir: false,
     competicionId: '',
     jornadaInicial: 1,
     costoEntrada: 0,
@@ -511,6 +550,19 @@ export class AdminTorneosComponent {
     return this.participantesDe(torneoId).filter((p) => p.vivo).length;
   }
 
+  /** Resumen de las reglas de supervivencia según lo elegido. */
+  resumenSupervivencia(): string {
+    const v = Number(this.form.vidas);
+    if (v === 0) {
+      return 'Sin vidas: un solo tropiezo, empate o derrota, y quedas fuera.';
+    }
+    const cuantas = v === 1 ? 'Una vida' : `${v} vidas`;
+    if (this.form.vidaCubre === 'tropiezo') {
+      return `${cuantas} por jugador. Cada empate o derrota gasta una; al agotarlas, el siguiente tropiezo elimina.`;
+    }
+    return `${cuantas} por jugador. El empate gasta una vida; la derrota siempre elimina.`;
+  }
+
   esGestor(t: Torneo, uid: string): boolean {
     return (t.gestores ?? []).includes(uid);
   }
@@ -562,6 +614,7 @@ export class AdminTorneosComponent {
         jornadas: this.form.modo === 'quiniela' ? Number(this.form.jornadas) || 1 : 0,
         vidas: this.form.modo === 'supervivencia' ? Number(this.form.vidas) : 0,
         vidaCubre: this.form.vidaCubre,
+        permiteRevivir: this.form.modo === 'supervivencia' && this.form.permiteRevivir,
       });
       this.form = {
         nombre: '',
@@ -569,6 +622,7 @@ export class AdminTorneosComponent {
         jornadas: 5,
         vidas: 1,
         vidaCubre: 'empate',
+        permiteRevivir: false,
         competicionId: '',
         jornadaInicial: 1,
         costoEntrada: 0,

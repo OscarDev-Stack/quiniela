@@ -27,6 +27,8 @@ export interface Torneo {
     vidas: number;
     /* Qué salva una vida: 'empate' o 'tropiezo' (también derrotas). */
     vidaCubre?: 'empate' | 'tropiezo';
+    /* Si se puede revivir tras caer (una vez, jornada siguiente). */
+    permiteRevivir?: boolean;
     /* Puntos que cuesta inscribirse. 0 = gratis. */
     costoEntrada: number;
     /* Acumulado de las inscripciones. */
@@ -69,6 +71,8 @@ export interface Participante {
     exactos?: number;
     equiposUsados: string[];
     eliminadoEn?: number;
+    /* Jornada en la que revivió, si lo hizo. */
+    revivioEn?: number;
 }
 
 /** Pronóstico de una jornada completa en el modo quiniela. */

@@ -2092,6 +2092,7 @@ export const consultarTorneo = onCall(opcionesCall, async (req) => {
         jornadas: Number(t['jornadas'] ?? 0),
         vidas: Number(t['vidas'] ?? 1),
         vidaCubre: String(t['vidaCubre'] ?? 'empate'),
+        permiteRevivir: t['permiteRevivir'] === true,
         estado: String(t['estado'] ?? 'inscripcion'),
         inscritos: participantes.data().count,
     };
@@ -2507,5 +2508,717 @@ export const recordarJornada = onSchedule(
         }
 
         if (avisados > 0) logger.info(`Recordatorio enviado a ${avisados} jugador(es).`);
+    },
+);
+
+/* ============================================================
+   REVIVIR EN SUPERVIVENCIA
+   Si el torneo lo permite, quien cae puede volver — pero solo
+   en la jornada inmediata siguiente a su eliminación, una vez
+   por torneo, y vuelve con las mismas vidas que tenía al caer.
+   Costo: (jornada ÷ 2) × costo de entrada.
+   ============================================================ */
+export const revivir = onCall(
+    { ...opcionesCall, secrets: [telegramToken] },
+    async (req) => {
+        const uid = req.auth?.uid;
+        if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+        const torneoId = String(req.data?.torneoId ?? '');
+        if (!torneoId) throw new HttpsError('invalid-argument', 'Falta el torneo.');
+
+        const torneoRef = db.doc(`torneos/${torneoId}`);
+
+        // Todo en una transacción: cobro y regreso, o nada.
+        const resultado = await db.runTransaction(async (tx) => {
+            const torneoSnap = await tx.get(torneoRef);
+            if (!torneoSnap.exists) throw new HttpsError('not-found', 'El torneo no existe.');
+            const t = torneoSnap.data() as Record<string, unknown>;
+
+            if (t['permiteRevivir'] !== true) {
+                throw new HttpsError('failed-precondition', 'Este torneo no permite revivir.');
+            }
+            if (t['estado'] !== 'en-curso') {
+                throw new HttpsError('failed-precondition', 'El torneo no está en curso.');
+            }
+
+            const partRef = torneoRef.collection('participantes').doc(uid);
+            const partSnap = await tx.get(partRef);
+            if (!partSnap.exists) throw new HttpsError('permission-denied', 'No estás en este torneo.');
+            const p = partSnap.data() as Record<string, unknown>;
+
+            if (p['vivo'] === true) {
+                throw new HttpsError('failed-precondition', 'Sigues vivo, no necesitas revivir.');
+            }
+            if (p['revivioEn']) {
+                throw new HttpsError('failed-precondition', 'Ya reviviste una vez en este torneo.');
+            }
+
+            // Solo en la jornada inmediata siguiente a la caída.
+            const cayoEn = Number(p['eliminadoEn'] ?? 0);
+            const actual = Number(t['jornadaActual'] ?? 0);
+            if (cayoEn === 0 || actual !== cayoEn + 1) {
+                throw new HttpsError(
+                    'failed-precondition',
+                    'Solo puedes revivir en la jornada justo después de tu eliminación, y ya pasó.',
+                );
+            }
+
+            // Costo: (jornada ÷ 2) × entrada, con el decimal tal cual.
+            const entrada = Number(t['costoEntrada'] ?? 0);
+            const costo = Math.round((actual / 2) * entrada);
+
+            const userRef = db.doc(`users/${uid}`);
+            const userSnap = await tx.get(userRef);
+            const saldo = Number(userSnap.data()?.['puntos'] ?? 0);
+            if (saldo - costo < TOPE_INFERIOR) {
+                throw new HttpsError('failed-precondition', 'No te alcanza el saldo para revivir.');
+            }
+
+            // Cobro.
+            if (costo > 0) {
+                tx.update(userRef, { puntos: FieldValue.increment(-costo) });
+                tx.set(torneoRef, { bolsa: FieldValue.increment(costo) }, { merge: true });
+            }
+
+            // Vuelve con las mismas vidas que tenía al caer: no se tocan, así
+            // que quedan tal cual. Solo se marca vivo de nuevo y que ya revivió.
+            tx.update(partRef, {
+                vivo: true,
+                eliminadoEn: FieldValue.delete(),
+                revivioEn: actual,
+            });
+
+            return { costo, jornada: actual, alias: String(p['alias'] ?? 'jugador') };
+        });
+
+        await actualizarRanking([uid]);
+
+        await avisar(
+            [uid],
+            `❤️‍🔥 <b>${String((await torneoRef.get()).data()?.['nombre'] ?? 'Torneo')}</b>\n` +
+            `Reviviste en la jornada ${resultado.jornada} por ${resultado.costo} pts.\n` +
+            'Vuelves con las vidas que tenías al caer. ¡Elige con cuidado!',
+        );
+
+        return { ok: true, ...resultado };
+    },
+);
+
+/* ============================================================
+   BRACKETS — eliminatoria (Fase 2: armar y capturar)
+   La lógica del cuadro vive aquí, en el servidor, para que
+   nadie pueda forzar un avance o un resultado desde el cliente.
+   ============================================================ */
+
+interface EquipoBk {
+    nombre: string;
+    siembra: number;
+}
+interface PartidoBk {
+    tipo: 'ida' | 'vuelta' | 'unico';
+    golesLocal?: number | null;
+    golesVisitante?: number | null;
+    ganaPenales?: 'local' | 'visitante' | null;
+}
+interface LlaveBk {
+    id: string;
+    ronda: number;
+    posicion: number;
+    local?: EquipoBk;
+    visitante?: EquipoBk;
+    partidos: PartidoBk[];
+    ganador?: EquipoBk;
+    resueltoPor?: 'global' | 'mejor-sembrado' | 'penales';
+}
+
+function rondasDeBk(equipos: number): number {
+    return Math.max(1, Math.round(Math.log2(equipos)));
+}
+
+function partidosDeLlaveBk(formato: 'ida-vuelta' | 'unico'): PartidoBk[] {
+    if (formato === 'unico') return [{ tipo: 'unico', golesLocal: null, golesVisitante: null }];
+    return [
+        { tipo: 'ida', golesLocal: null, golesVisitante: null },
+        { tipo: 'vuelta', golesLocal: null, golesVisitante: null },
+    ];
+}
+
+function armarCuadroBk(config: Record<string, unknown>, equipos: EquipoBk[]): LlaveBk[] {
+    const total = rondasDeBk(Number(config['equipos']));
+    const llaves: LlaveBk[] = [];
+
+    for (let ronda = 0; ronda < total; ronda++) {
+        const enRonda = Number(config['equipos']) / Math.pow(2, ronda + 1);
+        const esFinal = ronda === total - 1;
+        const formato = String(esFinal ? config['formatoFinal'] : config['formatoRondas']) as
+            | 'ida-vuelta'
+            | 'unico';
+
+        for (let pos = 0; pos < enRonda; pos++) {
+            llaves.push({ id: `R${ronda}-L${pos}`, ronda, posicion: pos, partidos: partidosDeLlaveBk(formato) });
+        }
+    }
+
+    if (config['armado'] === 'siembra' && equipos.length === Number(config['equipos'])) {
+        const orden = [...equipos].sort((a, b) => a.siembra - b.siembra);
+        let i = 0;
+        let j = orden.length - 1;
+        let pos = 0;
+        while (i < j) {
+            const llave = llaves.find((l) => l.ronda === 0 && l.posicion === pos);
+            if (llave) {
+                llave.local = orden[i];
+                llave.visitante = orden[j];
+            }
+            i++;
+            j--;
+            pos++;
+        }
+    }
+    return llaves;
+}
+
+function globalDeLlaveBk(llave: LlaveBk): { local: number; visitante: number } | null {
+    let local = 0;
+    let visitante = 0;
+    let hay = false;
+    for (const p of llave.partidos) {
+        if (typeof p.golesLocal !== 'number' || typeof p.golesVisitante !== 'number') return null;
+        hay = true;
+        if (p.tipo === 'vuelta') {
+            local += p.golesVisitante;
+            visitante += p.golesLocal;
+        } else {
+            local += p.golesLocal;
+            visitante += p.golesVisitante;
+        }
+    }
+    return hay ? { local, visitante } : null;
+}
+
+function resolverLlaveBk(
+    llave: LlaveBk,
+    desempate: string,
+): { ganador: EquipoBk; por: 'global' | 'mejor-sembrado' | 'penales' } | null {
+    if (!llave.local || !llave.visitante) return null;
+    const g = globalDeLlaveBk(llave);
+    if (!g) return null;
+
+    if (g.local > g.visitante) return { ganador: llave.local, por: 'global' };
+    if (g.visitante > g.local) return { ganador: llave.visitante, por: 'global' };
+
+    if (desempate === 'mejor-sembrado') {
+        const gana = llave.local.siembra <= llave.visitante.siembra ? llave.local : llave.visitante;
+        return { ganador: gana, por: 'mejor-sembrado' };
+    }
+    const ultimo = llave.partidos[llave.partidos.length - 1];
+    if (ultimo.ganaPenales === 'local') return { ganador: llave.local, por: 'penales' };
+    if (ultimo.ganaPenales === 'visitante') return { ganador: llave.visitante, por: 'penales' };
+    return null;
+}
+
+function avanzarGanadorBk(
+    llaves: LlaveBk[],
+    resuelta: LlaveBk,
+    ganador: EquipoBk,
+    avance: string,
+): void {
+    const sigRonda = resuelta.ronda + 1;
+
+    // Marca al ganador en su llave siempre.
+    resuelta.ganador = ganador;
+
+    // CRUCES FIJOS (Champions): posición predeterminada.
+    if (avance !== 'reordena') {
+        const sigPos = Math.floor(resuelta.posicion / 2);
+        const esLocal = resuelta.posicion % 2 === 0;
+        const destino = llaves.find((l) => l.ronda === sigRonda && l.posicion === sigPos);
+        if (!destino) return;
+        if (esLocal) destino.local = ganador;
+        else destino.visitante = ganador;
+        return;
+    }
+
+    // REORDENA (liguilla): solo emparejar cuando toda la ronda terminó.
+    const rondaActual = llaves.filter((l) => l.ronda === resuelta.ronda);
+    if (!rondaActual.every((l) => l.ganador)) return;
+
+    const ganadores = rondaActual
+        .map((l) => l.ganador as EquipoBk)
+        .sort((a, b) => a.siembra - b.siembra);
+
+    let i = 0;
+    let j = ganadores.length - 1;
+    let pos = 0;
+    while (i < j) {
+        const destino = llaves.find((l) => l.ronda === sigRonda && l.posicion === pos);
+        if (destino) {
+            destino.local = ganadores[i];
+            destino.visitante = ganadores[j];
+        }
+        i++;
+        j--;
+        pos++;
+    }
+}
+
+function codigoBracket(): string {
+    const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    return Array.from({ length: 6 }, () => letras.charAt(Math.floor(Math.random() * letras.length))).join('');
+}
+
+/** Crea un bracket. Solo administradores. */
+export const crearBracket = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+    const adminSnap = await db.doc(`admins/${uid}`).get();
+    if (!adminSnap.exists) throw new HttpsError('permission-denied', 'Solo un administrador.');
+
+    const nombre = String(req.data?.nombre ?? '').trim();
+    const config = req.data?.config as Record<string, unknown>;
+    const puntaje = req.data?.puntaje;
+    const equipos = (req.data?.equipos ?? []) as EquipoBk[];
+    if (!nombre || !config) throw new HttpsError('invalid-argument', 'Faltan datos.');
+
+    // La suma del reparto debe dar 100.
+    const reparto = (config['reparto'] ?? [100]) as number[];
+    if (reparto.reduce((a, b) => a + b, 0) !== 100) {
+        throw new HttpsError('invalid-argument', 'El reparto de la bolsa debe sumar 100%.');
+    }
+
+    const llaves = armarCuadroBk(config, equipos);
+    const cierraAt = req.data?.cierraAt ? Timestamp.fromDate(new Date(req.data.cierraAt)) : null;
+    const armado = config['armado'] === 'siembra' && equipos.length === Number(config['equipos']);
+
+    const ref = await db.collection('brackets').add({
+        nombre,
+        config,
+        puntaje,
+        llaves,
+        estado: armado ? 'inscripcion' : 'armando',
+        codigo: codigoBracket(),
+        cierraAt,
+        costoEntrada: Number(req.data?.costoEntrada ?? 0),
+        bolsa: 0,
+        gestores: [],
+        creadoPor: uid,
+        createdAt: FieldValue.serverTimestamp(),
+    });
+
+    return { ok: true, id: ref.id };
+});
+
+/** Asigna los equipos de una llave (modo manual). Solo admin/gestor. */
+export const asignarLlaveBracket = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const bracketId = String(req.data?.bracketId ?? '');
+    const idLlave = String(req.data?.idLlave ?? '');
+    const ref = db.doc(`brackets/${bracketId}`);
+
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) throw new HttpsError('not-found', 'El bracket no existe.');
+        const b = snap.data() as Record<string, unknown>;
+
+        const esAdmin = (await db.doc(`admins/${uid}`).get()).exists;
+        const esGestor = (b['gestores'] as string[] | undefined)?.includes(uid);
+        if (!esAdmin && !esGestor) throw new HttpsError('permission-denied', 'No puedes editar este cuadro.');
+
+        if (b['estado'] !== 'armando' && b['estado'] !== 'inscripcion') {
+            throw new HttpsError('failed-precondition', 'El cuadro ya está en juego.');
+        }
+
+        const llaves = b['llaves'] as LlaveBk[];
+        const llave = llaves.find((l) => l.id === idLlave);
+        if (!llave) throw new HttpsError('not-found', 'Esa llave no existe.');
+
+        llave.local = (req.data?.local as EquipoBk) ?? undefined;
+        llave.visitante = (req.data?.visitante as EquipoBk) ?? undefined;
+
+        // Si ya no queda ninguna llave de la primera ronda sin equipos, listo para inscripción.
+        const primera = llaves.filter((l) => l.ronda === 0);
+        const completa = primera.every((l) => l.local && l.visitante);
+
+        tx.update(ref, { llaves, estado: completa ? 'inscripcion' : 'armando' });
+    });
+
+    return { ok: true };
+});
+
+/** Captura un partido y resuelve la llave si queda completa. Solo admin/gestor. */
+export const capturarPartidoBracket = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const bracketId = String(req.data?.bracketId ?? '');
+    const idLlave = String(req.data?.idLlave ?? '');
+    const indice = Number(req.data?.indicePartido ?? 0);
+    const gl = Number(req.data?.golesLocal);
+    const gv = Number(req.data?.golesVisitante);
+    const penales = (req.data?.ganaPenales ?? null) as 'local' | 'visitante' | null;
+
+    if (!Number.isInteger(gl) || !Number.isInteger(gv) || gl < 0 || gv < 0) {
+        throw new HttpsError('invalid-argument', 'Marcador inválido.');
+    }
+
+    const ref = db.doc(`brackets/${bracketId}`);
+
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) throw new HttpsError('not-found', 'El bracket no existe.');
+        const b = snap.data() as Record<string, unknown>;
+
+        const esAdmin = (await db.doc(`admins/${uid}`).get()).exists;
+        const esGestor = (b['gestores'] as string[] | undefined)?.includes(uid);
+        if (!esAdmin && !esGestor) throw new HttpsError('permission-denied', 'No puedes capturar en este cuadro.');
+
+        const config = b['config'] as Record<string, unknown>;
+        const llaves = b['llaves'] as LlaveBk[];
+        const llave = llaves.find((l) => l.id === idLlave);
+        if (!llave) throw new HttpsError('not-found', 'Esa llave no existe.');
+        if (llave.ganador) throw new HttpsError('failed-precondition', 'Esa llave ya está resuelta.');
+        if (!llave.partidos[indice]) throw new HttpsError('invalid-argument', 'Partido inexistente.');
+
+        llave.partidos[indice].golesLocal = gl;
+        llave.partidos[indice].golesVisitante = gv;
+        if (penales) llave.partidos[indice].ganaPenales = penales;
+
+        // ¿Es la final? La última ronda usa su propio desempate.
+        const total = rondasDeBk(Number(config['equipos']));
+        const esFinal = llave.ronda === total - 1;
+        const desempate = String(esFinal ? config['desempateFinal'] : config['desempateRondas']);
+
+        const res = resolverLlaveBk(llave, desempate);
+        let ganadorAlias: string | undefined;
+        if (res) {
+            llave.ganador = res.ganador;
+            llave.resueltoPor = res.por;
+            avanzarGanadorBk(llaves, llave, res.ganador, String(config['avance'] ?? 'fijo'));
+            if (esFinal) ganadorAlias = res.ganador.nombre;
+        }
+
+        const patch: Record<string, unknown> = { llaves };
+        if (ganadorAlias) {
+            patch['estado'] = 'finalizado';
+            patch['ganadorAlias'] = ganadorAlias;
+        } else if (b['estado'] === 'inscripcion') {
+            // Al capturar el primer resultado, el cuadro pasa a en-curso.
+            patch['estado'] = 'en-curso';
+        }
+
+        tx.update(ref, patch);
+    });
+
+    return { ok: true };
+});
+
+/* ============================================================
+   BRACKETS — Fase 3: pronóstico del jugador
+   ============================================================ */
+
+/** Guarda (o actualiza) mi pronóstico del cuadro, si aún no cierra. */
+export const guardarPronosticoBracket = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const bracketId = String(req.data?.bracketId ?? '');
+    const avances = (req.data?.avances ?? {}) as Record<string, string>;
+    const marcadores = (req.data?.marcadores ?? null) as Record<
+        string,
+        { local: number; visitante: number }
+    > | null;
+
+    const userSnap = await db.doc(`users/${uid}`).get();
+    if (userSnap.data()?.['validada'] !== true) {
+        throw new HttpsError('permission-denied', 'Tu cuenta aún no ha sido validada.');
+    }
+    const alias =
+        String(userSnap.data()?.['alias'] ?? '').trim() ||
+        String(userSnap.data()?.['email'] ?? '').split('@')[0] ||
+        'jugador';
+
+    const bracketRef = db.doc(`brackets/${bracketId}`);
+    const bracketSnap = await bracketRef.get();
+    if (!bracketSnap.exists) throw new HttpsError('not-found', 'La eliminatoria no existe.');
+    const b = bracketSnap.data() as Record<string, unknown>;
+
+    // Solo se puede pronosticar antes del cierre único.
+    if (b['estado'] !== 'inscripcion') {
+        throw new HttpsError('failed-precondition', 'El pronóstico de esta eliminatoria ya cerró.');
+    }
+    const cierra = b['cierraAt'] as Timestamp | undefined;
+    if (cierra && cierra.toMillis() <= Date.now()) {
+        throw new HttpsError('failed-precondition', 'Ya pasó la hora de cierre.');
+    }
+
+    const conMarcador = !!marcadores && Object.keys(marcadores).length > 0;
+    const costo = Number(b['costoEntrada'] ?? 0);
+
+    // Todo en una transacción: cobro (solo la primera vez) y guardado.
+    await db.runTransaction(async (tx) => {
+        const pronRef = bracketRef.collection('pronosticos').doc(uid);
+        const yaEntro = (await tx.get(pronRef)).exists;
+
+        // Cobro único al entrar. Editar el pronóstico después no vuelve a cobrar.
+        if (!yaEntro && costo > 0) {
+            const userRef = db.doc(`users/${uid}`);
+            const saldo = Number((await tx.get(userRef)).data()?.['puntos'] ?? 0);
+            if (saldo - costo < TOPE_INFERIOR) {
+                throw new HttpsError('failed-precondition', 'No te alcanza el saldo para entrar.');
+            }
+            tx.update(userRef, { puntos: FieldValue.increment(-costo) });
+            tx.set(bracketRef, { bolsa: FieldValue.increment(costo) }, { merge: true });
+        }
+
+        tx.set(
+            pronRef,
+            {
+                uid,
+                alias,
+                avances,
+                marcadores: marcadores ?? {},
+                conMarcador,
+                estado: 'pendiente',
+                actualizado: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+        );
+
+        tx.set(db.doc(`users/${uid}`), { brackets: FieldValue.arrayUnion(bracketId) }, { merge: true });
+    });
+
+    return { ok: true };
+});
+
+/** Une a un jugador a un bracket por su código. Devuelve el id. */
+export const unirseBracket = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const codigo = String(req.data?.codigo ?? '').trim().toUpperCase();
+    if (!codigo) throw new HttpsError('invalid-argument', 'Falta el código.');
+
+    const encontrados = await db.collection('brackets').where('codigo', '==', codigo).limit(1).get();
+    if (encontrados.empty) throw new HttpsError('not-found', 'No hay ninguna eliminatoria con ese código.');
+
+    return { ok: true, id: encontrados.docs[0].id };
+});
+
+/* ============================================================
+   BRACKETS — Fase 4: calificar y repartir
+   Cuando el cuadro termina, se puntúa cada pronóstico contra el
+   resultado real y se reparte la bolsa según config.reparto.
+   ============================================================ */
+
+interface PuntajeBk {
+    avanzaPorRonda: number[];
+    campeon: number;
+    finalista: number;
+    marcadorExacto: number;
+    marcadorResultado: number;
+}
+
+interface DesgloseBk {
+    total: number;
+    aciertosPorRonda: number[];
+    marcadoresAcertados: number;
+}
+
+function calificarBk(
+    llaves: LlaveBk[],
+    avances: Record<string, string>,
+    marcadores: Record<string, { local: number; visitante: number }> | undefined,
+    puntaje: PuntajeBk,
+): DesgloseBk {
+    const totalRondas = Math.max(...llaves.map((l) => l.ronda)) + 1;
+    const aciertosPorRonda = new Array(totalRondas).fill(0);
+    let total = 0;
+    let marcadoresAcertados = 0;
+
+    // Por EQUIPO, no por posición de llave: si dijiste que un equipo avanza
+    // a una ronda y llegó, cuenta, esté donde esté en tu cuadro.
+    const realesPorRonda: Array<Set<string>> = [];
+    const misPorRonda: Array<Set<string>> = [];
+    for (let r = 0; r < totalRondas; r++) {
+        const reales = new Set<string>();
+        const mios = new Set<string>();
+        for (const l of llaves) {
+            if (l.ronda !== r) continue;
+            if (l.ganador) reales.add(l.ganador.nombre);
+            if (avances[l.id]) mios.add(avances[l.id]);
+        }
+        realesPorRonda.push(reales);
+        misPorRonda.push(mios);
+    }
+
+    for (let r = 0; r < totalRondas; r++) {
+        const reales = realesPorRonda[r];
+        if (reales.size === 0) continue;
+        const esFinal = r === totalRondas - 1;
+        const esSemis = r === totalRondas - 2;
+        for (const equipo of misPorRonda[r]) {
+            if (!reales.has(equipo)) continue;
+            total += puntaje.avanzaPorRonda[r] ?? 0;
+            aciertosPorRonda[r]++;
+            if (esFinal) total += puntaje.campeon;
+            else if (esSemis) total += puntaje.finalista;
+        }
+    }
+
+    if (marcadores) {
+        for (const llave of llaves) {
+            if (!llave.ganador) continue;
+            const miMarc = marcadores[llave.id];
+            if (!miMarc) continue;
+            const real = globalDeLlaveBk(llave);
+            if (!real) continue;
+            if (miMarc.local === real.local && miMarc.visitante === real.visitante) {
+                total += puntaje.marcadorExacto;
+                marcadoresAcertados++;
+            } else {
+                const mg = miMarc.local > miMarc.visitante ? 'l' : miMarc.local < miMarc.visitante ? 'v' : 'e';
+                const rg = real.local > real.visitante ? 'l' : real.local < real.visitante ? 'v' : 'e';
+                if (mg === rg) total += puntaje.marcadorResultado;
+            }
+        }
+    }
+
+    return { total, aciertosPorRonda, marcadoresAcertados };
+}
+
+function compararBk(
+    a: { puntos: number; d: DesgloseBk },
+    b: { puntos: number; d: DesgloseBk },
+): number {
+    if (a.puntos !== b.puntos) return b.puntos - a.puntos;
+    if (a.d.marcadoresAcertados !== b.d.marcadoresAcertados) {
+        return b.d.marcadoresAcertados - a.d.marcadoresAcertados;
+    }
+    const ra = a.d.aciertosPorRonda;
+    const rb = b.d.aciertosPorRonda;
+    for (let r = ra.length - 1; r >= 0; r--) {
+        if ((ra[r] ?? 0) !== (rb[r] ?? 0)) return (rb[r] ?? 0) - (ra[r] ?? 0);
+    }
+    return 0;
+}
+
+/**
+ * Califica una eliminatoria terminada y reparte la bolsa.
+ * La puede llamar el admin, o se dispara sola al capturar la final.
+ */
+export const calificarBracket = onCall(
+    { ...opcionesCall, secrets: [telegramToken] },
+    async (req) => {
+        const uid = req.auth?.uid;
+        if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+        const esAdmin = (await db.doc(`admins/${uid}`).get()).exists;
+        if (!esAdmin) throw new HttpsError('permission-denied', 'Solo un administrador.');
+
+        const bracketId = String(req.data?.bracketId ?? '');
+        const ref = db.doc(`brackets/${bracketId}`);
+        const snap = await ref.get();
+        if (!snap.exists) throw new HttpsError('not-found', 'La eliminatoria no existe.');
+        const b = snap.data() as Record<string, unknown>;
+
+        if (b['estado'] !== 'finalizado') {
+            throw new HttpsError('failed-precondition', 'La eliminatoria todavía no termina.');
+        }
+
+        const llaves = b['llaves'] as LlaveBk[];
+        const puntaje = b['puntaje'] as PuntajeBk;
+        const reparto = (b['config'] as Record<string, unknown>)['reparto'] as number[];
+        const bolsa = Number(b['bolsa'] ?? 0);
+
+        const pronosticos = await ref.collection('pronosticos').get();
+        if (pronosticos.empty) return { ok: true, calificados: 0 };
+
+        // Calificar a cada quien.
+        const tabla = pronosticos.docs.map((doc) => {
+            const p = doc.data() as Record<string, unknown>;
+            const d = calificarBk(
+                llaves,
+                (p['avances'] ?? {}) as Record<string, string>,
+                p['marcadores'] as Record<string, { local: number; visitante: number }> | undefined,
+                puntaje,
+            );
+            return { uid: doc.id, alias: String(p['alias'] ?? 'jugador'), puntos: d.total, d };
+        });
+
+        tabla.sort((x, y) => compararBk({ puntos: x.puntos, d: x.d }, { puntos: y.puntos, d: y.d }));
+
+        // Guardar puntos y repartir premios por posición.
+        const batch = db.batch();
+        tabla.forEach((jug, i) => {
+            const premio = i < reparto.length ? Math.round((bolsa * reparto[i]) / 100) : 0;
+            batch.update(ref.collection('pronosticos').doc(jug.uid), {
+                puntos: jug.puntos,
+                posicion: i + 1,
+                premio,
+                estado: 'calificado',
+            });
+            if (premio > 0) {
+                batch.set(
+                    db.doc(`users/${jug.uid}`),
+                    { puntos: FieldValue.increment(premio) },
+                    { merge: true },
+                );
+            }
+        });
+
+        batch.update(ref, {
+            premioPagado: bolsa,
+            ganadorAlias: tabla[0]?.alias ?? null,
+        });
+
+        await batch.commit();
+
+        // Avisar a los premiados.
+        for (let i = 0; i < Math.min(reparto.length, tabla.length); i++) {
+            const jug = tabla[i];
+            const premio = Math.round((bolsa * reparto[i]) / 100);
+            if (premio > 0) {
+                await avisar(
+                    [jug.uid],
+                    `🏆 <b>${String(b['nombre'] ?? 'Eliminatoria')}</b>\n` +
+                    `Quedaste en ${i + 1}° lugar con ${jug.puntos} pts.\n` +
+                    `Ganaste ${premio} pts. ¡Felicidades!`,
+                );
+            }
+        }
+
+        return { ok: true, calificados: tabla.length };
+    },
+);
+
+/* ============================================================
+   BRACKETS — cierre automático
+   Cuando llega la hora de cierre, el bracket pasa de 'inscripcion'
+   a 'en-curso' solo, sin que nadie lo toque. A partir de ahí ya no
+   se aceptan ni cambian pronósticos.
+   ============================================================ */
+export const cerrarBrackets = onSchedule(
+    { schedule: 'every 15 minutes', timeZone: 'America/Mexico_City' },
+    async () => {
+        const ahora = Timestamp.now();
+
+        const pendientes = await db
+            .collection('brackets')
+            .where('estado', '==', 'inscripcion')
+            .where('cierraAt', '<=', ahora)
+            .get();
+
+        if (pendientes.empty) {
+            logger.info('Sin eliminatorias por cerrar.');
+            return;
+        }
+
+        const batch = db.batch();
+        pendientes.docs.forEach((d) => batch.update(d.ref, { estado: 'en-curso' }));
+        await batch.commit();
+
+        logger.info(`Cerradas ${pendientes.size} eliminatorias.`);
     },
 );

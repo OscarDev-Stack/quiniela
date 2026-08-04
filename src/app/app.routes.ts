@@ -14,6 +14,8 @@ import { PerfilComponent } from './features/perfil/perfil.component';
 import { AdminLayoutComponent } from './features/admin/admin-layout.component';
 import { AdminPartidosComponent } from './features/admin/admin-partidos.component';
 import { AdminUsuariosComponent } from './features/admin/admin-usuarios.component';
+import { AdminBracketsComponent } from './features/brackets/admin-brackets.component';
+import { BracketDetalleComponent } from './features/brackets/bracket-detalle.component';
 import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
 
@@ -34,6 +36,8 @@ export const routes: Routes = [
     { path: 'torneos', component: TorneosListComponent, canActivate: [authGuard] },
     { path: 'torneos/:id', component: TorneoDetalleComponent, canActivate: [authGuard] },
 
+    { path: 'eliminatorias/:id', component: BracketDetalleComponent, canActivate: [authGuard] },
+
     {
         path: 'admin',
         component: AdminLayoutComponent,
@@ -44,6 +48,7 @@ export const routes: Routes = [
             { path: 'usuarios', component: AdminUsuariosComponent },
             { path: 'torneos', component: AdminTorneosComponent },
             { path: 'competiciones', component: AdminCompeticionesComponent },
+            { path: 'brackets', component: AdminBracketsComponent },
         ],
     },
 

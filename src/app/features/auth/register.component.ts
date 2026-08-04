@@ -12,8 +12,8 @@ import { AuthService } from '../../core/services/auth.service';
     <div class="auth-wrap">
       <div class="auth-card">
         <div class="brand">
-          <span class="brand-mark">A</span>
-          <span class="brand-name">AutomatePower</span>
+          <span class="brand-mark">Q</span>
+          <span class="brand-name">Quiniela</span>
         </div>
         <h1 class="auth-title">Crear cuenta</h1>
         <p class="auth-subtitle">Regístrate para empezar a competir.</p>
@@ -123,6 +123,8 @@ export class RegisterComponent {
       await this.auth.avisarRegistro();
 
       const invitacion = localStorage.getItem('invitacion');
+      // Se consume una sola vez: si no, cada login reenvía a unirse.
+      localStorage.removeItem('invitacion');
       this.router.navigate(invitacion ? ['/unirse', invitacion] : ['/partidos']);
     } catch (e: unknown) {
       this.error.set(this.mapError((e as { code?: string })?.code));

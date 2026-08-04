@@ -135,6 +135,19 @@ import { ModoTorneo } from '../../core/models/torneo.model';
         </div>
       </li>
 
+      @if (permiteRevivir()) {
+        <li>
+          <span class="icono icono--gold"><i class="ti ti-heart-plus"></i></span>
+          <div>
+            <strong>Puedes revivir una vez</strong>
+            <p>
+              Si caes, puedes volver pagando una cuota — solo en la jornada
+              siguiente, y regresas con las mismas vidas que tenías al caer.
+            </p>
+          </div>
+        </li>
+      }
+
       <li>
         <span class="icono icono--gold"><i class="ti ti-trophy"></i></span>
         <div>
@@ -169,8 +182,11 @@ import { ModoTorneo } from '../../core/models/torneo.model';
   ],
 })
 export class ReglasTorneoComponent {
+  /** Costo de entrada, para mencionarlo en la última regla. */
   readonly costo = input<number>(0);
+  /** Qué reglas mostrar. */
   readonly modo = input<ModoTorneo>('supervivencia');
   readonly vidas = input<number>(1);
   readonly vidaCubre = input<'empate' | 'tropiezo'>('empate');
+  readonly permiteRevivir = input<boolean>(false);
 }

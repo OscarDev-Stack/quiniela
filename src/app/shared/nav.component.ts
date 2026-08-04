@@ -1,5 +1,5 @@
 import { Component, computed, inject, input } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { AuthService } from '../core/services/auth.service';
@@ -29,7 +29,7 @@ import { TorneosService } from '../core/services/torneos.service';
                 <i class="ti ti-rosette-discount-check-filled check" title="Cuenta validada"></i>
               }
             </span>
-            <span class="sub">{{ title() || 'AutomatePower' }}</span>
+            <span class="sub">{{ title() || 'Quiniela' }}</span>
           </span>
         </div>
       }
@@ -159,6 +159,7 @@ export class NavComponent {
   private readonly admin = inject(AdminService);
   private readonly torneos = inject(TorneosService);
   private readonly router = inject(Router);
+  private readonly location = inject(Location);
 
   /** Muestra flecha de regreso en vez del logo. */
   readonly back = input(false);
@@ -187,7 +188,14 @@ export class NavComponent {
   }
 
   volver(): void {
-    this.router.navigate(['/partidos']);
+    // Regresa a la pantalla anterior. Si se entró directo por URL y no
+    // hay historial dentro de la app, cae a partidos como respaldo.
+    const haremos = document.referrer || history.length > 1;
+    if (haremos) {
+      this.location.back();
+    } else {
+      this.router.navigate(['/partidos']);
+    }
   }
 
 

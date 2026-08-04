@@ -1,0 +1,272 @@
+import { Component, computed, inject, signal } from '@angular/core';
+import { CommonModule, Location } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
+import { Auth, user } from '@angular/fire/auth';
+import { of } from 'rxjs';
+import { map, switchMap } from 'rxjs/operators';
+import { BracketsService } from '../../core/services/brackets.service';
+import { FormsModule } from '@angular/forms';
+import { CuadroBracketComponent } from './cuadro-bracket.component';
+import { ReglasBracketComponent } from './reglas-bracket.component';
+import { PronosticoBracketComponent } from './pronostico-bracket.component';
+import { TablaBracketComponent } from './tabla-bracket.component';
+import { NavComponent } from '../../shared/nav.component';
+import { Bracket } from '../../core/models/bracket.model';
+
+/**
+ * Vista del jugador para una eliminatoria: el cuadro real arriba, y
+ * debajo, según el momento, el formulario para pronosticar o el
+ * pronóstico ya congelado.
+ */
+@Component({
+  selector: 'app-bracket-detalle',
+  standalone: true,
+  imports: [
+    CommonModule,
+    FormsModule,
+    CuadroBracketComponent,
+    ReglasBracketComponent,
+    PronosticoBracketComponent,
+    TablaBracketComponent,
+    NavComponent,
+  ],
+  template: `
+    <app-nav [title]="bracket()?.nombre ?? 'Eliminatoria'" [back]="true" />
+
+    <div class="wrap">
+      @if (bracket(); as b) {
+        <div class="franja">
+          <span class="pill">{{ etiqueta(b.estado) }}</span>
+          <span class="pill">{{ b.config.equipos }} equipos</span>
+          @if (b.costoEntrada > 0) {
+            <span class="pill">Entrada: {{ b.costoEntrada | number }} pts</span>
+          }
+          @if (b.bolsa > 0) {
+            <span class="pill pill--premio">Bolsa: {{ b.bolsa | number }} pts</span>
+          }
+        </div>
+
+        <section class="panel">
+          <h2>Cuadro</h2>
+          <app-cuadro-bracket [bracket]="b" />
+        </section>
+
+        @if (b.estado === 'finalizado') {
+          <section class="panel">
+            <h2>Resultados</h2>
+            <app-tabla-bracket [pronosticos]="pronosticos()" [miUid]="miUid()" />
+          </section>
+        }
+
+        @if (b.estado !== 'inscripcion' || acepto()) {
+          <section class="panel">
+            <h2>Tu pronóstico</h2>
+            <app-pronostico-bracket [bracket]="b" />
+          </section>
+
+          <!-- Ya dentro: las reglas quedan al final, colapsadas. -->
+          <section class="panel">
+            <button class="colapso" (click)="verReglas.set(!verReglas())">
+              <span><i class="ti ti-book"></i> Cómo se juega</span>
+              <i class="ti" [class.ti-chevron-down]="!verReglas()" [class.ti-chevron-up]="verReglas()"></i>
+            </button>
+            @if (verReglas()) {
+              <div class="colapso-cuerpo">
+                <app-reglas-bracket [b]="b" />
+              </div>
+            }
+          </section>
+        }
+
+        <!-- Modal automático la primera vez: reglas + aceptar + unirse. -->
+        @if (b.estado === 'inscripcion' && !acepto()) {
+          <div class="modal-fondo">
+            <div class="modal">
+              <div class="modal-cab">
+                <h2 class="modal-tit">{{ b.nombre }}</h2>
+                <button class="modal-x" (click)="salir()" aria-label="Cerrar">
+                  <i class="ti ti-x"></i>
+                </button>
+              </div>
+              <div class="modal-cuerpo">
+                <app-reglas-bracket [b]="b" />
+              </div>
+              <label class="switch">
+                <span class="switch-texto">
+                  Entiendo cómo se juega y quiero participar@if (b.costoEntrada > 0) { (cuesta {{ b.costoEntrada }} pts) }.
+                </span>
+                <input type="checkbox" class="switch-input" [(ngModel)]="aceptoRaw" />
+                <span class="switch-pista" aria-hidden="true"></span>
+              </label>
+              <button class="btn-unir" [disabled]="!marcado()" (click)="confirmar()">
+                {{ marcado() ? 'Unirme y pronosticar' : 'Marca la casilla para continuar' }}
+              </button>
+              <button class="btn-salir" (click)="salir()">No jugar por ahora</button>
+            </div>
+          </div>
+        }
+      } @else {
+        <p class="cargando">Cargando eliminatoria…</p>
+      }
+    </div>
+  `,
+  styles: [
+    `
+      .wrap { padding: 14px 16px 40px; max-width: 900px; margin: 0 auto; }
+      .franja { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+      .pill {
+        font-size: 12px; font-weight: 600; padding: 6px 11px; border-radius: 999px;
+        background: var(--surface-1); color: var(--text-secondary);
+      }
+      .pill--premio { background: var(--accent-bg); color: var(--accent-text); }
+      .panel {
+        background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: 12px; padding: 16px; margin-bottom: 14px;
+      }
+      .panel h2 { font-size: 15px; font-weight: 600; margin: 0 0 12px; }
+      .cargando { font-size: 14px; color: var(--text-muted); }
+      .switch {
+        display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
+        cursor: pointer;
+      }
+      .switch-texto { flex: 1; font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
+      .switch-input { position: absolute; opacity: 0; width: 0; height: 0; }
+      .switch-pista {
+        position: relative; flex-shrink: 0; margin-top: 1px;
+        width: 46px; height: 26px; border-radius: 999px;
+        background: var(--surface-1); border: 1px solid var(--border);
+        transition: background 0.18s ease, border-color 0.18s ease;
+      }
+      .switch-pista::after {
+        content: ''; position: absolute; top: 2px; left: 2px;
+        width: 20px; height: 20px; border-radius: 50%;
+        background: var(--text-muted);
+        transition: transform 0.18s ease, background 0.18s ease;
+      }
+      .switch-input:checked + .switch-pista {
+        background: var(--accent-fill); border-color: transparent;
+      }
+      .switch-input:checked + .switch-pista::after {
+        transform: translateX(20px); background: #fff;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .switch-pista, .switch-pista::after { transition: none; }
+      }
+
+      /* Modal de bienvenida */
+      .modal-fondo {
+        position: fixed; inset: 0; z-index: 100;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex; align-items: flex-end; justify-content: center;
+        padding: 0;
+      }
+      .modal {
+        width: 100%; max-width: 520px; max-height: 85vh; overflow-y: auto;
+        background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: 18px 18px 0 0;
+        padding: 20px 20px calc(24px + env(safe-area-inset-bottom));
+        /* Ritmo vertical parejo entre bloques del modal. */
+        display: flex; flex-direction: column; gap: 16px;
+        animation: subir 0.25s ease;
+      }
+      @keyframes subir { from { transform: translateY(100%); } to { transform: translateY(0); } }
+      @media (min-width: 560px) {
+        .modal-fondo { align-items: center; padding: 20px; }
+        .modal { border-radius: 18px; }
+      }
+      .modal-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; }
+      .modal-tit { font-size: 18px; font-weight: 700; margin: 0; flex: 1; }
+      .modal-x {
+        flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--surface-1); border: none; cursor: pointer;
+        color: var(--text-secondary); font-size: 18px;
+      }
+      .btn-salir {
+        width: 100%; margin: -8px 0 0; padding: 10px; cursor: pointer;
+        font-size: 14px; font-weight: 500; border: none; border-radius: var(--radius);
+        background: transparent; color: var(--text-secondary);
+      }
+      .modal-cuerpo { margin: 0; }
+      .btn-unir {
+        width: 100%; margin: 0; padding: 13px; cursor: pointer;
+        font-size: 15px; font-weight: 600; border: none; border-radius: var(--radius);
+        background: var(--accent-fill); color: #fff;
+      }
+      .btn-unir:disabled { opacity: 0.6; cursor: default; background: var(--surface-1); color: var(--text-muted); }
+
+      /* Colapso de reglas al final */
+      .colapso {
+        display: flex; align-items: center; justify-content: space-between; width: 100%;
+        background: transparent; border: none; padding: 0; cursor: pointer;
+        color: inherit; font-size: 15px; font-weight: 600;
+      }
+      .colapso i { color: var(--text-muted); }
+      .colapso-cuerpo { margin-top: 14px; }
+    `,
+  ],
+})
+export class BracketDetalleComponent {
+  private readonly route = inject(ActivatedRoute);
+  private readonly service = inject(BracketsService);
+  private readonly location = inject(Location);
+  private readonly auth = inject(Auth);
+
+  private readonly id = signal(this.route.snapshot.paramMap.get('id') ?? '');
+
+  /** Estado del check dentro del modal. */
+  readonly marcado = signal(false);
+  get aceptoRaw(): boolean {
+    return this.marcado();
+  }
+  set aceptoRaw(v: boolean) {
+    this.marcado.set(v);
+  }
+  /** Se confirma al pulsar "Unirme": cierra el modal y muestra el cuadro. */
+  private readonly confirmado = signal(false);
+  confirmar(): void {
+    if (this.marcado()) this.confirmado.set(true);
+  }
+
+  /** Cierra el modal sin unirse y regresa a la pantalla anterior. */
+  salir(): void {
+    this.location.back();
+  }
+  readonly verReglas = signal(false);
+  readonly bracket = toSignal(this.service.bracket(this.id()), { initialValue: null });
+  readonly miUid = toSignal(user(this.auth).pipe(map((u) => u?.uid ?? null)), {
+    initialValue: null,
+  });
+
+  // La colección completa solo se puede leer cuando el bracket terminó
+  // (así lo exige la regla, para no espiar cuadros ajenos). Antes de eso
+  // solo leemos el propio pronóstico.
+  readonly pronosticos = toSignal(
+    toObservable(computed(() => this.bracket()?.estado === 'finalizado')).pipe(
+      switchMap((fin) => (fin ? this.service.pronosticos(this.id()) : of([]))),
+    ),
+    { initialValue: [] },
+  );
+
+  private readonly miPron = toSignal(
+    toObservable(this.miUid).pipe(
+      switchMap((uid) => (uid ? this.service.miPronostico(this.id(), uid) : of(null))),
+    ),
+    { initialValue: null },
+  );
+
+  /** ¿Ya tengo un pronóstico guardado? Entonces no pido aceptar de nuevo. */
+  private readonly yaPronostico = computed(() => !!this.miPron());
+  readonly acepto = computed(() => this.confirmado() || this.yaPronostico());
+
+  etiqueta(estado: string): string {
+    const m: Record<string, string> = {
+      armando: 'Armando',
+      inscripcion: 'Abierto para pronosticar',
+      'en-curso': 'En juego',
+      finalizado: 'Finalizado',
+    };
+    return m[estado] ?? estado;
+  }
+}

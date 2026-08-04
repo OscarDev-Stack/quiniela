@@ -47,7 +47,7 @@ import { ReglasTorneoComponent } from './reglas-torneo.component';
         } @else if (!sesion()) {
           <div class="bloque">
             <h2>Así se juega</h2>
-            <app-reglas-torneo [modo]="modo()" [costo]="costo()" [vidas]="vidas()" [vidaCubre]="vidaCubre()" />
+            <app-reglas-torneo [modo]="modo()" [costo]="costo()" [vidas]="vidas()" [vidaCubre]="vidaCubre()" [permiteRevivir]="permiteRevivir()" />
           </div>
           <p class="texto">Necesitas una cuenta para participar.</p>
           <button class="btn btn--primary" (click)="ir('registro')">Crear cuenta</button>
@@ -64,7 +64,7 @@ import { ReglasTorneoComponent } from './reglas-torneo.component';
 
           <div class="bloque">
             <h2>Mientras tanto, así se juega</h2>
-            <app-reglas-torneo [modo]="modo()" [costo]="costo()" [vidas]="vidas()" [vidaCubre]="vidaCubre()" />
+            <app-reglas-torneo [modo]="modo()" [costo]="costo()" [vidas]="vidas()" [vidaCubre]="vidaCubre()" [permiteRevivir]="permiteRevivir()" />
           </div>
 
           <button class="btn" (click)="reintentar()">Ya me validaron, intentar</button>
@@ -72,7 +72,7 @@ import { ReglasTorneoComponent } from './reglas-torneo.component';
         } @else {
           <div class="bloque">
             <h2>Antes de entrar, lee las reglas</h2>
-            <app-reglas-torneo [modo]="modo()" [costo]="costo()" [vidas]="vidas()" [vidaCubre]="vidaCubre()" />
+            <app-reglas-torneo [modo]="modo()" [costo]="costo()" [vidas]="vidas()" [vidaCubre]="vidaCubre()" [permiteRevivir]="permiteRevivir()" />
           </div>
 
           <label class="acepto" [class.acepto--on]="acepto()">
@@ -226,6 +226,7 @@ export class UnirseComponent {
     costoEntrada: number;
     vidas: number;
     vidaCubre: 'empate' | 'tropiezo';
+    permiteRevivir: boolean;
     inscritos: number;
   } | null>(null);
 
@@ -233,6 +234,7 @@ export class UnirseComponent {
   readonly costo = computed(() => this.info()?.costoEntrada ?? 0);
   readonly vidas = computed(() => this.info()?.vidas ?? 1);
   readonly vidaCubre = computed(() => this.info()?.vidaCubre ?? 'empate');
+  readonly permiteRevivir = computed(() => this.info()?.permiteRevivir ?? false);
 
   constructor() {
     // La invitación sobrevive al cierre del navegador y a la espera de validación.
