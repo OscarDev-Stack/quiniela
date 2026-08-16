@@ -27,6 +27,43 @@ export interface Novedad {
 
 export const NOVEDADES: Novedad[] = [
     {
+        version: '2.0.0',
+        fecha: 'Agosto 2026',
+        resumen: 'Llegaron las eliminatorias: arma tu cuadro y compite hasta el campeón.',
+        puntos: [
+            {
+                icono: 'ti-sitemap',
+                titulo: 'Eliminatorias tipo liguilla',
+                detalle:
+                    'Antes de que arranque, llenas el cuadro completo: eliges quién avanza en cada ' +
+                    'llave hasta coronar a tu campeón. Ganas más puntos mientras más lejos aciertes, ' +
+                    'y clavar al campeón vale el premio mayor.',
+            },
+            {
+                icono: 'ti-trophy',
+                titulo: 'Aciertas por equipo, no por posición',
+                detalle:
+                    'Si dijiste que un equipo llegaría a semifinales y llegó, cuenta — sin importar ' +
+                    'dónde lo pusiste en tu cuadro. Cada acierto suma con justicia.',
+            },
+            {
+                icono: 'ti-eye',
+                titulo: 'Todo a la vista y auditable',
+                detalle:
+                    'Consulta cómo se juega y cuánto vale cada acierto antes de entrar, con un ejemplo ' +
+                    'real para que no queden dudas. Nadie ve tu cuadro hasta el cierre, y al final la ' +
+                    'tabla muestra los puntos de todos.',
+            },
+            {
+                icono: 'ti-receipt',
+                titulo: 'Historial de tus movimientos',
+                detalle:
+                    'Desde tu perfil puedes revisar todos tus movimientos de puntos: entradas, ' +
+                    'premios y ajustes, con su fecha. Para que hagas tus cuentas cuando quieras.',
+            },
+        ],
+    },
+    {
         version: '1.1.0',
         fecha: 'Julio 2026',
         resumen: 'Llegaron los torneos por invitación y los avisos por Telegram.',

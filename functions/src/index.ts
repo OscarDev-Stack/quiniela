@@ -31,22 +31,6 @@ setGlobalOptions({ maxInstances: 10 });
  */
 const EXIGIR_APP_CHECK = false;
 const opcionesCall = { enforceAppCheck: EXIGIR_APP_CHECK };
-
-/**
- * ¿Puede este usuario gestionar esta competición? True si es admin
- * global (documento en `admins`) o si es gestor de esa liga (su UID
- * está en el array `gestores` de la competición). Con competicionId
- * vacío, solo los admins globales pasan.
- */
-async function puedeGestionar(uid: string, competicionId: string): Promise<boolean> {
-    const adminSnap = await db.doc(`admins/${uid}`).get();
-    if (adminSnap.exists) return true;
-    if (!competicionId) return false;
-    const compSnap = await db.doc(`competiciones/${competicionId}`).get();
-    if (!compSnap.exists) return false;
-    const gestores = (compSnap.data()?.['gestores'] ?? []) as string[];
-    return gestores.includes(uid);
-}
 /** Minutos tras el inicio antes de empezar a consultar la API. */
 const MINUTOS_ANTES_DE_CONSULTAR = 100;
 
@@ -293,6 +277,10 @@ export const liquidarPartido = onCall(opcionesCall, async (req) => {
     if (!uid) {
         throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
     }
+    const adminSnap = await db.doc(`admins/${uid}`).get();
+    if (!adminSnap.exists) {
+        throw new HttpsError('permission-denied', 'Solo un administrador puede liquidar.');
+    }
 
     const partidoId = String(req.data?.partidoId ?? '');
     const resultadoOficial = String(req.data?.resultadoOficial ?? '');
@@ -306,13 +294,6 @@ export const liquidarPartido = onCall(opcionesCall, async (req) => {
         throw new HttpsError('not-found', 'El partido no existe.');
     }
     const partido = partSnap.data() as Record<string, unknown>;
-
-    // Admin global, o gestor de la liga de ESTE partido.
-    const competicionId = String(partido['competicion'] ?? '');
-    if (!(await puedeGestionar(uid, competicionId))) {
-        throw new HttpsError('permission-denied', 'No administras esta liga.');
-    }
-
     if (partido['liquidado'] === true) {
         throw new HttpsError('failed-precondition', 'Este partido ya fue liquidado.');
     }

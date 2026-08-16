@@ -75,7 +75,7 @@ import { TorneosService } from '../core/services/torneos.service';
         </a>
       } @else if (esGestor()) {
         <a routerLink="/liga" routerLinkActive="on">
-          <i class="ti ti-whistle"></i><span>Mi liga</span>
+          <i class="ti ti-ball-football"></i><span>Mi liga</span>
         </a>
       }
     </nav>
