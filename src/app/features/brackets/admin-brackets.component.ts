@@ -509,8 +509,8 @@ export class AdminBracketsComponent {
   }
 
   async guardar(b: Bracket, l: Llave, indice: number): Promise<void> {
-    const gl = Number(this.marc[`${l.id}-${indice}-L`] ?? NaN);
-    const gv = Number(this.marc[`${l.id}-${indice}-V`] ?? NaN);
+    const gl = Number(this.marc[`${l.id}-${indice}-L`] ?? Number.NaN);
+    const gv = Number(this.marc[`${l.id}-${indice}-V`] ?? Number.NaN);
     if (!Number.isInteger(gl) || !Number.isInteger(gv)) {
       this.error.set(true);
       this.mensaje.set('Pon ambos marcadores antes de guardar.');

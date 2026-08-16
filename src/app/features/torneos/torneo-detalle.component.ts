@@ -1147,7 +1147,9 @@ export class TorneoDetalleComponent {
     }
   }
 
-  readonly usados = computed(() => [...(this.yo()?.equiposUsados ?? [])].sort());
+  readonly usados = computed(() =>
+    [...(this.yo()?.equiposUsados ?? [])].sort((a, b) => a.localeCompare(b)),
+  );
 
   /** Catálogo de equipos de la competición. */
   private readonly competicion = toSignal(
@@ -1161,7 +1163,7 @@ export class TorneoDetalleComponent {
   readonly comprometidos = computed(() => {
     const resueltos = this.usados();
     const enJuego = this.pendientes().map((p) => p.equipo);
-    return [...new Set([...resueltos, ...enJuego])].sort();
+    return [...new Set([...resueltos, ...enJuego])].sort((a, b) => a.localeCompare(b));
   });
 
   /** Equipos que todavía puedo usar en el resto del torneo. */

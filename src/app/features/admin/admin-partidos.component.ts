@@ -544,7 +544,7 @@ export class AdminPartidosComponent {
         return;
       }
       const cierre = new Date(this.form.closesAt);
-      if (isNaN(cierre.getTime())) {
+      if (Number.isNaN(cierre.getTime())) {
         this.mensaje.set('La fecha de cierre no es válida.');
         return;
       }
