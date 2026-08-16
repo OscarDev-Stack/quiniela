@@ -47,3 +47,8 @@ functions/lib/
 # System files
 .DS_Store
 Thumbs.db
+
+# SonarQube
+.scannerwork/
+.sonarlint/
+sonar-project.properties

@@ -73,6 +73,10 @@ import { TorneosService } from '../core/services/torneos.service';
             <span class="badge">{{ pendientes() }}</span>
           }
         </a>
+      } @else if (esGestor()) {
+        <a routerLink="/liga" routerLinkActive="on">
+          <i class="ti ti-whistle"></i><span>Mi liga</span>
+        </a>
       }
     </nav>
   `,
@@ -168,6 +172,7 @@ export class NavComponent {
 
   readonly me = toSignal(this.users.me$, { initialValue: null });
   readonly isAdmin = toSignal(this.users.isAdmin$, { initialValue: false });
+  readonly esGestor = toSignal(this.users.esGestor$, { initialValue: false });
   /** Resultados de la API por confirmar y alertas de partidos. */
   readonly pendientes = toSignal(this.admin.pendientes$, { initialValue: 0 });
   /** Torneos donde falta elegir equipo. */

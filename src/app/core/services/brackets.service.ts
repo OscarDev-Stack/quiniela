@@ -5,11 +5,13 @@ import {
     collectionData,
     doc,
     docData,
+    query,
+    where,
 } from '@angular/fire/firestore';
 import { Functions, httpsCallable } from '@angular/fire/functions';
 import { UserService } from './user.service';
 import { Observable, of, combineLatest } from 'rxjs';
-import { map, switchMap, distinctUntilChanged } from 'rxjs/operators';
+import { map, switchMap, distinctUntilChanged, catchError } from 'rxjs/operators';
 import {
     Bracket,
     ConfigBracket,
@@ -57,6 +59,21 @@ export class BracketsService {
         );
     }
 
+    /**
+     * Eliminatorias públicas abiertas a inscripción, para mostrarlas en el
+     * inicio. Cualquiera puede verlas y unirse sin invitación.
+     */
+    bracketsPublicos(): Observable<Bracket[]> {
+        const q = query(
+            collection(this.db, 'brackets'),
+            where('publico', '==', true),
+            where('estado', '==', 'inscripcion'),
+        );
+        return (collectionData(q, { idField: 'id' }) as Observable<Bracket[]>).pipe(
+            catchError(() => of([] as Bracket[])),
+        );
+    }
+
     /** Un bracket por id, en vivo. */
     bracket(id: string): Observable<Bracket | null> {
         if (!id) return of(null);
@@ -73,6 +90,7 @@ export class BracketsService {
         equipos: EquipoBracket[];
         costoEntrada: number;
         cierraAt: Date | null;
+        publico: boolean;
     }): Promise<{ id: string }> {
         const fn = httpsCallable<typeof datos, { ok: boolean; id: string }>(
             this.fns,

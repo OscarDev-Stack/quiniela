@@ -31,6 +31,22 @@ setGlobalOptions({ maxInstances: 10 });
  */
 const EXIGIR_APP_CHECK = false;
 const opcionesCall = { enforceAppCheck: EXIGIR_APP_CHECK };
+
+/**
+ * ¿Puede este usuario gestionar esta competición? True si es admin
+ * global (documento en `admins`) o si es gestor de esa liga (su UID
+ * está en el array `gestores` de la competición). Con competicionId
+ * vacío, solo los admins globales pasan.
+ */
+async function puedeGestionar(uid: string, competicionId: string): Promise<boolean> {
+    const adminSnap = await db.doc(`admins/${uid}`).get();
+    if (adminSnap.exists) return true;
+    if (!competicionId) return false;
+    const compSnap = await db.doc(`competiciones/${competicionId}`).get();
+    if (!compSnap.exists) return false;
+    const gestores = (compSnap.data()?.['gestores'] ?? []) as string[];
+    return gestores.includes(uid);
+}
 /** Minutos tras el inicio antes de empezar a consultar la API. */
 const MINUTOS_ANTES_DE_CONSULTAR = 100;
 
@@ -277,10 +293,6 @@ export const liquidarPartido = onCall(opcionesCall, async (req) => {
     if (!uid) {
         throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
     }
-    const adminSnap = await db.doc(`admins/${uid}`).get();
-    if (!adminSnap.exists) {
-        throw new HttpsError('permission-denied', 'Solo un administrador puede liquidar.');
-    }
 
     const partidoId = String(req.data?.partidoId ?? '');
     const resultadoOficial = String(req.data?.resultadoOficial ?? '');
@@ -294,6 +306,13 @@ export const liquidarPartido = onCall(opcionesCall, async (req) => {
         throw new HttpsError('not-found', 'El partido no existe.');
     }
     const partido = partSnap.data() as Record<string, unknown>;
+
+    // Admin global, o gestor de la liga de ESTE partido.
+    const competicionId = String(partido['competicion'] ?? '');
+    if (!(await puedeGestionar(uid, competicionId))) {
+        throw new HttpsError('permission-denied', 'No administras esta liga.');
+    }
+
     if (partido['liquidado'] === true) {
         throw new HttpsError('failed-precondition', 'Este partido ya fue liquidado.');
     }
@@ -671,6 +690,60 @@ export const recalcularRanking = onCall(opcionesCall, async (req) => {
 
     await batch.commit();
     return { ok: true, jugadores: escritos };
+});
+
+/* ============================================================
+   REINICIO DE SALDO (admin)
+   Pone el saldo del jugador en 0 y DEJA CONSTANCIA en el ledger
+   del ajuste, para que el historial no tenga huecos. Todo en una
+   transacción: o se hacen las dos cosas o ninguna.
+   ============================================================ */
+export const reiniciarPuntos = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) {
+        throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+    }
+    const adminSnap = await db.doc(`admins/${uid}`).get();
+    if (!adminSnap.exists) {
+        throw new HttpsError('permission-denied', 'Solo un administrador.');
+    }
+
+    const objetivo = String((req.data as { uid?: string })?.uid ?? '');
+    if (!objetivo) {
+        throw new HttpsError('invalid-argument', 'Falta el jugador a reiniciar.');
+    }
+
+    const ajuste = await db.runTransaction(async (tx) => {
+        const userRef = db.doc(`users/${objetivo}`);
+        const snap = await tx.get(userRef);
+        if (!snap.exists) {
+            throw new HttpsError('not-found', 'No existe ese jugador.');
+        }
+        const saldoAntes = Number(snap.data()?.['puntos'] ?? 0);
+
+        // El ajuste es lo que se suma/resta para llegar a 0. Si tenía -300,
+        // el ajuste es +300; si tenía +500, es -500.
+        const delta = -saldoAntes;
+
+        tx.update(userRef, { puntos: 0, bloqueado: false });
+
+        // Solo se registra si de verdad hubo cambio de saldo.
+        if (delta !== 0) {
+            tx.set(db.collection('ledger').doc(), {
+                uid: objetivo,
+                tipo: 'reinicio',
+                monto: delta,
+                saldoAntes,
+                detalle: 'Reinicio de saldo por administrador',
+                porAdmin: uid,
+                createdAt: FieldValue.serverTimestamp(),
+            });
+        }
+
+        return { saldoAntes, delta };
+    });
+
+    return { ok: true, ...ajuste };
 });
 
 
@@ -2579,6 +2652,16 @@ export const revivir = onCall(
             if (costo > 0) {
                 tx.update(userRef, { puntos: FieldValue.increment(-costo) });
                 tx.set(torneoRef, { bolsa: FieldValue.increment(costo) }, { merge: true });
+                // Queda en el ledger, igual que la entrada: el pago por revivir
+                // es auditable y aparece en el historial de movimientos.
+                tx.set(db.collection('ledger').doc(), {
+                    uid,
+                    tipo: 'torneo-revivir',
+                    monto: -costo,
+                    torneoId,
+                    detalle: String(t['nombre'] ?? 'Torneo'),
+                    createdAt: FieldValue.serverTimestamp(),
+                });
             }
 
             // Vuelve con las mismas vidas que tenía al caer: no se tocan, así
@@ -2800,6 +2883,7 @@ export const crearBracket = onCall(opcionesCall, async (req) => {
         codigo: codigoBracket(),
         cierraAt,
         costoEntrada: Number(req.data?.costoEntrada ?? 0),
+        publico: req.data?.publico === true,
         bolsa: 0,
         gestores: [],
         creadoPor: uid,

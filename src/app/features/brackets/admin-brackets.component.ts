@@ -103,6 +103,18 @@ import {
               </small>
             </label>
 
+            <label class="switch">
+              <span class="switch-texto">
+                Eliminatoria pública
+                <small class="pista">
+                  Aparece en el inicio y cualquiera puede unirse sin invitación.
+                  Si la dejas privada, solo entra quien tenga el enlace.
+                </small>
+              </span>
+              <input type="checkbox" class="switch-input" [(ngModel)]="nuevo.publico" />
+              <span class="switch-pista" aria-hidden="true"></span>
+            </label>
+
             <label class="field">
               <span>Costo de entrada (puntos)</span>
               <select [(ngModel)]="nuevo.costoEntrada">
@@ -351,6 +363,7 @@ export class AdminBracketsComponent {
     desempateFinal: 'penales' as 'mejor-sembrado' | 'penales',
     reparto: '80,20',
     escala: 'normal' as 'normal' | 'final' | 'pareja',
+    publico: false,
     costoEntrada: 100,
     cierre: '',
     listaEquipos: '',
@@ -450,6 +463,7 @@ export class AdminBracketsComponent {
         equipos,
         costoEntrada: Number(this.nuevo.costoEntrada),
         cierraAt: this.nuevo.cierre ? new Date(this.nuevo.cierre) : null,
+        publico: this.nuevo.publico,
       });
       this.mensaje.set('Eliminatoria creada.');
       this.nuevo.nombre = '';

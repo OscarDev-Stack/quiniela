@@ -19,6 +19,15 @@ export interface ResumenMovimientos {
     movimientos: number;
 }
 
+export interface Movimiento {
+    id: string;
+    tipo: string;
+    monto: number;
+    detalle?: string;
+    torneoId?: string;
+    createdAt?: { seconds: number } | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PerfilService {
     private readonly db = inject(Firestore);
@@ -34,6 +43,20 @@ export class PerfilService {
      * Resumen de mis movimientos. Solo funciona con la propia cuenta,
      * porque el ledger es privado por reglas de Firestore.
      */
+    /**
+     * Mis movimientos con detalle, más recientes primero. Solo la propia
+     * cuenta puede leerlos (el ledger es privado por reglas de Firestore).
+     */
+    movimientos(uid: string): Observable<Movimiento[]> {
+        const q = query(
+            collection(this.db, 'ledger'),
+            where('uid', '==', uid),
+            orderBy('createdAt', 'desc'),
+            limit(300),
+        );
+        return collectionData(q, { idField: 'id' }) as Observable<Movimiento[]>;
+    }
+
     resumen(uid: string): Observable<ResumenMovimientos> {
         const q = query(
             collection(this.db, 'ledger'),

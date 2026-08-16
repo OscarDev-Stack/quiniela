@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -43,6 +43,7 @@ interface Outcome {
       </div>
     </div>
 
+    @if (!soloLiquidar()) {
     <section class="panel">
       <button class="panel-title panel-title--boton" (click)="verApi.set(!verApi())">
         <i class="ti" [class.ti-chevron-down]="!verApi()" [class.ti-chevron-up]="verApi()"></i>
@@ -136,6 +137,7 @@ interface Outcome {
       </button>
       }
     </section>
+    }
 
     <section class="panel">
       <div class="panel-head">
@@ -320,6 +322,9 @@ interface Outcome {
 })
 export class AdminPartidosComponent {
   private readonly confirmar = inject(ConfirmarService);
+  /** En modo gestor de liga, oculta la creación de partidos: solo liquida. */
+  readonly soloLiquidar = input(false);
+
   private readonly admin = inject(AdminService);
 
   readonly partidos = toSignal(this.admin.getPartidos(), { initialValue: [] as Partido[] });

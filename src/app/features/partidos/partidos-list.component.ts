@@ -5,6 +5,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { NavComponent } from '../../shared/nav.component';
 import { PartidosService } from '../../core/services/partidos.service';
 import { PronosticosService } from '../../core/services/pronosticos.service';
+import { BracketsService } from '../../core/services/brackets.service';
 import { Pronostico } from '../../core/models/pronostico.model';
 import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/models/partido.model';
 
@@ -15,6 +16,25 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
   template: `
     <div class="screen">
       <app-nav />
+
+      @if (bracketsPublicos().length > 0) {
+        <section class="publicos">
+          <h3 class="publicos-tit"><i class="ti ti-sitemap"></i> Eliminatorias abiertas</h3>
+          @for (b of bracketsPublicos(); track b.id) {
+            <button class="bracket-card" (click)="abrirBracket(b.id)">
+              <div class="bracket-info">
+                <span class="bracket-nom">{{ b.nombre }}</span>
+                <span class="bracket-meta">
+                  {{ b.config.equipos }} equipos
+                  @if (b.costoEntrada > 0) { · {{ b.costoEntrada }} pts } @else { · Gratis }
+                  @if (b.bolsa > 0) { · Bolsa {{ b.bolsa | number }} }
+                </span>
+              </div>
+              <span class="bracket-cta">Ver <i class="ti ti-chevron-right"></i></span>
+            </button>
+          }
+        </section>
+      }
 
       <nav class="filters">
         @for (f of filtros; track f) {
@@ -113,6 +133,24 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
   `,
   styles: [
     `
+      .publicos { margin-bottom: 18px; }
+      .publicos-tit {
+        display: flex; align-items: center; gap: 7px;
+        font-size: 13px; font-weight: 700; color: var(--text-secondary); margin: 0 0 10px;
+      }
+      .bracket-card {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
+        padding: 13px 14px; margin-bottom: 8px; cursor: pointer; text-align: left;
+        border: 1px solid var(--accent-fill); border-radius: var(--radius);
+        background: var(--accent-bg);
+      }
+      .bracket-info { min-width: 0; }
+      .bracket-nom { display: block; font-size: 14px; font-weight: 700; color: var(--text-primary); }
+      .bracket-meta { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+      .bracket-cta {
+        flex-shrink: 0; display: flex; align-items: center; gap: 2px;
+        font-size: 13px; font-weight: 600; color: var(--accent-text);
+      }
       :host { display: block; }
 
       .filters { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 16px; }
@@ -194,7 +232,15 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
 export class PartidosListComponent {
   private readonly service = inject(PartidosService);
   private readonly pronosticos = inject(PronosticosService);
+  private readonly brackets = inject(BracketsService);
   private readonly router = inject(Router);
+
+  /** Eliminatorias públicas abiertas, visibles para todos en el inicio. */
+  readonly bracketsPublicos = toSignal(this.brackets.bracketsPublicos(), { initialValue: [] });
+
+  abrirBracket(id: string): void {
+    this.router.navigate(['/eliminatorias', id]);
+  }
 
   /** Invitación guardada que aún no se ha aceptado. */
   readonly invitacionPendiente = signal(localStorage.getItem('invitacion'));

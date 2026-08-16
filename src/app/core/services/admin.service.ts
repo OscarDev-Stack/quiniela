@@ -176,7 +176,10 @@ export class AdminService {
     }
 
     async reiniciarPuntos(uid: string): Promise<void> {
-        await updateDoc(doc(this.db, 'users', uid), { puntos: 0, bloqueado: false });
+        // Pasa por la Cloud Function: pone el saldo en 0 y registra el ajuste
+        // en el ledger, todo en una transacción auditable.
+        const fn = httpsCallable(this.fns, 'reiniciarPuntos');
+        await fn({ uid });
         await this.recalcularRanking();
     }
 

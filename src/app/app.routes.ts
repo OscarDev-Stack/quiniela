@@ -11,6 +11,9 @@ import { UnirseComponent } from './features/torneos/unirse.component';
 import { AdminTorneosComponent } from './features/admin/admin-torneos.component';
 import { AdminCompeticionesComponent } from './features/admin/admin-competiciones.component';
 import { PerfilComponent } from './features/perfil/perfil.component';
+import { MovimientosComponent } from './features/perfil/movimientos.component';
+import { LigaPanelComponent } from './features/liga/liga-panel.component';
+import { gestorGuard } from './core/guards/gestor.guard';
 import { AdminLayoutComponent } from './features/admin/admin-layout.component';
 import { AdminPartidosComponent } from './features/admin/admin-partidos.component';
 import { AdminUsuariosComponent } from './features/admin/admin-usuarios.component';
@@ -30,6 +33,8 @@ export const routes: Routes = [
     { path: 'ranking', component: RankingComponent, canActivate: [authGuard] },
 
     { path: 'perfil', component: PerfilComponent, canActivate: [authGuard] },
+    { path: 'movimientos', component: MovimientosComponent, canActivate: [authGuard] },
+    { path: 'liga', component: LigaPanelComponent, canActivate: [authGuard, gestorGuard] },
     { path: 'perfil/:uid', component: PerfilComponent, canActivate: [authGuard] },
 
     { path: 'unirse/:codigo', component: UnirseComponent },

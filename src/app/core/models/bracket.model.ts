@@ -168,6 +168,9 @@ export interface Bracket {
     bolsa: number;
     premioPagado?: number;
 
+    /* Público: aparece en el inicio y cualquiera puede unirse sin invitación. */
+    publico?: boolean;
+
     ganadorAlias?: string;
     gestores?: string[];
     creadoPor?: string;

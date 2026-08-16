@@ -77,6 +77,11 @@ import { APP_VERSION } from '../../core/version';
             <span>Mejor premio</span>
             <strong class="verde">{{ resumen()?.mejorPremio ?? 0 | number }} pts</strong>
           </div>
+
+          <button class="ver-movs" (click)="verMovimientos()">
+            <span><i class="ti ti-receipt"></i> Ver todos mis movimientos</span>
+            <i class="ti ti-chevron-right"></i>
+          </button>
         </section>
       }
 
@@ -237,6 +242,14 @@ import { APP_VERSION } from '../../core/version';
       .linea { display: flex; justify-content: space-between; align-items: center;
         font-size: 14px; padding: 7px 0; color: var(--text-secondary); }
       .linea strong { color: var(--text-primary); }
+      .ver-movs {
+        display: flex; align-items: center; justify-content: space-between; width: 100%;
+        margin-top: 12px; padding: 11px 12px; cursor: pointer;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-1); color: var(--text-primary);
+        font-size: 13px; font-weight: 600;
+      }
+      .ver-movs i:last-child { color: var(--text-muted); }
       .verde { color: var(--success-text); }
 
       .trofeo { display: flex; align-items: center; gap: 12px; padding: 10px 0;
@@ -331,6 +344,11 @@ export class PerfilComponent {
   private readonly perfil = inject(PerfilService);
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+
+  verMovimientos(): void {
+    this.router.navigate(['/movimientos']);
+  }
+
   private readonly confirmar = inject(ConfirmarService);
 
   /** uid del perfil que se muestra: el de la ruta, o el mío. */
@@ -440,17 +458,21 @@ export class PerfilComponent {
     }
   }
 
+  /** Abre el historial de novedades. */
   verNovedades(): void {
     this.novedadesSrv.abrirHistorial();
   }
 
+  /* --- Avisos por Telegram --- */
   activo = false;
   readonly guardandoTg = signal(false);
   readonly mensajeTg = signal('');
   readonly errorTg = signal(false);
 
+  /** ¿Ya quedó ligada la cuenta de Telegram? */
   readonly conectado = computed(() => !!this.me()?.telegramChatId);
 
+  /** Abre Telegram con el enlace personal de conexión. */
   async conectar(): Promise<void> {
     this.guardandoTg.set(true);
     this.mensajeTg.set('');
@@ -458,6 +480,7 @@ export class PerfilComponent {
 
     try {
       const enlace = await this.perfil.vincularTelegram();
+      // Se abre en otra pestaña: en móvil salta directo a la app.
       window.open(enlace, '_blank');
       this.mensajeTg.set('Pulsa Iniciar en Telegram y listo. Esta pantalla se actualiza sola.');
     } catch (e: unknown) {
@@ -468,6 +491,7 @@ export class PerfilComponent {
     }
   }
 
+  /** Enciende o apaga los avisos sin desconectar la cuenta. */
   async alternarAvisos(valor: boolean): Promise<void> {
     this.activo = valor;
     this.mensajeTg.set('');
@@ -498,6 +522,7 @@ export class PerfilComponent {
   }
 
   constructor() {
+    // Posición en el ranking, si aplica.
     const f = this.fila();
     if (f?.calificado) {
       this.ranking
@@ -506,6 +531,7 @@ export class PerfilComponent {
         .catch(() => this.posicion.set(null));
     }
 
+    // Precarga la configuración de Telegram que ya estuviera guardada.
     effect(() => {
       const yo = this.me();
       if (!yo) return;
