@@ -2,8 +2,11 @@ import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { tap } from 'rxjs/operators';
 import { Auth, user } from '@angular/fire/auth';
 import { NavComponent } from '../../shared/nav.component';
+import { CargandoComponent } from '../../shared/cargando.component';
+import { apagarCargando } from '../../shared/cargando.util';
 import {
   RankingService,
   FilaRanking,
@@ -17,7 +20,7 @@ type Vista = 'puntos' | 'porcentaje';
 @Component({
   selector: 'app-ranking',
   standalone: true,
-  imports: [CommonModule, NavComponent],
+  imports: [CommonModule, NavComponent, CargandoComponent],
   template: `
     <div class="screen">
       <app-nav title="Estadísticas" />
@@ -69,7 +72,9 @@ type Vista = 'puntos' | 'porcentaje';
         </div>
       </div>
 
-      @if (tabla().length === 0) {
+      @if (cargando()) {
+        <app-cargando texto="Cargando la tabla" />
+      } @else if (tabla().length === 0) {
         <p class="empty">Todavía no hay datos para la tabla.</p>
       }
 
@@ -291,9 +296,14 @@ export class RankingComponent {
   private readonly topPuntos = toSignal(this.service.topPuntos(), {
     initialValue: [] as RankingDoc[],
   });
-  private readonly topPorcentaje = toSignal(this.service.topPorcentaje(), {
-    initialValue: [] as RankingDoc[],
-  });
+  /** True hasta que llegan los primeros datos de la tabla. */
+  readonly cargando = signal(true);
+  private readonly inicioCarga = Date.now();
+
+  private readonly topPorcentaje = toSignal(
+    this.service.topPorcentaje().pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
+    { initialValue: [] as RankingDoc[] },
+  );
 
   constructor() {
     // Recalcula la posición cuando cambia la vista o mis números.
@@ -363,16 +373,19 @@ export class RankingComponent {
       return this.verTodos() ? null : yo;
     }
 
+    // Fuera del top: es el único sitio donde puedo verme.
     const fuera = this.miFila();
     const posicion = this.miPosicion();
     if (!fuera || !posicion) return null;
     return { ...fuera, posicion } as FilaRanking;
   });
 
+  /** ¿Aparezco dentro de la tabla que se está mostrando? */
   readonly estoyEnTabla = computed(() =>
     this.tabla().some((f) => f.id === this.miUid()),
   );
 
+  /** Todos los que no están en el podio. */
   readonly resto = computed(() => this.tabla().slice(3));
 
   verPerfil(f: RankingDoc): void {

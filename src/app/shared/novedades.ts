@@ -27,6 +27,44 @@ export interface Novedad {
 
 export const NOVEDADES: Novedad[] = [
     {
+        version: '2.1.0',
+        fecha: 'Agosto 2026',
+        resumen: 'Escudos de los equipos, avisos al teléfono y la app instalable.',
+        puntos: [
+            {
+                icono: 'ti-shield',
+                titulo: 'Escudos de los equipos',
+                detalle:
+                    'Ahora ves el escudo de cada equipo en los partidos, los torneos y las ' +
+                    'eliminatorias. Reconoces al vuelo quién juega, sin leer nombre por nombre. ' +
+                    'Incluye Liga MX, MLS, LaLiga y selecciones.',
+            },
+            {
+                icono: 'ti-bell',
+                titulo: 'Avisos directo a tu teléfono',
+                detalle:
+                    'Actívalos desde tu perfil y recibe una notificación cuando abra una jornada, ' +
+                    'salgan resultados o haya novedades en tus torneos, aunque no tengas la app ' +
+                    'abierta. Un interruptor para prender y apagar cuando quieras.',
+            },
+            {
+                icono: 'ti-download',
+                titulo: 'Instala la app en tu teléfono',
+                detalle:
+                    'Desde tu perfil puedes instalar la app en tu pantalla de inicio y abrirla como ' +
+                    'cualquier otra, sin buscar el enlace cada vez. Funciona en Android y iPhone.',
+            },
+            {
+                icono: 'ti-bell-ringing',
+                titulo: 'Campanita de novedades',
+                detalle:
+                    'Toca la campanita en la parte de arriba para ver de un vistazo tus últimos ' +
+                    'movimientos de puntos, sin salir de donde estás. Para el detalle completo, ' +
+                    'de ahí saltas a tu historial.',
+            },
+        ],
+    },
+    {
         version: '2.0.0',
         fecha: 'Agosto 2026',
         resumen: 'Llegaron las eliminatorias: arma tu cuadro y compite hasta el campeón.',

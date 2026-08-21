@@ -15,6 +15,14 @@ export type EstadoBracket =
     | 'en-curso' // cerró el pronóstico, se juegan las rondas
     | 'finalizado';
 
+/**
+ * Cómo se juega el bracket.
+ *  pronostico → cada jugador llena el cuadro completo y gana por acertar.
+ *  duenos     → el admin asigna cada equipo a un participante (una porra
+ *               de dueños). No se predice nada: gana quien tenga al campeón.
+ */
+export type ModoBracket = 'pronostico' | 'duenos';
+
 /** Cómo se arma el cuadro inicial. */
 export type ArmadoCuadro =
     | 'siembra' // 1°vs8°, 2°vs7°… se acomoda solo por posición
@@ -96,6 +104,29 @@ export interface EquipoBracket {
 }
 
 /**
+ * Modo 'duenos': la asignación de un equipo a un participante.
+ * El dueño puede ser un usuario registrado (uid + alias) o un invitado
+ * que solo tiene nombre (lo gestiona el admin, no cobra ni avisa).
+ *
+ * El estado sigue el flujo de invitación con aceptación:
+ *  invitado  → se le mandó el aviso, aún no acepta ni se le cobró.
+ *  aceptado  → aceptó las reglas y se le cobró la entrada.
+ *  invitado-sin-registro → es un invitado externo (sin cuenta), va directo.
+ */
+export interface DuenoEquipo {
+    /* Nombre del equipo asignado (coincide con EquipoBracket.nombre). */
+    equipo: string;
+    /* uid del usuario registrado, o null si es invitado externo. */
+    uid: string | null;
+    /* Nombre que se muestra: el alias del registrado o el nombre del invitado. */
+    nombre: string;
+    /* Si es un invitado externo sin cuenta. */
+    invitado: boolean;
+    /* Estado de la invitación/cobro. */
+    estado: 'invitado' | 'aceptado' | 'invitado-sin-registro';
+}
+
+/**
  * Una llave del cuadro: el enfrentamiento entre dos equipos en una
  * ronda. Puede tener uno o dos partidos según el formato.
  */
@@ -160,6 +191,22 @@ export interface Bracket {
 
     /* El cuadro completo: todas las llaves de todas las rondas. */
     llaves: Llave[];
+
+    /* Lista de equipos del bracket. Sirve para armar los cruces a mano. */
+    equipos?: EquipoBracket[];
+
+    /*
+     * Modo de juego. Si falta, es 'pronostico' por compatibilidad con los
+     * brackets creados antes de este campo.
+     */
+    modo?: ModoBracket;
+
+    /*
+     * Solo en modo 'duenos': a quién le tocó cada equipo. La clave es el
+     * nombre del equipo. Un dueño puede ser un usuario registrado (con uid)
+     * o un invitado que gestiona el admin (solo nombre).
+     */
+    duenos?: DuenoEquipo[];
 
     /* Cierre único del pronóstico, antes del primer partido. */
     cierraAt?: { seconds: number } | Date | null;

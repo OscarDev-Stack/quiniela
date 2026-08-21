@@ -1,5 +1,6 @@
 import { Component, computed, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { EscudoComponent } from '../../shared/escudo.component';
 import {
   Bracket,
   Llave,
@@ -16,7 +17,7 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
 @Component({
   selector: 'app-cuadro-bracket',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, EscudoComponent],
   template: `
     <div class="cuadro" [style.--rondas]="totalRondas()">
       @for (r of rondas(); track r) {
@@ -29,6 +30,7 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
                 <div class="lado" [class.lado--gana]="esGanador(l, l.local?.nombre)">
                   @if (l.local) {
                     <span class="siembra">{{ l.local.siembra }}</span>
+                    <app-escudo [equipo]="l.local.nombre" [size]="18" />
                     <span class="equipo">{{ l.local.nombre }}</span>
                   } @else {
                     <span class="equipo por-definir">Por definir</span>
@@ -39,6 +41,7 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
                 <div class="lado" [class.lado--gana]="esGanador(l, l.visitante?.nombre)">
                   @if (l.visitante) {
                     <span class="siembra">{{ l.visitante.siembra }}</span>
+                    <app-escudo [equipo]="l.visitante.nombre" [size]="18" />
                     <span class="equipo">{{ l.visitante.nombre }}</span>
                   } @else {
                     <span class="equipo por-definir">Por definir</span>

@@ -1,19 +1,25 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { tap } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
+import { CargandoComponent } from '../../shared/cargando.component';
+import { apagarCargando } from '../../shared/cargando.util';
+import { EscudoComponent } from '../../shared/escudo.component';
 import { PronosticosService } from '../../core/services/pronosticos.service';
 import { Pronostico, gananciaNeta } from '../../core/models/pronostico.model';
 
 @Component({
   selector: 'app-mis-pronosticos',
   standalone: true,
-  imports: [CommonModule, NavComponent],
+  imports: [CommonModule, NavComponent, CargandoComponent, EscudoComponent],
   template: `
     <div class="screen">
       <app-nav title="Mis pronósticos" />
 
-      @if (pronosticos().length === 0) {
+      @if (cargando()) {
+        <app-cargando texto="Cargando pronósticos" />
+      } @else if (pronosticos().length === 0) {
         <p class="empty">Todavía no has hecho ningún pronóstico.</p>
       }
 
@@ -22,6 +28,9 @@ import { Pronostico, gananciaNeta } from '../../core/models/pronostico.model';
           <div class="row-main">
             <div class="row-title">{{ p.partidoLabel }}</div>
             <div class="row-sub">
+              @if (equipoParaEscudo(p)) {
+                <app-escudo [equipo]="equipoParaEscudo(p)" [size]="18" />
+              }
               {{ equipoElegido(p) }} · x{{ p.multiplicador }} ({{ p.apuesta | number }} pts)
             </div>
           </div>
@@ -57,7 +66,7 @@ import { Pronostico, gananciaNeta } from '../../core/models/pronostico.model';
       }
       .row-main { flex: 1; }
       .row-title { font-size: 14px; font-weight: 600; }
-      .row-sub { font-size: 12px; color: var(--text-muted); }
+      .row-sub { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
       .row-right { text-align: right; }
 
       .tag {
@@ -76,14 +85,19 @@ import { Pronostico, gananciaNeta } from '../../core/models/pronostico.model';
 export class MisPronosticosComponent {
   private readonly service = inject(PronosticosService);
 
-  readonly pronosticos = toSignal(this.service.misPronosticos(), {
-    initialValue: [] as Pronostico[],
-  });
+  readonly cargando = signal(true);
+  private readonly inicioCarga = Date.now();
+
+  readonly pronosticos = toSignal(
+    this.service.misPronosticos().pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
+    { initialValue: [] as Pronostico[] },
+  );
 
   neto(p: Pronostico): number {
     return gananciaNeta(p);
   }
 
+  /** Nombre del equipo elegido, sacado de la etiqueta "A vs B". */
   equipoElegido(p: Pronostico): string {
     const [local, visitante] = (p.partidoLabel ?? '').split(' vs ');
     switch (p.resultado) {
@@ -97,6 +111,21 @@ export class MisPronosticosComponent {
         return `Pasa ${visitante || 'visitante'}`;
       default:
         return 'Empate';
+    }
+  }
+
+  /** Solo el nombre del equipo elegido (sin "Pasa"), para su escudo. Vacío si fue empate. */
+  equipoParaEscudo(p: Pronostico): string {
+    const [local, visitante] = (p.partidoLabel ?? '').split(' vs ');
+    switch (p.resultado) {
+      case 'local':
+      case 'pasa-local':
+        return local?.trim() ?? '';
+      case 'visitante':
+      case 'pasa-visitante':
+        return visitante?.trim() ?? '';
+      default:
+        return '';
     }
   }
 }

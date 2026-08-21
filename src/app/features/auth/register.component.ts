@@ -125,7 +125,7 @@ export class RegisterComponent {
       const invitacion = localStorage.getItem('invitacion');
       // Se consume una sola vez: si no, cada login reenvía a unirse.
       localStorage.removeItem('invitacion');
-      this.router.navigate(invitacion ? ['/unirse', invitacion] : ['/partidos']);
+      this.router.navigate(invitacion ? ['/unirse', invitacion] : ['/inicio']);
     } catch (e: unknown) {
       this.error.set(this.mapError((e as { code?: string })?.code));
     } finally {

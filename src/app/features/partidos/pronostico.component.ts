@@ -3,7 +3,12 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Firestore, doc, docData } from '@angular/fire/firestore';
+import { Observable } from 'rxjs';
+import { tap } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
+import { CargandoComponent } from '../../shared/cargando.component';
+import { StatsService } from '../../shared/stats.service';
+import { apagarCargando } from '../../shared/cargando.util';
 import { UserService } from '../../core/services/user.service';
 import {
   PronosticosService,
@@ -22,7 +27,7 @@ interface Opcion {
 @Component({
   selector: 'app-pronostico',
   standalone: true,
-  imports: [CommonModule, NavComponent],
+  imports: [CommonModule, NavComponent, CargandoComponent],
   template: `
     <div class="screen">
       <app-nav [back]="true" title="Confirmar pronóstico" />
@@ -88,8 +93,10 @@ interface Opcion {
             {{ saving() ? 'Enviando…' : 'Confirmar pronóstico' }}
           </button>
         </div>
+      } @else if (cargando()) {
+        <app-cargando texto="Cargando partido" />
       } @else {
-        <p class="loading">Cargando partido…</p>
+        <p class="loading">No se encontró el partido.</p>
       }
     </div>
   `,
@@ -154,6 +161,7 @@ interface Opcion {
 export class PronosticoComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly stats = inject(StatsService);
   private readonly db = inject(Firestore);
   private readonly service = inject(PronosticosService);
   private readonly users = inject(UserService);
@@ -162,8 +170,12 @@ export class PronosticoComponent {
 
   private readonly id = this.route.snapshot.paramMap.get('id')!;
 
+  readonly cargando = signal(true);
+  private readonly inicioCarga = Date.now();
+
   readonly partido = toSignal(
-    docData(doc(this.db, 'partidos', this.id), { idField: 'id' }) as never,
+    (docData(doc(this.db, 'partidos', this.id), { idField: 'id' }) as Observable<Partido | null>)
+      .pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
     { initialValue: null },
   ) as () => Partido | null;
 
@@ -223,6 +235,7 @@ export class PronosticoComponent {
     this.saving.set(true);
     try {
       await this.service.crear(p, r, this.multiplicador());
+      this.stats.evento('pronostico_hecho', { multiplicador: this.multiplicador() });
       this.router.navigate(['/mis-pronosticos']);
     } catch (e: unknown) {
       this.error.set((e as Error)?.message ?? 'No se pudo registrar el pronóstico.');

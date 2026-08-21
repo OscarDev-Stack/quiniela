@@ -16,6 +16,61 @@ import { EjemploBracketComponent } from './ejemplo-bracket.component';
     <div class="reglas">
       <h3 class="titulo"><i class="ti ti-book"></i> Cómo se juega</h3>
 
+      @if (b().modo === 'duenos') {
+        <!-- Reglas del modo dueños -->
+        <ul>
+          <li>
+            <span class="icono icono--ok"><i class="ti ti-ticket"></i></span>
+            <div>
+              <strong>Te toca un equipo</strong>
+              <p>
+                El administrador te asigna uno de los equipos del cuadro. No eliges
+                ni pronosticas nada: ese equipo es tuyo durante todo el torneo.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="icono icono--gold"><i class="ti ti-trophy"></i></span>
+            <div>
+              <strong>Ganas si tu equipo es campeón</strong>
+              <p>
+                Tu equipo avanza (o no) según los resultados reales de cada llave.
+                Gana el torneo quien tenga al equipo que se corona campeón.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="icono icono--ok"><i class="ti ti-coins"></i></span>
+            <div>
+              <strong>La bolsa</strong>
+              <p>
+                @if (b().costoEntrada > 0) {
+                  Cada participante paga {{ b().costoEntrada }} pts de entrada al aceptar.
+                  Todo se junta en la bolsa y se la lleva completa el dueño del campeón.
+                } @else {
+                  El dueño del equipo campeón se lleva la bolsa completa.
+                }
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="icono icono--ok"><i class="ti ti-check"></i></span>
+            <div>
+              <strong>Acepta antes del cierre</strong>
+              <p>
+                Cuando te asignan tu equipo, revisa estas reglas y acepta o rechaza.
+                @if (b().costoEntrada > 0) {
+                  <strong>Si no respondes antes de la fecha de cierre, se te cobra igual</strong>
+                  (ya tenías el equipo apartado). Si no te alcanzan los puntos, tu equipo se libera.
+                } @else {
+                  Si no rechazas antes del cierre, quedas dentro con tu equipo.
+                }
+              </p>
+            </div>
+          </li>
+        </ul>
+      } @else {
+
       <button class="ver-ejemplo" (click)="verEjemplo.set(true)">
         <i class="ti ti-eye"></i> Ver un ejemplo con el Clausura 2026
       </button>
@@ -129,6 +184,7 @@ import { EjemploBracketComponent } from './ejemplo-bracket.component';
 
       @if (verEjemplo()) {
         <app-ejemplo-bracket (cerrar)="verEjemplo.set(false)" />
+      }
       }
     </div>
   `,

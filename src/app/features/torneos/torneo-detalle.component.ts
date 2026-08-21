@@ -2,11 +2,14 @@ import { Component, DestroyRef, computed, effect, inject, signal, untracked } fr
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Auth, user } from '@angular/fire/auth';
-import { map, switchMap } from 'rxjs/operators';
+import { map, switchMap, tap } from 'rxjs/operators';
 import { of, Subscription } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { NavComponent } from '../../shared/nav.component';
+import { CargandoComponent } from '../../shared/cargando.component';
+import { EscudoComponent } from '../../shared/escudo.component';
+import { apagarCargando } from '../../shared/cargando.util';
 import { ReglasTorneoComponent } from './reglas-torneo.component';
 import { PartidosJornadaComponent } from './partidos-jornada.component';
 import { TablaPosicionesComponent } from './tabla-posiciones.component';
@@ -22,6 +25,7 @@ import {
 import { Jornada, fechaJornada, equiposDeJornada } from '../../core/models/competicion.model';
 import { CompeticionesService } from '../../core/services/competiciones.service';
 import { ConfirmarService } from '../../shared/confirmar.service';
+import { ToastService } from '../../shared/toast.service';
 
 @Component({
   selector: 'app-torneo-detalle',
@@ -30,10 +34,16 @@ import { ConfirmarService } from '../../shared/confirmar.service';
     PartidosJornadaComponent,
     TablaPosicionesComponent,
     CartonesJornadaComponent,
+    CargandoComponent,
+    EscudoComponent,
   ],
   template: `
     <div class="screen">
       <app-nav [back]="true" [title]="torneo()?.nombre ?? 'Torneo'" />
+
+      @if (cargando()) {
+        <app-cargando texto="Cargando torneo" />
+      }
 
       @if (torneo(); as t) {
         <div class="flujo" [class.flujo--cerrada]="revelarPicks()">
@@ -116,10 +126,6 @@ import { ConfirmarService } from '../../shared/confirmar.service';
               }
             </div>
           }
-        }
-
-        @if (mensaje()) {
-          <div class="msg" (click)="mensaje.set('')">{{ mensaje() }}</div>
         }
 
         @if (!yo() && !soyGestor()) {
@@ -207,7 +213,11 @@ import { ConfirmarService } from '../../shared/confirmar.service';
 
               <p class="listado-partidos">
                 @for (p of j.partidos; track $index) {
-                  <span class="mini">{{ p.local }} vs {{ p.visitante }}</span>
+                  <span class="mini">
+                    <app-escudo [equipo]="p.local" [size]="18" />
+                    {{ p.local }} vs {{ p.visitante }}
+                    <app-escudo [equipo]="p.visitante" [size]="18" />
+                  </span>
                 }
               </p>
             } @else {
@@ -257,7 +267,10 @@ import { ConfirmarService } from '../../shared/confirmar.service';
 
               @for (p of j.partidos; track $index) {
                 <div class="pronostico">
-                  <span class="equipo-nombre">{{ p.local }}</span>
+                  <span class="equipo-lado equipo-lado--izq">
+                    <span class="equipo-nombre">{{ p.local }}</span>
+                    <app-escudo [equipo]="p.local" [size]="22" />
+                  </span>
                   <input
                     type="number"
                     min="0"
@@ -277,7 +290,10 @@ import { ConfirmarService } from '../../shared/confirmar.service';
                     (ngModelChange)="ponerGol($index, 'visitante', $event)"
                     [attr.aria-label]="'Goles de ' + p.visitante"
                   />
-                  <span class="equipo-nombre equipo-nombre--der">{{ p.visitante }}</span>
+                  <span class="equipo-lado equipo-lado--der">
+                    <app-escudo [equipo]="p.visitante" [size]="22" />
+                    <span class="equipo-nombre">{{ p.visitante }}</span>
+                  </span>
                 </div>
               }
 
@@ -335,6 +351,7 @@ import { ConfirmarService } from '../../shared/confirmar.service';
                       [disabled]="guardando()"
                       (click)="elegir(e)"
                     >
+                      <app-escudo [equipo]="e" [size]="20" />
                       {{ e }}
                     </button>
                   }
@@ -367,7 +384,7 @@ import { ConfirmarService } from '../../shared/confirmar.service';
             @if (disponiblesTotales().length > 0) {
               <div class="chips">
                 @for (e of disponiblesTotales(); track e) {
-                  <span class="chip">{{ e }}</span>
+                  <span class="chip"><app-escudo [equipo]="e" [size]="18" />{{ e }}</span>
                 }
               </div>
             } @else if (comprometidos().length === 0) {
@@ -382,6 +399,7 @@ import { ConfirmarService } from '../../shared/confirmar.service';
                 @for (e of comprometidos(); track e) {
                   <span class="chip chip--usado">
                     @if (jornadaLabel(e); as j) { <span class="chip-j">{{ j }}</span> }
+                    <app-escudo [equipo]="e" [size]="18" />
                     {{ e }}
                   </span>
                 }
@@ -615,8 +633,6 @@ import { ConfirmarService } from '../../shared/confirmar.service';
         .final--gano .trofeo { animation: none; }
       }
 
-      .msg { background: var(--success-bg); color: var(--success-text); font-size: 13px;
-        padding: 10px 12px; border-radius: var(--radius); margin-bottom: 14px; cursor: pointer; }
       .aviso { background: var(--warning-bg); color: var(--warning-text); font-size: 13px;
         padding: 11px 13px; border-radius: var(--radius); margin-bottom: 14px; }
       .panel--revivir { border-color: var(--accent-fill); }
@@ -661,6 +677,7 @@ import { ConfirmarService } from '../../shared/confirmar.service';
       .chip {
         font-size: 12px; padding: 5px 11px; border-radius: 999px;
         background: var(--surface-1); color: var(--text-secondary);
+        display: inline-flex; align-items: center; gap: 6px;
       }
       .chip--usado { opacity: 0.5; text-decoration: line-through; }
       .chip-j {
@@ -696,8 +713,12 @@ import { ConfirmarService } from '../../shared/confirmar.service';
         border-bottom: 1px solid var(--border);
       }
       .pronostico:last-of-type { border-bottom: none; }
-      .equipo-nombre { flex: 1; font-size: 13px; text-align: right; min-width: 0; }
-      .equipo-nombre--der { text-align: left; }
+      .equipo-lado {
+        flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
+      }
+      .equipo-lado--izq { justify-content: flex-end; }
+      .equipo-lado--der { justify-content: flex-start; }
+      .equipo-nombre { font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .goles {
         width: 46px; min-height: 40px; text-align: center; font-size: 16px;
         padding: 6px; border: 1px solid var(--border); border-radius: var(--radius);
@@ -716,6 +737,7 @@ import { ConfirmarService } from '../../shared/confirmar.service';
         flex: 1 1 calc(50% - 4px); padding: 12px 10px; cursor: pointer;
         border: 1px solid var(--border); border-radius: var(--radius);
         background: transparent; font-size: 14px; font-weight: 600;
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
       }
       .equipo:hover:not(:disabled) { border-color: var(--accent-fill); background: var(--accent-bg); }
       .equipo:disabled { opacity: 0.5; }
@@ -735,6 +757,7 @@ import { ConfirmarService } from '../../shared/confirmar.service';
       .falta--vencida { color: var(--danger-text); }
       .listado-partidos { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
       .mini {
+        display: inline-flex; align-items: center; gap: 5px;
         font-size: 11px; padding: 4px 9px; border-radius: 999px;
         background: var(--surface-1); color: var(--text-muted);
       }
@@ -778,10 +801,17 @@ export class TorneoDetalleComponent {
   private readonly auth = inject(Auth);
   private readonly competiciones = inject(CompeticionesService);
   private readonly confirmar = inject(ConfirmarService);
+  private readonly toast = inject(ToastService);
 
   private readonly id = this.route.snapshot.paramMap.get('id')!;
 
-  readonly torneo = toSignal(this.service.torneo(this.id), { initialValue: null });
+  readonly cargando = signal(true);
+  private readonly inicioCarga = Date.now();
+
+  readonly torneo = toSignal(
+    this.service.torneo(this.id).pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
+    { initialValue: null },
+  );
   readonly participantes = toSignal(this.service.participantes(this.id), {
     initialValue: [] as Participante[],
   });
@@ -797,7 +827,6 @@ export class TorneoDetalleComponent {
   readonly yo = toSignal(this.service.miParticipacion(this.id), { initialValue: null });
 
   readonly guardando = signal(false);
-  readonly mensaje = signal('');
   /** Reloj interno para refrescar la cuenta regresiva. */
   private readonly ahora = signal(Date.now());
 
@@ -959,7 +988,7 @@ export class TorneoDetalleComponent {
     });
     if (!ok) return;
     await this.service.cambiarEstado(this.id, 'en-curso');
-    this.mensaje.set('Torneo iniciado.');
+    this.toast.exito('Torneo iniciado.');
   }
 
 
@@ -975,12 +1004,12 @@ export class TorneoDetalleComponent {
     if (!ok) return;
     try {
       const r = await this.service.finalizar(this.id);
-      this.mensaje.set(
+      this.toast.exito(
         `Torneo cerrado: ${r.ganadores} ganador(es)` +
         (r.premioPorCabeza > 0 ? ` · ${r.premioPorCabeza} pts cada uno.` : '.'),
       );
     } catch (e: unknown) {
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo cerrar.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo cerrar.');
     }
   }
 
@@ -1125,12 +1154,11 @@ export class TorneoDetalleComponent {
         typeof lista[i]?.local === 'number' && typeof lista[i]?.visitante === 'number',
     );
     if (!completos) {
-      this.mensaje.set('Falta capturar algún marcador.');
+      this.toast.error('Falta capturar algún marcador.');
       return;
     }
 
     this.guardando.set(true);
-    this.mensaje.set('');
     try {
       await this.service.guardarQuiniela(
         this.id,
@@ -1139,17 +1167,15 @@ export class TorneoDetalleComponent {
           visitante: Number(m.visitante),
         })),
       );
-      this.mensaje.set('Pronósticos guardados.');
+      this.toast.exito('Pronósticos guardados.');
     } catch (e: unknown) {
-      this.mensaje.set((e as Error)?.message ?? 'No se pudieron guardar.');
+      this.toast.error((e as Error)?.message ?? 'No se pudieron guardar.');
     } finally {
       this.guardando.set(false);
     }
   }
 
-  readonly usados = computed(() =>
-    [...(this.yo()?.equiposUsados ?? [])].sort((a, b) => a.localeCompare(b)),
-  );
+  readonly usados = computed(() => [...(this.yo()?.equiposUsados ?? [])].sort());
 
   /** Catálogo de equipos de la competición. */
   private readonly competicion = toSignal(
@@ -1163,7 +1189,7 @@ export class TorneoDetalleComponent {
   readonly comprometidos = computed(() => {
     const resueltos = this.usados();
     const enJuego = this.pendientes().map((p) => p.equipo);
-    return [...new Set([...resueltos, ...enJuego])].sort((a, b) => a.localeCompare(b));
+    return [...new Set([...resueltos, ...enJuego])].sort();
   });
 
   /** Equipos que todavía puedo usar en el resto del torneo. */
@@ -1267,12 +1293,11 @@ export class TorneoDetalleComponent {
     if (!ok) return;
     const yaTenia = !!this.miPick();
     this.guardando.set(true);
-    this.mensaje.set('');
     try {
       await this.service.elegir(this.id, equipo);
-      this.mensaje.set(yaTenia ? `Cambiaste a ${equipo}.` : `Elegiste ${equipo}.`);
+      this.toast.exito(yaTenia ? `Cambiaste a ${equipo}.` : `Elegiste ${equipo}.`);
     } catch (e: unknown) {
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo guardar tu elección.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo guardar tu elección.');
     } finally {
       this.guardando.set(false);
     }

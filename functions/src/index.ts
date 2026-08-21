@@ -6,6 +6,7 @@ import * as logger from 'firebase-functions/logger';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
+import { getMessaging } from 'firebase-admin/messaging';
 
 initializeApp();
 const db = getFirestore();
@@ -2185,6 +2186,58 @@ async function enviarTelegram(chatId: string, texto: string): Promise<boolean> {
     }
 }
 
+/**
+ * Envía una notificación push a los dispositivos de un usuario vía FCM.
+ * Limpia los tokens que el servicio reporte como inválidos (dispositivos
+ * viejos o permisos revocados), para no acumular basura.
+ */
+/** Quita las etiquetas HTML (que usa Telegram) para las notificaciones push. */
+function limpiarHtml(texto: string): string {
+    return texto
+        .replace(/<[^>]+>/g, '') // quita <b>, </b>, <i>, etc.
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .trim();
+}
+
+async function enviarPush(uid: string, tokens: string[], titulo: string, cuerpo: string): Promise<boolean> {
+    if (tokens.length === 0) return false;
+    try {
+        const resp = await getMessaging().sendEachForMulticast({
+            tokens,
+            notification: { title: titulo, body: cuerpo },
+            webpush: {
+                fcmOptions: { link: 'https://automatepowerv1.web.app' },
+                notification: { icon: '/icons/icon-192.png' },
+            },
+        });
+
+        // Quita del usuario los tokens que fallaron por ser inválidos.
+        const invalidos: string[] = [];
+        resp.responses.forEach((r, i) => {
+            if (!r.success) {
+                const code = r.error?.code ?? '';
+                if (
+                    code === 'messaging/registration-token-not-registered' ||
+                    code === 'messaging/invalid-registration-token'
+                ) {
+                    invalidos.push(tokens[i]);
+                }
+            }
+        });
+        if (invalidos.length > 0) {
+            await db.doc(`users/${uid}`).update({
+                pushTokens: FieldValue.arrayRemove(...invalidos),
+            });
+        }
+        return resp.successCount > 0;
+    } catch (e) {
+        logger.warn(`No se pudo enviar push a ${uid}.`, e);
+        return false;
+    }
+}
+
 /** Avisa a varios de una vez, saltando a quien no quiera recibir. */
 async function avisar(uids: string[], texto: string): Promise<number> {
     if (uids.length === 0) return 0;
@@ -2194,15 +2247,60 @@ async function avisar(uids: string[], texto: string): Promise<number> {
 
     for (const doc of docs) {
         const u = doc.data() as Record<string, unknown> | undefined;
-        if (!u || u['notificaciones'] !== true) continue;
+        if (!u) continue;
+
+        const quiereTelegram = u['notificaciones'] === true;
+        const quierePush = u['pushActivo'] === true;
+        // Si no quiere ninguno de los dos, nos lo saltamos.
+        if (!quiereTelegram && !quierePush) continue;
 
         const chatId = String(u['telegramChatId'] ?? '');
-        if (!chatId) continue;
+        if (quiereTelegram && chatId && (await enviarTelegram(chatId, texto))) enviados++;
 
-        if (await enviarTelegram(chatId, texto)) enviados++;
+        // Push a sus dispositivos, si lo tiene activado.
+        if (quierePush) {
+            const tokens = (u['pushTokens'] ?? []) as string[];
+            // La push no entiende HTML: quitamos <b>, <i>, etc. y usamos la
+            // primera línea como título para que se lea mejor.
+            const limpio = limpiarHtml(texto);
+            const lineas = limpio.split('\n').filter((l) => l.trim());
+            const titulo = lineas[0] ?? 'Quiniela';
+            const cuerpo = lineas.slice(1).join('\n') || titulo;
+            await enviarPush(doc.id, tokens, titulo, cuerpo);
+        }
     }
     return enviados;
 }
+
+/**
+ * Activa o desactiva las notificaciones push del usuario y guarda (o
+ * quita) el token del dispositivo actual. El botón del perfil llama a
+ * esto. Se maneja con dos campos en el usuario: pushActivo (el switch)
+ * y pushTokens (los dispositivos donde recibir).
+ */
+export const guardarPush = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const activo = req.data?.activo === true;
+    const token = String(req.data?.token ?? '').trim();
+
+    const ref = db.doc(`users/${uid}`);
+    if (activo) {
+        if (!token) throw new HttpsError('invalid-argument', 'Falta el token del dispositivo.');
+        await ref.update({
+            pushActivo: true,
+            pushTokens: FieldValue.arrayUnion(token),
+        });
+    } else {
+        // Al desactivar, quitamos este dispositivo. Si mandó token, solo ese;
+        // si no, apagamos el switch (deja de recibir en todos).
+        const update: Record<string, unknown> = { pushActivo: false };
+        if (token) update['pushTokens'] = FieldValue.arrayRemove(token);
+        await ref.update(update);
+    }
+    return { ok: true };
+});
 
 /** Guarda el chat de Telegram del propio usuario y manda una prueba. */
 export const guardarTelegram = onCall(
@@ -2679,6 +2777,13 @@ interface EquipoBk {
     nombre: string;
     siembra: number;
 }
+interface DuenoBk {
+    equipo: string;
+    uid: string | null;
+    nombre: string;
+    invitado: boolean;
+    estado: 'invitado' | 'aceptado' | 'invitado-sin-registro';
+}
 interface PartidoBk {
     tipo: 'ida' | 'vuelta' | 'unico';
     golesLocal?: number | null;
@@ -2860,6 +2965,8 @@ export const crearBracket = onCall(opcionesCall, async (req) => {
         config,
         puntaje,
         llaves,
+        equipos, // lista completa, para poder armar los cruces a mano si es manual
+        modo: req.data?.modo === 'duenos' ? 'duenos' : 'pronostico',
         estado: armado ? 'inscripcion' : 'armando',
         codigo: codigoBracket(),
         cierraAt,
@@ -2909,6 +3016,179 @@ export const asignarLlaveBracket = onCall(opcionesCall, async (req) => {
 
         tx.update(ref, { llaves, estado: completa ? 'inscripcion' : 'armando' });
     });
+
+    return { ok: true };
+});
+
+/**
+ * MODO DUEÑOS — el admin asigna un equipo a un participante.
+ * Si es registrado, queda 'invitado' (le llega aviso, aún no se le cobra).
+ * Si es invitado externo (sin cuenta), queda listo sin cobro.
+ */
+export const asignarDuenoBracket = onCall({ ...opcionesCall, secrets: [telegramToken] }, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const bracketId = String(req.data?.bracketId ?? '');
+    const equipo = String(req.data?.equipo ?? '').trim();
+    const duenoUid = req.data?.duenoUid ? String(req.data.duenoUid) : null;
+    const nombreInvitado = String(req.data?.nombre ?? '').trim();
+    if (!equipo) throw new HttpsError('invalid-argument', 'Falta el equipo.');
+
+    const ref = db.doc(`brackets/${bracketId}`);
+
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) throw new HttpsError('not-found', 'El bracket no existe.');
+        const b = snap.data() as Record<string, unknown>;
+
+        const esAdmin = (await db.doc(`admins/${uid}`).get()).exists;
+        const esGestor = (b['gestores'] as string[] | undefined)?.includes(uid);
+        if (!esAdmin && !esGestor) throw new HttpsError('permission-denied', 'No puedes editar este bracket.');
+
+        if (b['modo'] !== 'duenos') throw new HttpsError('failed-precondition', 'Este bracket no es de dueños.');
+        if (b['estado'] !== 'armando' && b['estado'] !== 'inscripcion') {
+            throw new HttpsError('failed-precondition', 'El bracket ya está en juego.');
+        }
+
+        const duenos = (b['duenos'] as DuenoBk[] | undefined) ?? [];
+        // Quita cualquier asignación previa de ese equipo.
+        const sinEse = duenos.filter((d) => d.equipo !== equipo);
+
+        let nuevo: DuenoBk;
+        if (duenoUid) {
+            // Participante registrado: buscamos su alias y lo dejamos invitado.
+            const userSnap = await tx.get(db.doc(`users/${duenoUid}`));
+            const alias = userSnap.exists
+                ? String((userSnap.data() as Record<string, unknown>)['alias'] ?? 'Jugador')
+                : 'Jugador';
+            nuevo = { equipo, uid: duenoUid, nombre: alias, invitado: false, estado: 'invitado' };
+            // Que le aparezca en su lista para que pueda entrar a aceptar.
+            tx.set(db.doc(`users/${duenoUid}`), { brackets: FieldValue.arrayUnion(bracketId) }, { merge: true });
+        } else {
+            // Invitado externo sin cuenta: no cobra ni avisa.
+            if (!nombreInvitado) throw new HttpsError('invalid-argument', 'Falta el nombre del invitado.');
+            nuevo = { equipo, uid: null, nombre: nombreInvitado, invitado: true, estado: 'invitado-sin-registro' };
+        }
+
+        tx.update(ref, { duenos: [...sinEse, nuevo] });
+    });
+
+    // Aviso al participante registrado (fuera de la transacción).
+    if (duenoUid) {
+        const bSnap = await ref.get();
+        const bd = bSnap.data() as Record<string, unknown>;
+        const costo = Number(bd['costoEntrada'] ?? 0);
+        await avisar(
+            [duenoUid],
+            `⚽ <b>${String(bd['nombre'] ?? 'Eliminatoria')}</b>\n` +
+            `Te asignaron a <b>${equipo}</b>.\n` +
+            (costo > 0 ? `Entra a la app para aceptar (cuesta ${costo} pts).` : 'Entra a la app para aceptar.'),
+        );
+    }
+
+    return { ok: true };
+});
+
+/**
+ * MODO DUEÑOS — el participante registrado acepta las reglas y se le
+ * cobra la entrada. Pasa su asignación a 'aceptado' y suma a la bolsa.
+ */
+export const aceptarDuenoBracket = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const bracketId = String(req.data?.bracketId ?? '');
+    const ref = db.doc(`brackets/${bracketId}`);
+    const userRef = db.doc(`users/${uid}`);
+
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) throw new HttpsError('not-found', 'El bracket no existe.');
+        const b = snap.data() as Record<string, unknown>;
+
+        if (b['modo'] !== 'duenos') throw new HttpsError('failed-precondition', 'Este bracket no es de dueños.');
+
+        const duenos = (b['duenos'] as DuenoBk[] | undefined) ?? [];
+        const mio = duenos.find((d) => d.uid === uid);
+        if (!mio) throw new HttpsError('not-found', 'No tienes un equipo asignado aquí.');
+        if (mio.estado === 'aceptado') return; // ya aceptó, no cobra doble.
+
+        const costo = Number(b['costoEntrada'] ?? 0);
+        if (costo > 0) {
+            const userSnap = await tx.get(userRef);
+            const puntos = Number((userSnap.data() as Record<string, unknown>)?.['puntos'] ?? 0);
+            if (puntos < costo) throw new HttpsError('failed-precondition', 'No tienes puntos suficientes.');
+            tx.update(userRef, { puntos: FieldValue.increment(-costo) });
+        }
+
+        const actualizados = duenos.map((d) =>
+            d.uid === uid ? { ...d, estado: 'aceptado' } : d,
+        );
+        tx.update(ref, {
+            duenos: actualizados,
+            bolsa: FieldValue.increment(costo),
+        });
+        // Que el bracket aparezca en su lista/hub.
+        tx.set(userRef, { brackets: FieldValue.arrayUnion(bracketId) }, { merge: true });
+    });
+
+    return { ok: true };
+});
+
+/**
+ * MODO DUEÑOS — el participante rechaza el equipo que le asignaron.
+ * El equipo queda libre para que el admin lo reasigne, y se quita el
+ * bracket de su lista. Solo se puede rechazar si aún no aceptó.
+ */
+export const rechazarDuenoBracket = onCall({ ...opcionesCall, secrets: [telegramToken] }, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const bracketId = String(req.data?.bracketId ?? '');
+    const ref = db.doc(`brackets/${bracketId}`);
+    const userRef = db.doc(`users/${uid}`);
+
+    let equipoLiberado = '';
+    let nombreBracket = '';
+    let creadoPor = '';
+
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) throw new HttpsError('not-found', 'El bracket no existe.');
+        const b = snap.data() as Record<string, unknown>;
+
+        if (b['modo'] !== 'duenos') throw new HttpsError('failed-precondition', 'Este bracket no es de dueños.');
+        if (b['estado'] !== 'inscripcion' && b['estado'] !== 'armando') {
+            throw new HttpsError('failed-precondition', 'El torneo ya arrancó, no se puede rechazar.');
+        }
+
+        const duenos = (b['duenos'] as DuenoBk[] | undefined) ?? [];
+        const mio = duenos.find((d) => d.uid === uid);
+        if (!mio) throw new HttpsError('not-found', 'No tienes un equipo asignado aquí.');
+        if (mio.estado === 'aceptado') {
+            throw new HttpsError('failed-precondition', 'Ya aceptaste; no puedes rechazar.');
+        }
+
+        equipoLiberado = mio.equipo;
+        nombreBracket = String(b['nombre'] ?? 'Eliminatoria');
+        creadoPor = String(b['creadoPor'] ?? '');
+
+        // Quita la asignación (el equipo queda libre) y saca el bracket de su lista.
+        const sinMio = duenos.filter((d) => d.uid !== uid);
+        tx.update(ref, { duenos: sinMio });
+        tx.set(userRef, { brackets: FieldValue.arrayRemove(bracketId) }, { merge: true });
+    });
+
+    // Avisar al creador para que reasigne.
+    if (creadoPor) {
+        await avisar(
+            [creadoPor],
+            `⚠️ <b>${nombreBracket}</b>\n` +
+            `Un participante rechazó al equipo ${equipoLiberado}.\n` +
+            `Ya quedó libre para reasignar.`,
+        );
+    }
 
     return { ok: true };
 });
@@ -3174,6 +3454,63 @@ function compararBk(
  * Califica una eliminatoria terminada y reparte la bolsa.
  * La puede llamar el admin, o se dispara sola al capturar la final.
  */
+/**
+ * MODO DUEÑOS — al terminar el cuadro, gana el dueño del equipo campeón.
+ * Se lleva toda la bolsa, suma un torneo ganado y recibe su trofeo.
+ */
+async function calificarDuenos(
+    ref: FirebaseFirestore.DocumentReference,
+    b: Record<string, unknown>,
+    llaves: LlaveBk[],
+    bracketId: string,
+): Promise<{ ok: boolean; calificados: number }> {
+    const bolsa = Number(b['bolsa'] ?? 0);
+    const duenos = (b['duenos'] as DuenoBk[] | undefined) ?? [];
+
+    // El campeón es el ganador de la final (la llave de mayor ronda).
+    const rondaFinal = Math.max(...llaves.map((l) => l.ronda));
+    const final = llaves.find((l) => l.ronda === rondaFinal);
+    const campeon = final?.ganador?.nombre ?? null;
+    if (!campeon) {
+        await ref.update({ premioPagado: 0, ganadorAlias: 'Sin campeón' });
+        return { ok: true, calificados: 0 };
+    }
+
+    // ¿Quién es el dueño de ese equipo?
+    const dueno = duenos.find((d) => d.equipo === campeon) ?? null;
+
+    await ref.update({
+        premioPagado: bolsa,
+        ganadorAlias: dueno?.nombre ?? campeon,
+    });
+
+    // Si el dueño es un usuario registrado, cobra la bolsa, trofeo y aviso.
+    if (dueno?.uid) {
+        if (bolsa > 0) {
+            await db.doc(`users/${dueno.uid}`).set(
+                { puntos: FieldValue.increment(bolsa) },
+                { merge: true },
+            );
+        }
+        await registrarTrofeos(
+            [{ uid: dueno.uid, alias: dueno.nombre }],
+            bracketId,
+            String(b['nombre'] ?? 'Eliminatoria'),
+            String(b['competicion'] ?? b['nombre'] ?? 'Eliminatoria'),
+            bolsa,
+            false,
+        );
+        await avisar(
+            [dueno.uid],
+            `🏆 <b>${String(b['nombre'] ?? 'Eliminatoria')}</b>\n` +
+            `¡Tu equipo ${campeon} fue campeón!\n` +
+            (bolsa > 0 ? `Ganaste ${bolsa} pts. ¡Felicidades!` : '¡Felicidades!'),
+        );
+    }
+
+    return { ok: true, calificados: dueno ? 1 : 0 };
+}
+
 export const calificarBracket = onCall(
     { ...opcionesCall, secrets: [telegramToken] },
     async (req) => {
@@ -3193,6 +3530,13 @@ export const calificarBracket = onCall(
         }
 
         const llaves = b['llaves'] as LlaveBk[];
+
+        // ── MODO DUEÑOS ──────────────────────────────────────────────
+        // No hay pronósticos: gana el dueño del equipo campeón.
+        if (b['modo'] === 'duenos') {
+            return await calificarDuenos(ref, b, llaves, bracketId);
+        }
+
         const puntaje = b['puntaje'] as PuntajeBk;
         const reparto = (b['config'] as Record<string, unknown>)['reparto'] as number[];
         const bolsa = Number(b['bolsa'] ?? 0);
@@ -3240,6 +3584,21 @@ export const calificarBracket = onCall(
 
         await batch.commit();
 
+        // El campeón (primer lugar) suma un torneo ganado y recibe su trofeo,
+        // igual que quien gana un survivor o una quiniela. Solo el 1° lugar.
+        const campeon = tabla[0];
+        if (campeon) {
+            const premioCampeon = reparto.length > 0 ? Math.round((bolsa * reparto[0]) / 100) : 0;
+            await registrarTrofeos(
+                [{ uid: campeon.uid, alias: campeon.alias }],
+                bracketId,
+                String(b['nombre'] ?? 'Eliminatoria'),
+                String(b['competicion'] ?? b['nombre'] ?? 'Eliminatoria'),
+                premioCampeon,
+                false,
+            );
+        }
+
         // Avisar a los premiados.
         for (let i = 0; i < Math.min(reparto.length, tabla.length); i++) {
             const jug = tabla[i];
@@ -3264,8 +3623,46 @@ export const calificarBracket = onCall(
    a 'en-curso' solo, sin que nadie lo toque. A partir de ahí ya no
    se aceptan ni cambian pronósticos.
    ============================================================ */
+/**
+ * MODO DUEÑOS — avisa al creador si un bracket cierra pronto y todavía
+ * hay participantes que no han aceptado. Corre cada hora y avisa una sola
+ * vez por bracket (marca 'avisadoPendientes').
+ */
+export const avisarDuenosPendientes = onSchedule(
+    { schedule: 'every 60 minutes', timeZone: 'America/Mexico_City', secrets: [telegramToken] },
+    async () => {
+        const ahora = Timestamp.now();
+        const enTresHoras = Timestamp.fromMillis(ahora.toMillis() + 3 * 60 * 60 * 1000);
+
+        const brackets = await db
+            .collection('brackets')
+            .where('estado', '==', 'inscripcion')
+            .where('cierraAt', '<=', enTresHoras)
+            .get();
+
+        for (const d of brackets.docs) {
+            const b = d.data() as Record<string, unknown>;
+            if (b['modo'] !== 'duenos' || b['avisadoPendientes'] === true) continue;
+
+            const duenos = (b['duenos'] as DuenoBk[] | undefined) ?? [];
+            const faltan = duenos.filter((dn) => dn.uid && dn.estado === 'invitado');
+            const creadoPor = String(b['creadoPor'] ?? '');
+            if (faltan.length === 0 || !creadoPor) continue;
+
+            const nombres = faltan.map((f) => `${f.nombre} (${f.equipo})`).join(', ');
+            await avisar(
+                [creadoPor],
+                `⏰ <b>${String(b['nombre'] ?? 'Eliminatoria')}</b>\n` +
+                `Cierra pronto y faltan ${faltan.length} por aceptar: ${nombres}.\n` +
+                `Al cerrar se les cobrará automáticamente (o se libera su equipo si no tienen puntos).`,
+            );
+            await d.ref.update({ avisadoPendientes: true });
+        }
+    },
+);
+
 export const cerrarBrackets = onSchedule(
-    { schedule: 'every 15 minutes', timeZone: 'America/Mexico_City' },
+    { schedule: 'every 15 minutes', timeZone: 'America/Mexico_City', secrets: [telegramToken] },
     async () => {
         const ahora = Timestamp.now();
 
@@ -3280,10 +3677,74 @@ export const cerrarBrackets = onSchedule(
             return;
         }
 
-        const batch = db.batch();
-        pendientes.docs.forEach((d) => batch.update(d.ref, { estado: 'en-curso' }));
-        await batch.commit();
+        for (const d of pendientes.docs) {
+            const b = d.data() as Record<string, unknown>;
+
+            // En modo dueños, antes de arrancar cobramos a los que no respondieron.
+            if (b['modo'] === 'duenos') {
+                await cobrarDuenosPendientes(d.ref, b);
+            }
+
+            await d.ref.update({ estado: 'en-curso' });
+        }
 
         logger.info(`Cerradas ${pendientes.size} eliminatorias.`);
     },
 );
+
+/**
+ * MODO DUEÑOS — al cerrar, a quienes no aceptaron ni rechazaron se les
+ * cobra igual (ya tenían el equipo apartado). Si no les alcanzan los
+ * puntos, se les quita el equipo (queda sin dueño). Los que ya aceptaron
+ * no se tocan.
+ */
+async function cobrarDuenosPendientes(
+    ref: FirebaseFirestore.DocumentReference,
+    b: Record<string, unknown>,
+): Promise<void> {
+    const duenos = (b['duenos'] as DuenoBk[] | undefined) ?? [];
+    const costo = Number(b['costoEntrada'] ?? 0);
+    const pendientes = duenos.filter((dn) => dn.uid && dn.estado === 'invitado');
+    if (pendientes.length === 0) return;
+
+    const finales: DuenoBk[] = [];
+    // Empezamos con los que no están pendientes (aceptados o invitados externos).
+    for (const dn of duenos) {
+        if (!(dn.uid && dn.estado === 'invitado')) finales.push(dn);
+    }
+
+    let sumaBolsa = 0;
+    for (const dn of pendientes) {
+        const uid = dn.uid as string;
+        const userRef = db.doc(`users/${uid}`);
+        const cobrado = await db.runTransaction(async (tx) => {
+            if (costo <= 0) return true; // gratis: se queda dentro sin cobro.
+            const snap = await tx.get(userRef);
+            const puntos = Number((snap.data() as Record<string, unknown>)?.['puntos'] ?? 0);
+            if (puntos < costo) return false; // sin saldo: se le quita el equipo.
+            tx.update(userRef, { puntos: FieldValue.increment(-costo) });
+            return true;
+        });
+
+        if (cobrado) {
+            finales.push({ ...dn, estado: 'aceptado' });
+            sumaBolsa += costo;
+            await avisar(
+                [uid],
+                `⚽ <b>${String(b['nombre'] ?? 'Eliminatoria')}</b>\n` +
+                `El torneo arrancó con tu equipo ${dn.equipo}.` +
+                (costo > 0 ? ` Se te cobró la entrada de ${costo} pts.` : ''),
+            );
+        } else {
+            // Sin saldo: se libera el equipo y se saca de su lista.
+            await db.doc(`users/${uid}`).set({ brackets: FieldValue.arrayRemove(ref.id) }, { merge: true });
+            await avisar(
+                [uid],
+                `⚠️ <b>${String(b['nombre'] ?? 'Eliminatoria')}</b>\n` +
+                `No tenías puntos para la entrada, así que quedaste fuera y ${dn.equipo} se liberó.`,
+            );
+        }
+    }
+
+    await ref.update({ duenos: finales, bolsa: FieldValue.increment(sumaBolsa) });
+}

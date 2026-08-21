@@ -9,6 +9,7 @@ import { NavComponent } from '../../shared/nav.component';
 import { UserService } from '../../core/services/user.service';
 import { CompeticionesService } from '../../core/services/competiciones.service';
 import { ConfirmarService } from '../../shared/confirmar.service';
+import { ToastService } from '../../shared/toast.service';
 import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
 
 /**
@@ -18,10 +19,10 @@ import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
  * en el panel de admin, fuera de su alcance.
  */
 @Component({
-    selector: 'app-liga-panel',
-    standalone: true,
-    imports: [CommonModule, FormsModule, NavComponent],
-    template: `
+  selector: 'app-liga-panel',
+  standalone: true,
+  imports: [CommonModule, FormsModule, NavComponent],
+  template: `
     <div class="screen">
       <app-nav [back]="true" title="Mi liga" />
 
@@ -108,14 +109,10 @@ import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
           }
         </section>
       }
-
-      @if (mensaje(); as m) {
-        <p class="msg">{{ m }}</p>
-      }
     </div>
   `,
-    styles: [
-        `
+  styles: [
+    `
       .rol {
         display: inline-flex; align-items: center; gap: 7px;
         padding: 6px 12px; border-radius: 999px;
@@ -170,112 +167,126 @@ import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
       }
       .btn--primary { border: none; background: var(--accent-fill); color: #fff; }
       .btn--primary:disabled { opacity: 0.5; cursor: default; }
-      .msg {
-        font-size: 13px; color: var(--success-text); background: var(--success-bg);
-        padding: 10px 12px; border-radius: var(--radius); margin-top: 12px;
-      }
     `,
-    ],
+  ],
 })
 export class LigaPanelComponent {
-    private readonly users = inject(UserService);
-    private readonly service = inject(CompeticionesService);
-    private readonly confirmar = inject(ConfirmarService);
+  private readonly users = inject(UserService);
+  private readonly service = inject(CompeticionesService);
+  private readonly confirmar = inject(ConfirmarService);
+  private readonly toast = inject(ToastService);
 
-    readonly ligas = toSignal(this.users.misLigas$, { initialValue: [] as Array<{ id: string; nombre: string }> });
+  readonly ligas = toSignal(this.users.misLigas$, { initialValue: [] as Array<{ id: string; nombre: string }> });
 
-    readonly publicando = signal(false);
-    readonly mensaje = signal('');
+  readonly publicando = signal(false);
 
-    private readonly ligaAbiertaId = signal<string | null>(null);
-    private readonly jornadaAbiertaId = signal<string | null>(null);
+  private readonly ligaAbiertaId = signal<string | null>(null);
+  private readonly jornadaAbiertaId = signal<string | null>(null);
 
-    // Jornadas de todas mis ligas, cargadas por liga abierta.
-    private readonly jornadasSignal = toSignal(
-        toObservable(this.ligaAbiertaId).pipe(
-            switchMap((id) => (id ? this.service.jornadas(id) : of([] as Jornada[]))),
-        ),
-        { initialValue: [] as Jornada[] },
-    );
+  // Jornadas de todas mis ligas, cargadas por liga abierta.
+  private readonly jornadasSignal = toSignal(
+    toObservable(this.ligaAbiertaId).pipe(
+      switchMap((id) => (id ? this.service.jornadas(id) : of([] as Jornada[]))),
+    ),
+    { initialValue: [] as Jornada[] },
+  );
 
-    jornadas(competicionId: string): Jornada[] {
-        // Solo cargamos las de la liga abierta; para las demás, vacío.
-        return this.ligaAbiertaId() === competicionId ? this.jornadasSignal() : [];
+  jornadas(competicionId: string): Jornada[] {
+    // Solo cargamos las de la liga abierta; para las demás, vacío.
+    return this.ligaAbiertaId() === competicionId ? this.jornadasSignal() : [];
+  }
+
+  ligaAbierta(id: string): boolean {
+    return this.ligaAbiertaId() === id;
+  }
+  alternarLiga(id: string): void {
+    this.ligaAbiertaId.set(this.ligaAbiertaId() === id ? null : id);
+    this.jornadaAbiertaId.set(null);
+  }
+
+  jornadaAbierta(id: string): boolean {
+    return this.jornadaAbiertaId() === id;
+  }
+  alternarJornada(id: string): void {
+    this.jornadaAbiertaId.set(this.jornadaAbiertaId() === id ? null : id);
+  }
+
+  faltantes(j: Jornada): number {
+    return j.partidos.filter((p) => !p.resultado).length;
+  }
+
+  etiqueta(p: PartidoJornada): string {
+    if (p.resultado === 'pospuesto') return 'Aplazado';
+    if (typeof p.golesLocal === 'number' && typeof p.golesVisitante === 'number') {
+      return `${p.golesLocal} – ${p.golesVisitante}`;
     }
+    return '—';
+  }
 
-    ligaAbierta(id: string): boolean {
-        return this.ligaAbiertaId() === id;
-    }
-    alternarLiga(id: string): void {
-        this.ligaAbiertaId.set(this.ligaAbiertaId() === id ? null : id);
-        this.jornadaAbiertaId.set(null);
-    }
+  ponerGoles(p: PartidoJornada, lado: 'local' | 'visitante', valor: unknown): void {
+    const n = Number(valor);
+    const goles = Number.isFinite(n) && n >= 0 ? n : null;
+    if (lado === 'local') p.golesLocal = goles;
+    else p.golesVisitante = goles;
 
-    jornadaAbierta(id: string): boolean {
-        return this.jornadaAbiertaId() === id;
+    // Deriva el resultado cuando ambos marcadores están puestos.
+    if (typeof p.golesLocal === 'number' && typeof p.golesVisitante === 'number') {
+      p.resultado =
+        p.golesLocal > p.golesVisitante
+          ? 'local'
+          : p.golesLocal < p.golesVisitante
+            ? 'visitante'
+            : 'empate';
+    } else {
+      p.resultado = null;
     }
-    alternarJornada(id: string): void {
-        this.jornadaAbiertaId.set(this.jornadaAbiertaId() === id ? null : id);
+  }
+
+  async guardar(competicionId: string, j: Jornada): Promise<void> {
+    try {
+      await this.service.guardarResultados(competicionId, j.id, this.limpiar(j.partidos));
+      this.toast.exito('Resultados guardados.');
+    } catch {
+      this.toast.error('No se pudieron guardar los resultados.');
     }
+  }
 
-    faltantes(j: Jornada): number {
-        return j.partidos.filter((p) => !p.resultado).length;
+  /**
+   * Firestore rechaza campos undefined. Normaliza cada partido para que
+   * los marcadores y el resultado sean número o null, nunca undefined.
+   */
+  private limpiar(partidos: PartidoJornada[]): PartidoJornada[] {
+    return partidos.map((p) => ({
+      local: p.local,
+      visitante: p.visitante,
+      golesLocal: typeof p.golesLocal === 'number' ? p.golesLocal : null,
+      golesVisitante: typeof p.golesVisitante === 'number' ? p.golesVisitante : null,
+      resultado: p.resultado ?? null,
+    }));
+  }
+
+  async publicar(competicionId: string, j: Jornada): Promise<void> {
+    if (this.faltantes(j) > 0) {
+      this.toast.error('Faltan resultados por capturar.');
+      return;
     }
+    const ok = await this.confirmar.pedir({
+      titulo: `Publicar la jornada ${j.numero}`,
+      mensaje: 'Se aplicará a todos los torneos que estén en esta jornada. No se puede deshacer.',
+      aceptar: 'Publicar',
+      peligro: true,
+    });
+    if (!ok) return;
 
-    etiqueta(p: PartidoJornada): string {
-        if (p.resultado === 'pospuesto') return 'Aplazado';
-        if (typeof p.golesLocal === 'number' && typeof p.golesVisitante === 'number') {
-            return `${p.golesLocal} – ${p.golesVisitante}`;
-        }
-        return '—';
+    this.publicando.set(true);
+    try {
+      await this.service.guardarResultados(competicionId, j.id, this.limpiar(j.partidos));
+      await this.service.resolver(competicionId, j.id);
+      this.toast.exito(`Jornada ${j.numero} publicada y aplicada a los torneos.`);
+    } catch {
+      this.toast.error('No se pudo publicar.');
+    } finally {
+      this.publicando.set(false);
     }
-
-    ponerGoles(p: PartidoJornada, lado: 'local' | 'visitante', valor: unknown): void {
-        const n = Number(valor);
-        const goles = Number.isFinite(n) && n >= 0 ? n : null;
-        if (lado === 'local') p.golesLocal = goles;
-        else p.golesVisitante = goles;
-
-        // Deriva el resultado cuando ambos marcadores están puestos.
-        if (typeof p.golesLocal === 'number' && typeof p.golesVisitante === 'number') {
-            p.resultado =
-                p.golesLocal > p.golesVisitante
-                    ? 'local'
-                    : p.golesLocal < p.golesVisitante
-                        ? 'visitante'
-                        : 'empate';
-        } else {
-            p.resultado = null;
-        }
-    }
-
-    async guardar(competicionId: string, j: Jornada): Promise<void> {
-        await this.service.guardarResultados(competicionId, j.id, j.partidos);
-        this.mensaje.set('Resultados guardados.');
-    }
-
-    async publicar(competicionId: string, j: Jornada): Promise<void> {
-        if (this.faltantes(j) > 0) {
-            this.mensaje.set('Faltan resultados por capturar.');
-            return;
-        }
-        const ok = await this.confirmar.pedir({
-            titulo: `Publicar la jornada ${j.numero}`,
-            mensaje: 'Se aplicará a todos los torneos que estén en esta jornada. No se puede deshacer.',
-            aceptar: 'Publicar',
-            peligro: true,
-        });
-        if (!ok) return;
-
-        this.publicando.set(true);
-        try {
-            await this.service.guardarResultados(competicionId, j.id, j.partidos);
-            await this.service.resolver(competicionId, j.id);
-            this.mensaje.set(`Jornada ${j.numero} publicada y aplicada a los torneos.`);
-        } catch (e: unknown) {
-            this.mensaje.set((e as Error)?.message ?? 'No se pudo publicar.');
-        } finally {
-            this.publicando.set(false);
-        }
-    }
+  }
 }

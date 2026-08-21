@@ -1,5 +1,6 @@
 import { Component, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { EscudoComponent } from '../../shared/escudo.component';
 
 /**
  * Ejemplo concreto con el Clausura 2026 de la Liga MX: muestra el
@@ -10,10 +11,10 @@ import { CommonModule } from '@angular/common';
  * finalista +15) para ilustrar; el bracket real usa su propia escala.
  */
 @Component({
-    selector: 'app-ejemplo-bracket',
-    standalone: true,
-    imports: [CommonModule],
-    template: `
+  selector: 'app-ejemplo-bracket',
+  standalone: true,
+  imports: [CommonModule, EscudoComponent],
+  template: `
     <div class="fondo" (click)="cerrar.emit()">
       <div class="hoja" (click)="$event.stopPropagation()">
         <div class="cab">
@@ -30,29 +31,29 @@ import { CommonModule } from '@angular/common';
         <!-- Cuartos -->
         <div class="ronda">
           <span class="ronda-tit">Cuartos de final</span>
-          <div class="llave"><span>Pumas</span><b>6</b><span class="vs">–</span><b>6</b><span>América</span></div>
+          <div class="llave"><app-escudo [equipo]="'Pumas'" [size]="18" /><span>Pumas</span><b>6</b><span class="vs">–</span><b>6</b><span>América</span><app-escudo [equipo]="'América'" [size]="18" /></div>
           <div class="nota">Pumas avanza (mejor posicionado)</div>
-          <div class="llave"><span>Guadalajara</span><b>3</b><span class="vs">–</span><b>3</b><span>Tigres</span></div>
+          <div class="llave"><app-escudo [equipo]="'Guadalajara'" [size]="18" /><span>Guadalajara</span><b>3</b><span class="vs">–</span><b>3</b><span>Tigres</span><app-escudo [equipo]="'Tigres'" [size]="18" /></div>
           <div class="nota">Guadalajara avanza (mejor posicionado)</div>
-          <div class="llave llave--acierto"><span>Cruz Azul</span><b>4</b><span class="vs">–</span><b>2</b><span>Atlas</span></div>
+          <div class="llave llave--acierto"><app-escudo [equipo]="'Cruz Azul'" [size]="18" /><span>Cruz Azul</span><b>4</b><span class="vs">–</span><b>2</b><span>Atlas</span><app-escudo [equipo]="'Atlas'" [size]="18" /></div>
           <div class="nota nota--ok">Acertaste: Cruz Azul avanza · +10</div>
-          <div class="llave"><span>Pachuca</span><b>3</b><span class="vs">–</span><b>0</b><span>Toluca</span></div>
+          <div class="llave"><app-escudo [equipo]="'Pachuca'" [size]="18" /><span>Pachuca</span><b>3</b><span class="vs">–</span><b>0</b><span>Toluca</span><app-escudo [equipo]="'Toluca'" [size]="18" /></div>
           <div class="nota">Pachuca avanza</div>
         </div>
 
         <!-- Semifinal -->
         <div class="ronda">
           <span class="ronda-tit">Semifinal</span>
-          <div class="llave"><span>Pumas</span><b>1</b><span class="vs">–</span><b>1</b><span>Pachuca</span></div>
+          <div class="llave"><app-escudo [equipo]="'Pumas'" [size]="18" /><span>Pumas</span><b>1</b><span class="vs">–</span><b>1</b><span>Pachuca</span><app-escudo [equipo]="'Pachuca'" [size]="18" /></div>
           <div class="nota">Pumas avanza (mejor posicionado) — a la final</div>
-          <div class="llave llave--acierto"><span>Guadalajara</span><b>3</b><span class="vs">–</span><b>4</b><span>Cruz Azul</span></div>
+          <div class="llave llave--acierto"><app-escudo [equipo]="'Guadalajara'" [size]="18" /><span>Guadalajara</span><b>3</b><span class="vs">–</span><b>4</b><span>Cruz Azul</span><app-escudo [equipo]="'Cruz Azul'" [size]="18" /></div>
           <div class="nota nota--ok">Acertaste: Cruz Azul a la final · +20 y +15 de finalista</div>
         </div>
 
         <!-- Final -->
         <div class="ronda">
           <span class="ronda-tit">Final</span>
-          <div class="llave llave--acierto"><span>Pumas</span><b>1</b><span class="vs">–</span><b>2</b><span>Cruz Azul</span></div>
+          <div class="llave llave--acierto"><app-escudo [equipo]="'Pumas'" [size]="18" /><span>Pumas</span><b>1</b><span class="vs">–</span><b>2</b><span>Cruz Azul</span><app-escudo [equipo]="'Cruz Azul'" [size]="18" /></div>
           <div class="nota nota--ok">¡Acertaste al campeón! · +40 y +30 de campeón</div>
         </div>
 
@@ -73,8 +74,8 @@ import { CommonModule } from '@angular/common';
       </div>
     </div>
   `,
-    styles: [
-        `
+  styles: [
+    `
       .fondo {
         position: fixed; inset: 0; z-index: 110;
         background: rgba(0, 0, 0, 0.6);
@@ -138,8 +139,8 @@ import { CommonModule } from '@angular/common';
         background: var(--accent-fill); color: #fff;
       }
     `,
-    ],
+  ],
 })
 export class EjemploBracketComponent {
-    readonly cerrar = output<void>();
+  readonly cerrar = output<void>();
 }

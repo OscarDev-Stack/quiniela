@@ -66,15 +66,17 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if isAdmin();
 
-      function gestionaCompeticion() {
-        return request.auth != null
-          && request.auth.uid in
-            get(/databases/$(database)/documents/competiciones/$(compId)).data().get('gestores', []);
-      }
-
       match /jornadas/{jornadaId} {
         allow read: if request.auth != null;
-        allow write: if isAdmin() || gestionaCompeticion();
+        // Admin global, o gestor de esta liga. El get() lee el array
+        // gestores del documento padre de forma explícita.
+        allow write: if request.auth != null && (
+          isAdmin() ||
+          (
+            'gestores' in get(/databases/$(database)/documents/competiciones/$(compId)).data
+            && request.auth.uid in get(/databases/$(database)/documents/competiciones/$(compId)).data.gestores
+          )
+        );
       }
     }
 

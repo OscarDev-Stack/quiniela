@@ -13,6 +13,7 @@ import {
   resultadoDeMarcador,
 } from '../../core/models/competicion.model';
 import { AppUser } from '../../core/models/user.model';
+import { nombreOficial } from '../../core/models/equipos-liga-mx';
 import { ConfirmarService } from '../../shared/confirmar.service';
 
 @Component({
@@ -486,7 +487,7 @@ export class AdminCompeticionesComponent {
   async guardarEquipos(c: Competicion): Promise<void> {
     const lista = (this.textoEquipos[c.id] ?? '')
       .split('\n')
-      .map((e) => e.trim())
+      .map((e) => nombreOficial(e))
       .filter(Boolean);
 
     if (lista.length < 2) {

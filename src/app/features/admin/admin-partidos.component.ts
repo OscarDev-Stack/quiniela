@@ -4,6 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Timestamp } from '@angular/fire/firestore';
 import { AdminService } from '../../core/services/admin.service';
+import { nombreOficial } from '../../core/models/equipos-liga-mx';
+import { EscudoComponent } from '../../shared/escudo.component';
+import { SelectorEquipoComponent } from '../../shared/selector-equipo.component';
 import { Partido, TipoPartido, fechaCierre } from '../../core/models/partido.model';
 import { Bolsa } from '../../core/models/bolsa.model';
 import { ConfirmarService } from '../../shared/confirmar.service';
@@ -16,7 +19,7 @@ interface Outcome {
 @Component({
   selector: 'app-admin-partidos',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, EscudoComponent, SelectorEquipoComponent],
   template: `
     @if (mensaje()) {
       <div class="msg" (click)="mensaje.set('')">
@@ -108,11 +111,25 @@ interface Outcome {
       <div class="grid">
         <label class="field">
           <span>Equipo local</span>
-          <input type="text" [(ngModel)]="form.homeTeam" placeholder="México" />
+          <div class="equipo-input">
+            <input type="text" [(ngModel)]="form.homeTeam" placeholder="Cruz Azul" />
+            @if (form.homeTeam) { <app-escudo [equipo]="form.homeTeam" [size]="24" /> }
+            <button type="button" class="btn-liga" (click)="selectorLocal.set(!selectorLocal())">Liga MX</button>
+          </div>
+          @if (selectorLocal()) {
+            <app-selector-equipo (elegido)="form.homeTeam = $event; selectorLocal.set(false)" />
+          }
         </label>
         <label class="field">
           <span>Equipo visitante</span>
-          <input type="text" [(ngModel)]="form.awayTeam" placeholder="Argentina" />
+          <div class="equipo-input">
+            <input type="text" [(ngModel)]="form.awayTeam" placeholder="América" />
+            @if (form.awayTeam) { <app-escudo [equipo]="form.awayTeam" [size]="24" /> }
+            <button type="button" class="btn-liga" (click)="selectorVisita.set(!selectorVisita())">Liga MX</button>
+          </div>
+          @if (selectorVisita()) {
+            <app-selector-equipo (elegido)="form.awayTeam = $event; selectorVisita.set(false)" />
+          }
         </label>
         <label class="field">
           <span>Competición</span>
@@ -240,6 +257,13 @@ interface Outcome {
       .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
       .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
       .field { display: block; margin-bottom: 12px; }
+      .equipo-input { display: flex; align-items: center; gap: 8px; }
+      .equipo-input input { flex: 1; }
+      .btn-liga {
+        flex-shrink: 0; padding: 8px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+        border: 1px solid var(--border-strong); border-radius: var(--radius);
+        background: transparent; color: var(--text-secondary);
+      }
       .field span { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
       select {
         width: 100%; padding: 10px 12px; border: 1px solid var(--border);
@@ -320,6 +344,9 @@ interface Outcome {
 })
 export class AdminPartidosComponent {
   private readonly confirmar = inject(ConfirmarService);
+  readonly selectorLocal = signal(false);
+  readonly selectorVisita = signal(false);
+
   private readonly admin = inject(AdminService);
 
   readonly partidos = toSignal(this.admin.getPartidos(), { initialValue: [] as Partido[] });
@@ -428,8 +455,8 @@ export class AdminPartidosComponent {
     }
     await this.admin.crearPartido({
       competition: f.competition,
-      homeTeam: f.homeTeam,
-      awayTeam: f.awayTeam,
+      homeTeam: nombreOficial(f.homeTeam),
+      awayTeam: nombreOficial(f.awayTeam),
       type: this.busqueda.type,
       status: 'abierto',
       closesAt: Timestamp.fromDate(inicio),
@@ -544,7 +571,7 @@ export class AdminPartidosComponent {
         return;
       }
       const cierre = new Date(this.form.closesAt);
-      if (Number.isNaN(cierre.getTime())) {
+      if (isNaN(cierre.getTime())) {
         this.mensaje.set('La fecha de cierre no es válida.');
         return;
       }
@@ -555,8 +582,8 @@ export class AdminPartidosComponent {
 
       await this.admin.crearPartido({
         competition: this.form.competition.trim() || 'Partido',
-        homeTeam: this.form.homeTeam.trim(),
-        awayTeam: this.form.awayTeam.trim(),
+        homeTeam: nombreOficial(this.form.homeTeam),
+        awayTeam: nombreOficial(this.form.awayTeam),
         type: this.form.type,
         status: 'abierto',
         closesAt: Timestamp.fromDate(cierre),

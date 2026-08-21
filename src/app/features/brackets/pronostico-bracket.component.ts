@@ -1,5 +1,6 @@
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { EscudoComponent } from '../../shared/escudo.component';
 import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Auth, user } from '@angular/fire/auth';
@@ -24,7 +25,7 @@ import {
 @Component({
   selector: 'app-pronostico-bracket',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, EscudoComponent],
   template: `
     @if (bracket(); as b) {
       <div class="wrap">
@@ -54,6 +55,7 @@ import {
                     (click)="elegir(l, l.local!.nombre)"
                   >
                     <span class="siembra">{{ l.local!.siembra }}</span>
+                    <app-escudo [equipo]="l.local!.nombre" [size]="20" />
                     {{ l.local!.nombre }}
                   </button>
 
@@ -66,6 +68,7 @@ import {
                     (click)="elegir(l, l.visitante!.nombre)"
                   >
                     <span class="siembra">{{ l.visitante!.siembra }}</span>
+                    <app-escudo [equipo]="l.visitante!.nombre" [size]="20" />
                     {{ l.visitante!.nombre }}
                   </button>
                 </div>
@@ -79,7 +82,11 @@ import {
         }
 
         @if (campeon(); as c) {
-          <div class="campeon">🏆 Tu campeón: <strong>{{ c }}</strong></div>
+          <div class="campeon">
+            <span class="campeon-corona">🏆 Tu campeón</span>
+            <app-escudo [equipo]="c" [size]="72" />
+            <strong class="campeon-nom">{{ c }}</strong>
+          </div>
         }
 
         @if (!yaCerro(b)) {
@@ -138,9 +145,12 @@ import {
       .opcion--elegida .siembra { background: rgba(255, 255, 255, 0.25); color: inherit; }
       .vs { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
       .campeon {
-        margin: 4px 0 18px; padding: 13px; border-radius: var(--radius);
-        background: var(--accent-bg); color: var(--accent-text); text-align: center; font-size: 15px;
+        margin: 4px 0 18px; padding: 18px 13px; border-radius: var(--radius);
+        background: var(--accent-bg); color: var(--accent-text); text-align: center;
+        display: flex; flex-direction: column; align-items: center; gap: 8px;
       }
+      .campeon-corona { font-size: 13px; font-weight: 600; opacity: 0.85; }
+      .campeon-nom { font-size: 18px; }
       .btn--primary {
         width: 100%; padding: 13px; cursor: pointer; font-size: 15px; font-weight: 600;
         border: none; border-radius: var(--radius); background: var(--accent-fill); color: #fff;

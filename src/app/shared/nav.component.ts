@@ -1,4 +1,5 @@
 import { Component, computed, inject, input } from '@angular/core';
+import { CampanitaComponent } from './campanita.component';
 import { CommonModule, Location } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -10,7 +11,7 @@ import { TorneosService } from '../core/services/torneos.service';
 @Component({
   selector: 'app-nav',
   standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive],
+  imports: [CommonModule, RouterLink, RouterLinkActive, CampanitaComponent],
   template: `
     <!-- Encabezado -->
     <header class="topbar">
@@ -19,6 +20,8 @@ import { TorneosService } from '../core/services/torneos.service';
           <i class="ti ti-arrow-left"></i>
         </button>
         <span class="title">{{ title() }}</span>
+      } @else if (minimal()) {
+        <span class="marca">{{ title() || 'Quiniela' }}</span>
       } @else {
         <div class="brand">
           <span class="avatar" routerLink="/perfil">{{ inicial() }}</span>
@@ -38,6 +41,10 @@ import { TorneosService } from '../core/services/torneos.service';
         <i class="ti ti-coins"></i>
         <span>{{ me()?.puntos ?? 0 | number }} pts</span>
       </div>
+
+      @if (!back()) {
+        <app-campanita />
+      }
     </header>
 
     @if (me() && !me()!.validada) {
@@ -49,8 +56,8 @@ import { TorneosService } from '../core/services/torneos.service';
 
     <!-- Barra inferior -->
     <nav class="tabs">
-      <a routerLink="/partidos" routerLinkActive="on">
-        <i class="ti ti-ball-football"></i><span>Partidos</span>
+      <a routerLink="/inicio" routerLinkActive="on">
+        <i class="ti ti-home"></i><span>Inicio</span>
       </a>
       <a routerLink="/mis-pronosticos" routerLinkActive="on">
         <i class="ti ti-ticket"></i><span>Míos</span>
@@ -58,14 +65,6 @@ import { TorneosService } from '../core/services/torneos.service';
       <a routerLink="/ranking" routerLinkActive="on">
         <i class="ti ti-trophy"></i><span>Ranking</span>
       </a>
-      @if (tengoTorneos()) {
-        <a routerLink="/torneos" routerLinkActive="on" class="con-badge">
-          <i class="ti ti-tournament"></i><span>Torneos</span>
-          @if (pendientesTorneos() > 0) {
-            <span class="badge">{{ pendientesTorneos() }}</span>
-          }
-        </a>
-      }
       @if (isAdmin()) {
         <a routerLink="/admin" routerLinkActive="on" class="con-badge">
           <i class="ti ti-shield-check"></i><span>Admin</span>
@@ -107,11 +106,13 @@ import { TorneosService } from '../core/services/torneos.service';
       .check { color: var(--accent-fill); font-size: 15px; flex-shrink: 0; }
       .sub { font-size: 11px; color: var(--text-muted); line-height: 1.3; }
       .title { flex: 1; font-size: 16px; font-weight: 600; }
+      .marca { flex: 1; font-size: 17px; font-weight: 800; color: var(--text-primary); }
 
       .icon-btn {
-        width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+        width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
         border: 1px solid var(--border); background: var(--surface-2);
         display: flex; align-items: center; justify-content: center; font-size: 18px;
+        flex-shrink: 0;
       }
 
       .balance {
@@ -137,14 +138,17 @@ import { TorneosService } from '../core/services/torneos.service';
         border-top: 1px solid var(--border);
       }
       .tabs a, .tabs button {
-        flex: 1; max-width: 88px;
+        flex: 1; max-width: 72px; min-width: 0;
         display: flex; flex-direction: column; align-items: center; gap: 3px;
         text-decoration: none; cursor: pointer;
         border: none; background: none;
-        color: var(--text-muted); font-size: 11px; padding: 4px 2px;
+        color: var(--text-muted); font-size: 10px; padding: 4px 1px;
         border-radius: var(--radius);
       }
-      .tabs i { font-size: 21px; }
+      .tabs a span, .tabs button span {
+        max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .tabs i { font-size: 20px; }
       .tabs a.on { color: var(--accent-text); }
       .con-badge { position: relative; }
       .badge {
@@ -169,6 +173,8 @@ export class NavComponent {
   readonly back = input(false);
   /** Título del encabezado. */
   readonly title = input('');
+  /** Si es true, muestra la barra superior sin nombre/avatar (solo marca + puntos + campanita). */
+  readonly minimal = input(false);
 
   readonly me = toSignal(this.users.me$, { initialValue: null });
   readonly isAdmin = toSignal(this.users.isAdmin$, { initialValue: false });

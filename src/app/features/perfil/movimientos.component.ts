@@ -1,10 +1,13 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map, switchMap } from 'rxjs/operators';
 import { of } from 'rxjs';
+import { tap } from 'rxjs/operators';
 import { Auth, user } from '@angular/fire/auth';
 import { NavComponent } from '../../shared/nav.component';
+import { CargandoComponent } from '../../shared/cargando.component';
+import { apagarCargando } from '../../shared/cargando.util';
 import { PerfilService, Movimiento } from '../../core/services/perfil.service';
 
 /**
@@ -16,10 +19,14 @@ import { PerfilService, Movimiento } from '../../core/services/perfil.service';
 @Component({
   selector: 'app-movimientos',
   standalone: true,
-  imports: [CommonModule, NavComponent],
+  imports: [CommonModule, NavComponent, CargandoComponent],
   template: `
     <div class="screen">
       <app-nav [back]="true" title="Mis movimientos" />
+
+      @if (cargando()) {
+        <app-cargando texto="Cargando movimientos" />
+      }
 
       @if (movimientos(); as movs) {
         @if (movs.length === 0) {
@@ -54,8 +61,6 @@ import { PerfilService, Movimiento } from '../../core/services/perfil.service';
             }
           </div>
         }
-      } @else {
-        <p class="cargando">Cargando movimientos…</p>
       }
     </div>
   `,
@@ -102,10 +107,14 @@ export class MovimientosComponent {
     initialValue: null,
   });
 
+  readonly cargando = signal(true);
+  private readonly inicioCarga = Date.now();
+
   readonly movimientos = toSignal(
     user(this.auth).pipe(
       map((u) => u?.uid ?? null),
       switchMap((uid) => (uid ? this.perfil.movimientos(uid) : of([] as Movimiento[]))),
+      tap(() => apagarCargando(this.cargando, this.inicioCarga)),
     ),
     { initialValue: undefined },
   );

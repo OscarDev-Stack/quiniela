@@ -3,7 +3,10 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { BracketsService } from '../../core/services/brackets.service';
+import { nombreOficial } from '../../core/models/equipos-liga-mx';
 import { CuadroBracketComponent } from './cuadro-bracket.component';
+import { ArmarBracketComponent } from './armar-bracket.component';
+import { AsignarDuenosComponent } from './asignar-duenos.component';
 import {
   Bracket,
   Llave,
@@ -19,7 +22,10 @@ import {
 @Component({
   selector: 'app-admin-brackets',
   standalone: true,
-  imports: [CommonModule, FormsModule, CuadroBracketComponent],
+  imports: [CommonModule, FormsModule, CuadroBracketComponent,
+    ArmarBracketComponent,
+    AsignarDuenosComponent,
+  ],
   template: `
     <div class="wrap">
       <h1>Eliminatorias</h1>
@@ -36,6 +42,14 @@ import {
             <label class="field">
               <span>Nombre</span>
               <input [(ngModel)]="nuevo.nombre" placeholder="Liguilla Apertura 2026" />
+            </label>
+
+            <label class="field">
+              <span>Modo de juego</span>
+              <select [(ngModel)]="nuevo.modo">
+                <option value="pronostico">Pronóstico (cada quien llena el cuadro)</option>
+                <option value="duenos">Dueños (a cada quien le toca un equipo)</option>
+              </select>
             </label>
 
             <label class="field">
@@ -96,10 +110,14 @@ import {
             </label>
 
             <label class="field field--ancho">
-              <span>Cierre de pronósticos</span>
+              <span>{{ nuevo.modo === 'duenos' ? 'Cierre / inicio del torneo' : 'Cierre de pronósticos' }}</span>
               <input type="datetime-local" [(ngModel)]="nuevo.cierre" />
               <small class="pista">
-                A esa hora se congela el cuadro. Ponla antes del primer partido.
+                @if (nuevo.modo === 'duenos') {
+                  A esa hora arranca el torneo. Ponla antes del primer partido.
+                } @else {
+                  A esa hora se congela el cuadro. Ponla antes del primer partido.
+                }
               </small>
             </label>
 
@@ -126,6 +144,7 @@ import {
               </select>
             </label>
 
+            @if (nuevo.modo !== 'duenos') {
             <label class="field">
               <span>Reparto de la bolsa</span>
               <select [(ngModel)]="nuevo.reparto">
@@ -144,6 +163,7 @@ import {
               </select>
               <small class="pista">Los puntos suben por ronda; el campeón da el bono mayor.</small>
             </label>
+            }
 
 
 
@@ -187,7 +207,17 @@ import {
               </button>
             </div>
 
-            <app-cuadro-bracket [bracket]="b" />
+            @if (b.estado === 'armando') {
+              <h3 class="sub">Arma los cruces de la primera ronda</h3>
+              <app-armar-bracket [bracket]="b" />
+            } @else {
+              <app-cuadro-bracket [bracket]="b" />
+            }
+
+            @if (b.modo === 'duenos' && (b.estado === 'inscripcion' || b.estado === 'armando')) {
+              <h3 class="sub">Asigna los equipos a los participantes</h3>
+              <app-asignar-duenos [bracket]="b" />
+            }
 
             @if (b.estado === 'finalizado' && !b.premioPagado) {
               <button class="btn btn--primary calif" [disabled]="calificando()" (click)="calificar(b)">
@@ -198,9 +228,10 @@ import {
               <p class="aviso">Ya calificada. Ganó {{ b.ganadorAlias }}.</p>
             }
 
-            @if (b.estado !== 'finalizado') {
+            @if (b.estado === 'en-curso') {
               <h3 class="sub">Capturar resultados</h3>
             }
+            @if (b.estado === 'en-curso') {
             @for (l of jugables(b); track l.id) {
               <div class="captura">
                 <div class="captura-cab">
@@ -234,6 +265,7 @@ import {
               </div>
             } @empty {
               <p class="aviso">No hay llaves listas para capturar. Se van abriendo conforme avanzan las rondas.</p>
+            }
             }
           }
         </section>
@@ -354,6 +386,7 @@ export class AdminBracketsComponent {
 
   nuevo = {
     nombre: '',
+    modo: 'pronostico' as 'pronostico' | 'duenos',
     equipos: 8,
     armado: 'siembra' as 'siembra' | 'manual',
     avance: 'reordena' as 'reordena' | 'fijo',
@@ -433,7 +466,7 @@ export class AdminBracketsComponent {
   async crear(): Promise<void> {
     const equipos: EquipoBracket[] = this.nuevo.listaEquipos
       .split('\n')
-      .map((n) => n.trim())
+      .map((n) => nombreOficial(n))
       .filter(Boolean)
       .map((nombre, i) => ({ nombre, siembra: i + 1 }));
 
@@ -449,6 +482,7 @@ export class AdminBracketsComponent {
     try {
       await this.service.crear({
         nombre: this.nuevo.nombre.trim(),
+        modo: this.nuevo.modo,
         config: {
           equipos: this.nuevo.equipos,
           armado: this.nuevo.armado,
@@ -457,7 +491,8 @@ export class AdminBracketsComponent {
           formatoFinal: this.nuevo.formatoFinal,
           desempateRondas: this.nuevo.desempateRondas,
           desempateFinal: this.nuevo.desempateFinal,
-          reparto: this.nuevo.reparto.split(',').map(Number),
+          reparto:
+            this.nuevo.modo === 'duenos' ? [100] : this.nuevo.reparto.split(',').map(Number),
         },
         puntaje: this.puntajeDeEscala(),
         equipos,
@@ -509,8 +544,8 @@ export class AdminBracketsComponent {
   }
 
   async guardar(b: Bracket, l: Llave, indice: number): Promise<void> {
-    const gl = Number(this.marc[`${l.id}-${indice}-L`] ?? Number.NaN);
-    const gv = Number(this.marc[`${l.id}-${indice}-V`] ?? Number.NaN);
+    const gl = Number(this.marc[`${l.id}-${indice}-L`] ?? NaN);
+    const gv = Number(this.marc[`${l.id}-${indice}-V`] ?? NaN);
     if (!Number.isInteger(gl) || !Number.isInteger(gv)) {
       this.error.set(true);
       this.mensaje.set('Pon ambos marcadores antes de guardar.');

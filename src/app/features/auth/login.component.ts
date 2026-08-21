@@ -156,7 +156,7 @@ export class LoginComponent {
         const invitacion = localStorage.getItem('invitacion');
         // Se consume una sola vez: si no, cada login reenvía a unirse.
         localStorage.removeItem('invitacion');
-        await this.router.navigate(invitacion ? ['/unirse', invitacion] : ['/partidos']);
+        await this.router.navigate(invitacion ? ['/unirse', invitacion] : ['/inicio']);
       } else {
         this.error.set('No se pudo iniciar la sesión. Intenta de nuevo.');
       }

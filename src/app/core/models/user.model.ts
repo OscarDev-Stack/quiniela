@@ -35,6 +35,10 @@ export interface AppUser {
     telegramChatId?: string;
     notificaciones?: boolean;
 
+    /* Notificaciones push (PWA): switch y tokens de dispositivos. */
+    pushActivo?: boolean;
+    pushTokens?: string[];
+
     /* Cuenta de puro administrador: no aparece en el ranking. */
     noParticipa?: boolean;
     /* Código temporal mientras se conecta Telegram. */

@@ -85,6 +85,7 @@ export class BracketsService {
     /** Crea el bracket con su configuración y equipos. */
     async crear(datos: {
         nombre: string;
+        modo: 'pronostico' | 'duenos';
         config: ConfigBracket;
         puntaje: PuntajeBracket;
         equipos: EquipoBracket[];
@@ -109,6 +110,32 @@ export class BracketsService {
     ): Promise<void> {
         const fn = httpsCallable(this.fns, 'asignarLlaveBracket');
         await fn({ bracketId, idLlave, local, visitante });
+    }
+
+    /**
+     * Modo dueños: el admin asigna un equipo a un participante. Para un
+     * registrado pasa su uid; para un invitado externo, solo el nombre.
+     */
+    async asignarDueno(
+        bracketId: string,
+        equipo: string,
+        duenoUid: string | null,
+        nombre: string,
+    ): Promise<void> {
+        const fn = httpsCallable(this.fns, 'asignarDuenoBracket');
+        await fn({ bracketId, equipo, duenoUid, nombre });
+    }
+
+    /** Modo dueños: el participante acepta las reglas y se le cobra la entrada. */
+    async aceptarDueno(bracketId: string): Promise<void> {
+        const fn = httpsCallable(this.fns, 'aceptarDuenoBracket');
+        await fn({ bracketId });
+    }
+
+    /** Modo dueños: el participante rechaza el equipo asignado (queda libre). */
+    async rechazarDueno(bracketId: string): Promise<void> {
+        const fn = httpsCallable(this.fns, 'rechazarDuenoBracket');
+        await fn({ bracketId });
     }
 
     /** Captura el marcador de un partido y, si se completa, resuelve la llave. */

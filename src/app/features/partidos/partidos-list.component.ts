@@ -2,7 +2,11 @@ import { Component, DestroyRef, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { tap } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
+import { CargandoComponent } from '../../shared/cargando.component';
+import { apagarCargando } from '../../shared/cargando.util';
+import { EscudoComponent } from '../../shared/escudo.component';
 import { PartidosService } from '../../core/services/partidos.service';
 import { PronosticosService } from '../../core/services/pronosticos.service';
 import { BracketsService } from '../../core/services/brackets.service';
@@ -12,29 +16,10 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
 @Component({
   selector: 'app-partidos-list',
   standalone: true,
-  imports: [CommonModule, NavComponent],
+  imports: [CommonModule, NavComponent, CargandoComponent, EscudoComponent],
   template: `
     <div class="screen">
       <app-nav />
-
-      @if (bracketsPublicos().length > 0) {
-        <section class="publicos">
-          <h3 class="publicos-tit"><i class="ti ti-sitemap"></i> Eliminatorias abiertas</h3>
-          @for (b of bracketsPublicos(); track b.id) {
-            <button class="bracket-card" (click)="abrirBracket(b.id)">
-              <div class="bracket-info">
-                <span class="bracket-nom">{{ b.nombre }}</span>
-                <span class="bracket-meta">
-                  {{ b.config.equipos }} equipos
-                  @if (b.costoEntrada > 0) { · {{ b.costoEntrada }} pts } @else { · Gratis }
-                  @if (b.bolsa > 0) { · Bolsa {{ b.bolsa | number }} }
-                </span>
-              </div>
-              <span class="bracket-cta">Ver <i class="ti ti-chevron-right"></i></span>
-            </button>
-          }
-        </section>
-      }
 
       <nav class="filters">
         @for (f of filtros; track f) {
@@ -44,7 +29,9 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
         }
       </nav>
 
-      @if (visibles().length === 0) {
+      @if (cargando()) {
+        <app-cargando texto="Cargando partidos" />
+      } @else if (visibles().length === 0) {
         <div class="empty">
           <i class="ti ti-ball-football"></i>
           <p>
@@ -72,9 +59,15 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
           </div>
 
           <div class="teams">
-            <span class="team">{{ m.homeTeam }}</span>
+            <span class="team">
+              <app-escudo [equipo]="m.homeTeam" [size]="26" />
+              {{ m.homeTeam }}
+            </span>
             <span class="vs">vs</span>
-            <span class="team team--right">{{ m.awayTeam }}</span>
+            <span class="team team--right">
+              {{ m.awayTeam }}
+              <app-escudo [equipo]="m.awayTeam" [size]="26" />
+            </span>
           </div>
 
           @if (aceptaPronosticos(m)) {
@@ -141,8 +134,9 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
       .bracket-card {
         display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
         padding: 13px 14px; margin-bottom: 8px; cursor: pointer; text-align: left;
-        border: 1px solid var(--accent-fill); border-radius: var(--radius);
-        background: var(--accent-bg);
+        border: 1px solid var(--border); border-left: 4px solid var(--tipo-elim-fill);
+        border-radius: var(--radius);
+        background: var(--tipo-elim-bg);
       }
       .bracket-info { min-width: 0; }
       .bracket-nom { display: block; font-size: 14px; font-weight: 700; color: var(--text-primary); }
@@ -188,8 +182,11 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
         display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
         gap: 10px; margin-bottom: 14px;
       }
-      .team { font-size: 17px; font-weight: 600; }
-      .team--right { text-align: right; }
+      .team {
+        font-size: 17px; font-weight: 600;
+        display: flex; align-items: center; gap: 8px; min-width: 0;
+      }
+      .team--right { justify-content: flex-end; }
       .vs { font-size: 13px; color: var(--text-muted); }
 
       .meta { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
@@ -254,9 +251,14 @@ export class PartidosListComponent {
   /* Arranca en Todos: si no hay partidos abiertos, ver la lista vacía confunde. */
   readonly filtro = signal('Todos');
 
-  private readonly partidos = toSignal(this.service.getPartidos(), {
-    initialValue: [] as Partido[],
-  });
+  /** True hasta que llegan los primeros partidos, para no ver la vista vacía. */
+  readonly cargando = signal(true);
+  private readonly inicioCarga = Date.now();
+
+  private readonly partidos = toSignal(
+    this.service.getPartidos().pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
+    { initialValue: [] as Partido[] },
+  );
 
   readonly visibles = computed(() => {
     const activos = this.partidos().filter((p) => p.status !== 'cancelado');

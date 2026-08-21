@@ -1,5 +1,6 @@
 import { Component, computed, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { EscudoComponent } from '../../shared/escudo.component';
 import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
 
 /**
@@ -7,10 +8,10 @@ import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
  * Resalta aquel donde juega el equipo que eligió quien mira.
  */
 @Component({
-    selector: 'app-partidos-jornada',
-    standalone: true,
-    imports: [CommonModule],
-    template: `
+  selector: 'app-partidos-jornada',
+  standalone: true,
+  imports: [CommonModule, EscudoComponent],
+  template: `
     <section class="panel">
       <div class="panel-head">
         <h3>Partidos de la jornada</h3>
@@ -19,7 +20,10 @@ import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
 
       @for (p of jornada().partidos; track $index) {
         <div class="encuentro" [class.encuentro--mio]="esMio(p)">
-          <span class="lado" [class.lado--gano]="p.resultado === 'local'">{{ p.local }}</span>
+          <span class="lado" [class.lado--gano]="p.resultado === 'local'">
+            <span class="nom">{{ p.local }}</span>
+            <app-escudo [equipo]="p.local" [size]="22" />
+          </span>
 
           <span class="marcador">
             @if (p.resultado === 'pospuesto') {
@@ -32,14 +36,15 @@ import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
           </span>
 
           <span class="lado lado--der" [class.lado--gano]="p.resultado === 'visitante'">
-            {{ p.visitante }}
+            <app-escudo [equipo]="p.visitante" [size]="22" />
+            <span class="nom">{{ p.visitante }}</span>
           </span>
         </div>
       }
     </section>
   `,
-    styles: [
-        `
+  styles: [
+    `
       .panel {
         background: var(--surface-2); border: 1px solid var(--border);
         border-radius: 12px; padding: 16px 18px; margin-bottom: 14px;
@@ -59,8 +64,12 @@ import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
       .encuentro:last-child { border-bottom: none; }
       .encuentro--mio { background: var(--accent-bg); }
 
-      .lado { text-align: right; color: var(--text-secondary); min-width: 0; }
-      .lado--der { text-align: left; }
+      .lado {
+        display: flex; align-items: center; justify-content: flex-end; gap: 7px;
+        color: var(--text-secondary); min-width: 0;
+      }
+      .lado--der { justify-content: flex-start; }
+      .lado .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .lado--gano { color: var(--text-primary); font-weight: 700; }
 
       .marcador {
@@ -71,24 +80,24 @@ import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
       .marcador .sin { font-size: 11px; font-weight: 500; color: var(--text-muted); }
       .marcador .apl { font-size: 11px; font-weight: 600; color: var(--warning-text); }
     `,
-    ],
+  ],
 })
 export class PartidosJornadaComponent {
-    readonly jornada = input.required<Jornada>();
-    /** Equipo elegido por quien mira, para resaltar su partido. */
-    readonly miEquipo = input<string | null>(null);
+  readonly jornada = input.required<Jornada>();
+  /** Equipo elegido por quien mira, para resaltar su partido. */
+  readonly miEquipo = input<string | null>(null);
 
-    readonly jugados = computed(
-        () =>
-            this.jornada().partidos.filter((p) => !!p.resultado && p.resultado !== 'pospuesto').length,
-    );
+  readonly jugados = computed(
+    () =>
+      this.jornada().partidos.filter((p) => !!p.resultado && p.resultado !== 'pospuesto').length,
+  );
 
-    tieneMarcador(p: PartidoJornada): boolean {
-        return typeof p.golesLocal === 'number' && typeof p.golesVisitante === 'number';
-    }
+  tieneMarcador(p: PartidoJornada): boolean {
+    return typeof p.golesLocal === 'number' && typeof p.golesVisitante === 'number';
+  }
 
-    esMio(p: PartidoJornada): boolean {
-        const mio = this.miEquipo();
-        return !!mio && (p.local === mio || p.visitante === mio);
-    }
+  esMio(p: PartidoJornada): boolean {
+    const mio = this.miEquipo();
+    return !!mio && (p.local === mio || p.visitante === mio);
+  }
 }

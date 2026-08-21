@@ -22,6 +22,8 @@ import {
 } from '@angular/fire/auth';
 import { provideFirestore, getFirestore } from '@angular/fire/firestore';
 import { provideFunctions, getFunctions } from '@angular/fire/functions';
+import { provideMessaging, getMessaging } from '@angular/fire/messaging';
+import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService } from '@angular/fire/analytics';
 
 import { routes } from './app.routes';
 import { environment } from '../environments/environment';
@@ -57,6 +59,10 @@ export const appConfig: ApplicationConfig = {
 
     provideFirestore(() => getFirestore()),
     provideFunctions(() => getFunctions()),
+    provideMessaging(() => getMessaging()),
+    provideAnalytics(() => getAnalytics()),
+    ScreenTrackingService,
+    UserTrackingService,
 
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),

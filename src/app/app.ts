@@ -4,11 +4,12 @@ import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
 import { filter } from 'rxjs/operators';
 import { ConfirmarDialogComponent } from './shared/confirmar-dialog.component';
 import { NovedadesComponent } from './shared/novedades.component';
+import { ToastsComponent } from './shared/toasts.component';
 import { NovedadesService } from './shared/novedades.service';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, ConfirmarDialogComponent, NovedadesComponent],
+  imports: [RouterOutlet, ConfirmarDialogComponent, NovedadesComponent, ToastsComponent],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })

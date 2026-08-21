@@ -1,8 +1,11 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { tap } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
+import { CargandoComponent } from '../../shared/cargando.component';
+import { apagarCargando } from '../../shared/cargando.util';
 import { TorneosService } from '../../core/services/torneos.service';
 import { BracketsService } from '../../core/services/brackets.service';
 import { Torneo } from '../../core/models/torneo.model';
@@ -11,12 +14,14 @@ import { Bracket } from '../../core/models/bracket.model';
 @Component({
   selector: 'app-torneos-list',
   standalone: true,
-  imports: [CommonModule, NavComponent],
+  imports: [CommonModule, NavComponent, CargandoComponent],
   template: `
     <div class="screen">
       <app-nav title="Torneos" />
 
-      @if (visibles().length === 0 && brackets().length === 0) {
+      @if (cargando()) {
+        <app-cargando texto="Cargando torneos" />
+      } @else if (visibles().length === 0 && brackets().length === 0) {
         <div class="vacio">
           <i class="ti ti-tournament"></i>
           <p>No participas en ningún torneo.</p>
@@ -127,7 +132,14 @@ export class TorneosListComponent {
   private readonly bracketsService = inject(BracketsService);
   private readonly router = inject(Router);
 
-  private readonly torneos = toSignal(this.service.misTorneos$, { initialValue: [] as Torneo[] });
+  /** True hasta que llegan los primeros torneos. */
+  readonly cargando = signal(true);
+  private readonly inicioCarga = Date.now();
+
+  private readonly torneos = toSignal(
+    this.service.misTorneos$.pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
+    { initialValue: [] as Torneo[] },
+  );
   readonly brackets = toSignal(this.bracketsService.misBrackets(), { initialValue: [] as Bracket[] });
 
   readonly visibles = computed(() =>

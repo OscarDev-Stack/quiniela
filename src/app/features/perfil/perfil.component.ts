@@ -4,8 +4,13 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { ConfirmarService } from '../../shared/confirmar.service';
+import { InstalarBotonComponent } from './instalar-boton.component';
+import { NotificacionesBotonComponent } from './notificaciones-boton.component';
+import { CargandoComponent } from '../../shared/cargando.component';
+import { apagarCargando } from '../../shared/cargando.util';
+import { ToastService } from '../../shared/toast.service';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
-import { of, switchMap } from 'rxjs';
+import { of, switchMap, tap } from 'rxjs';
 import { Auth, user } from '@angular/fire/auth';
 import { NavComponent } from '../../shared/nav.component';
 import { UserService } from '../../core/services/user.service';
@@ -18,10 +23,14 @@ import { APP_VERSION } from '../../core/version';
 @Component({
   selector: 'app-perfil',
   standalone: true,
-  imports: [CommonModule, FormsModule, NavComponent],
+  imports: [CommonModule, FormsModule, NavComponent, InstalarBotonComponent, NotificacionesBotonComponent, CargandoComponent],
   template: `
     <div class="screen">
       <app-nav [back]="true" title="Perfil" />
+
+      @if (cargando()) {
+        <app-cargando texto="Cargando perfil" />
+      }
 
       <header class="cabecera">
         <div class="avatar">{{ inicial() }}</div>
@@ -154,6 +163,13 @@ import { APP_VERSION } from '../../core/version';
       @if (esMio() && validada()) {
         <section class="panel">
           <div class="panel-head">
+            <h3><i class="ti ti-bell"></i> Notificaciones</h3>
+          </div>
+          <app-notificaciones-boton [pushActivo]="me()?.pushActivo === true" />
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
             <h3><i class="ti ti-brand-telegram"></i> Avisos por Telegram</h3>
             @if (conectado()) {
               <span class="marca-ok"><i class="ti ti-circle-check"></i> Conectado</span>
@@ -199,6 +215,8 @@ import { APP_VERSION } from '../../core/version';
       }
 
       @if (esMio()) {
+        <app-instalar-boton />
+
         <button class="salir" (click)="salir()">
           <i class="ti ti-logout"></i> Cerrar sesión
         </button>
@@ -350,6 +368,7 @@ export class PerfilComponent {
   }
 
   private readonly confirmar = inject(ConfirmarService);
+  private readonly toast = inject(ToastService);
 
   /** uid del perfil que se muestra: el de la ruta, o el mío. */
   private readonly uidRuta = this.route.snapshot.paramMap.get('uid');
@@ -362,9 +381,13 @@ export class PerfilComponent {
   readonly me = toSignal(this.users.me$, { initialValue: null });
 
   /** Datos públicos: sirven para cualquier perfil. */
+  readonly cargando = signal(true);
+  private readonly inicioCarga = Date.now();
+
   private readonly fila = toSignal(
     toObservable(this.uid).pipe(
       switchMap((uid) => (uid ? this.ranking.fila(uid) : of(null))),
+      tap(() => apagarCargando(this.cargando, this.inicioCarga)),
     ),
     { initialValue: null as RankingDoc | null },
   );
@@ -443,7 +466,6 @@ export class PerfilComponent {
     if (!ok) return;
 
     this.pidiendo.set(true);
-    this.mensajeReinicio.set('');
     this.errorReinicio.set(false);
 
     try {
@@ -494,17 +516,14 @@ export class PerfilComponent {
   /** Enciende o apaga los avisos sin desconectar la cuenta. */
   async alternarAvisos(valor: boolean): Promise<void> {
     this.activo = valor;
-    this.mensajeTg.set('');
-    this.errorTg.set(false);
 
     try {
       const chatId = this.me()?.telegramChatId ?? '';
       await this.perfil.guardarTelegram(chatId, valor);
-      this.mensajeTg.set(valor ? 'Avisos activados.' : 'Avisos en pausa.');
+      this.toast.exito(valor ? 'Avisos activados.' : 'Avisos en pausa.');
     } catch (e: unknown) {
       this.activo = !valor;
-      this.errorTg.set(true);
-      this.mensajeTg.set((e as Error)?.message ?? 'No se pudo guardar.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo guardar.');
     }
   }
 

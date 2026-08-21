@@ -1,7 +1,5 @@
-@import '@tabler/icons-webfont/dist/tabler-icons.min.css';
-
 /* ============================================================
-   Tema — AutomatePower
+   Tema — Quiniela de Pronósticos
    Claro por defecto, oscuro automático según el sistema.
    ============================================================ */
 :root {
@@ -27,6 +25,24 @@
     --warning-bg: #faeeda;
     --danger-text: #a32d2d;
     --danger-bg: #fcebeb;
+
+    /* Colores por tipo de juego, para orientar de un vistazo. */
+    --tipo-elim-fill: #378add;
+    /* Eliminatorias — azul */
+    --tipo-elim-bg: #e6f1fb;
+    --tipo-elim-text: #0c447c;
+    --tipo-surv-fill: #e0533d;
+    /* Survivor — rojo */
+    --tipo-surv-bg: #fcebe7;
+    --tipo-surv-text: #93321f;
+    --tipo-quin-fill: #2f9e6b;
+    /* Quiniela — verde */
+    --tipo-quin-bg: #e3f5ec;
+    --tipo-quin-text: #14603f;
+    --tipo-pron-fill: #8257c9;
+    /* Pronósticos — morado */
+    --tipo-pron-bg: #f0eafc;
+    --tipo-pron-text: #4c2d85;
 
     --radius: 10px;
     --radius-lg: 14px;
@@ -56,6 +72,20 @@
         --warning-bg: #3a2a12;
         --danger-text: #e88b8b;
         --danger-bg: #3d1d1d;
+
+        /* Colores por tipo de juego (modo oscuro). */
+        --tipo-elim-fill: #4a97e4;
+        --tipo-elim-bg: #10304f;
+        --tipo-elim-text: #8cc0f0;
+        --tipo-surv-fill: #e86b57;
+        --tipo-surv-bg: #3d1f18;
+        --tipo-surv-text: #f0a595;
+        --tipo-quin-fill: #46b382;
+        --tipo-quin-bg: #123526;
+        --tipo-quin-text: #7fd6ac;
+        --tipo-pron-fill: #9d78d9;
+        --tipo-pron-bg: #2a1f42;
+        --tipo-pron-text: #c4a9ef;
     }
 }
 
