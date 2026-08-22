@@ -34,6 +34,7 @@ jobs:
         with:
           workload_identity_provider: 'projects/747605502963/locations/global/workloadIdentityPools/github-actions/providers/github'
           service_account: 'github-deployer@quinielav1-e23eb.iam.gserviceaccount.com'
+          create_credentials_file: true
 
       - name: Instalar Firebase CLI
         run: npm install -g firebase-tools
