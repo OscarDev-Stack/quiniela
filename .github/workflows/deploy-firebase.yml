@@ -3,15 +3,17 @@ name: Deploy Firebase
 on:
   push:
     branches:
-      - master
+      - develop # -> proyecto de desarrollo
+      - master # -> produccion (con aprobacion manual)
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
+    # Gate manual solo en master; develop pasa directo
+    environment: ${{ github.ref == 'refs/heads/master' && 'produccion' || 'desarrollo' }}
 
     steps:
       - name: Descargar código
@@ -26,19 +28,43 @@ jobs:
       - name: Instalar dependencias
         run: npm ci --legacy-peer-deps
 
+      # Compila con la config segun la rama (dev o produccion)
       - name: Compilar Angular
-        run: npm run build
+        run: |
+          if [ "${GITHUB_REF##*/}" = "master" ]; then
+            npm run build -- --configuration=production
+          else
+            npm run build -- --configuration=development
+          fi
 
-      - name: Autenticar con Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: 'projects/747605502963/locations/global/workloadIdentityPools/github-actions/providers/github'
-          service_account: 'github-deployer@quinielav1-e23eb.iam.gserviceaccount.com'
+      # Escribe la llave del SA correcto para que la CLI de Firebase autentique
+      - name: Autenticar Firebase CLI
+        run: |
+          echo '${{ github.ref == 'refs/heads/master' && secrets.FIREBASE_SA_PROD || secrets.FIREBASE_SA_DEV }}' > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+
+      # Instala deps de las funciones (ajusta la ruta si tu carpeta no es 'functions')
+      - name: Instalar dependencias de funciones
+        run: npm ci
+        working-directory: functions
 
       - name: Instalar Firebase CLI
-        run: npm install -g firebase-tools
+        run: npm install -g firebase-tools@15.22.1
 
-      - name: Deploy Firebase Hosting
-        env:
-         GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
-        run: firebase deploy --only hosting:principal --project quinielav1-e23eb
+      # Despliega funciones: mismo comando en ambas ramas.
+      # Que se registre cada funcion lo decide el codigo segun el proyecto.
+      - name: Deploy funciones
+        run: |
+          firebase deploy --only functions,firestore:rules \
+            --project ${{ github.ref == 'refs/heads/master' && 'quinelav1-e23eb' || 'quiniela-dev-d203d' }} \
+            --non-interactive
+
+      # Despliega hosting al proyecto que corresponde a la rama
+      - name: Deploy hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ github.ref == 'refs/heads/master' && secrets.FIREBASE_SA_PROD || secrets.FIREBASE_SA_DEV }}
+          projectId: ${{ github.ref == 'refs/heads/master' && 'quinelav1-e23eb' || 'quiniela-dev-d203d' }}
+          target: principal
+          channelId: live
