@@ -1,13 +1,13 @@
 export const environment = {
     production: false,
     firebase: {
-        apiKey: "AIzaSyBUH5WmRFAP14oJAs8weD4fTsgvUtpLOk0",
-        authDomain: "quinelav1-e23eb.firebaseapp.com",
-        projectId: "quinelav1-e23eb",
-        storageBucket: "quinelav1-e23eb.firebasestorage.app",
-        messagingSenderId: "747605502963",
-        appId: "1:747605502963:web:ab250b1376a7e32c2b0086",
-        measurementId: 'G-N54K2C3C1T',
+        apiKey: "AIzaSyABu6F2GAVC3aNa1hLhVTXBdvvwNeEPPQE",
+        authDomain: "quiniela-dev-d203d.firebaseapp.com",
+        projectId: "quiniela-dev-d203d",
+        storageBucket: "quiniela-dev-d203d.firebasestorage.app",
+        messagingSenderId: "886993597039",
+        appId: "1:886993597039:web:6b1e4cc0002496bb43139a",
+        measurementId: 'G-F9Z8QCSFH2"',
     },
-    vapidKey: 'BCxtkG0S7DachIM6KMm_osSDfvQ4Gw4SKfIV4VCaTR8f1kpKZWP3FMzPzUnFpIPtCpdlRimN0Mjum8D72HLWk3I',
+    vapidKey: 'BHe6zPO4thncjT4HgJg2rIlIgjlyAjPcfthtBilHGkIzrPObCRne9--HHDWjmNhRxfT9-zctBTSfvtGKIh6I5lE',
 };

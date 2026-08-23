@@ -9,6 +9,20 @@ import { getAuth } from 'firebase-admin/auth';
 import { getMessaging } from 'firebase-admin/messaging';
 
 initializeApp();
+
+/* ============================================================
+   Entorno: en dev no corre ningún scheduler automático.
+   Se disparan a mano o desde el emulador. En prod corren todos.
+   ============================================================ */
+const PROYECTO_PROD = 'quinelav1-e23eb';
+const esProd = process.env.GCLOUD_PROJECT === PROYECTO_PROD;
+
+/**
+ * Envuelve una función programada: en producción la registra tal cual;
+ * en dev devuelve undefined, así Firebase no la despliega y no corre sola.
+ */
+const scheduler = <T>(fn: () => T): T | undefined => (esProd ? fn() : undefined);
+
 const db = getFirestore();
 
 const APUESTA_BASE = 100;
@@ -471,57 +485,59 @@ export const liquidarPartido = onCall(opcionesCall, async (req) => {
    Corre cada 5 minutos: marca "cierra pronto" los que están por
    cerrar y pasa a "en juego" los que ya alcanzaron su hora.
    ============================================================ */
-export const cerrarPartidos = onSchedule('every 5 minutes', async () => {
-    const enTreintaMin = Timestamp.fromMillis(Date.now() + 30 * 60 * 1000);
-    // Ventana hacia atrás: ignora el histórico y mantiene la consulta pequeña
-    // sin importar cuántos partidos se acumulen con el tiempo.
-    const hace12Horas = Timestamp.fromMillis(Date.now() - 12 * 60 * 60 * 1000);
+export const cerrarPartidos = scheduler(() =>
+    onSchedule('every 5 minutes', async () => {
+        const enTreintaMin = Timestamp.fromMillis(Date.now() + 30 * 60 * 1000);
+        // Ventana hacia atrás: ignora el histórico y mantiene la consulta pequeña
+        // sin importar cuántos partidos se acumulen con el tiempo.
+        const hace12Horas = Timestamp.fromMillis(Date.now() - 12 * 60 * 60 * 1000);
 
-    // Rango sobre un solo campo: no requiere índice compuesto.
-    const snap = await db
-        .collection('partidos')
-        .where('closesAt', '>=', hace12Horas)
-        .where('closesAt', '<=', enTreintaMin)
-        .get();
+        // Rango sobre un solo campo: no requiere índice compuesto.
+        const snap = await db
+            .collection('partidos')
+            .where('closesAt', '>=', hace12Horas)
+            .where('closesAt', '<=', enTreintaMin)
+            .get();
 
-    let aJuego = 0;
-    let aPronto = 0;
+        let aJuego = 0;
+        let aPronto = 0;
 
-    for (const d of snap.docs) {
-        const p = d.data() as Record<string, unknown>;
-        const status = String(p['status'] ?? '');
-        if (status !== 'abierto' && status !== 'cierra-pronto') continue;
+        for (const d of snap.docs) {
+            const p = d.data() as Record<string, unknown>;
+            const status = String(p['status'] ?? '');
+            if (status !== 'abierto' && status !== 'cierra-pronto') continue;
 
-        const cierre = p['closesAt'] as Timestamp | undefined;
-        if (!cierre) continue;
+            const cierre = p['closesAt'] as Timestamp | undefined;
+            if (!cierre) continue;
 
-        if (cierre.toMillis() <= Date.now()) {
-            // Momento de revelar: se publican la bolsa y los premios por resultado.
-            const bolsaSnap = await db.doc(`bolsas/${d.id}`).get();
-            const total = Number(bolsaSnap.data()?.['total'] ?? 0);
-            const porResultado = (bolsaSnap.data()?.['porResultado'] ?? {}) as Record<string, number>;
+            if (cierre.toMillis() <= Date.now()) {
+                // Momento de revelar: se publican la bolsa y los premios por resultado.
+                const bolsaSnap = await db.doc(`bolsas/${d.id}`).get();
+                const total = Number(bolsaSnap.data()?.['total'] ?? 0);
+                const porResultado = (bolsaSnap.data()?.['porResultado'] ?? {}) as Record<string, number>;
 
-            // Cuánto pagaría cada 100 puntos apostados a ese resultado.
-            const premioPor100: Record<string, number> = {};
-            Object.entries(porResultado).forEach(([r, apostado]) => {
-                premioPor100[r] = apostado > 0 ? Math.floor((100 * total) / apostado) : 0;
-            });
+                // Cuánto pagaría cada 100 puntos apostados a ese resultado.
+                const premioPor100: Record<string, number> = {};
+                Object.entries(porResultado).forEach(([r, apostado]) => {
+                    premioPor100[r] = apostado > 0 ? Math.floor((100 * total) / apostado) : 0;
+                });
 
-            await d.ref.update({
-                status: 'en-juego',
-                poolTotal: total,
-                porResultado,
-                premioPor100,
-            });
-            aJuego++;
-        } else if (status === 'abierto') {
-            await d.ref.update({ status: 'cierra-pronto' });
-            aPronto++;
+                await d.ref.update({
+                    status: 'en-juego',
+                    poolTotal: total,
+                    porResultado,
+                    premioPor100,
+                });
+                aJuego++;
+            } else if (status === 'abierto') {
+                await d.ref.update({ status: 'cierra-pronto' });
+                aPronto++;
+            }
         }
-    }
 
-    console.log(`Cierre automático: ${aJuego} en juego, ${aPronto} cierran pronto.`);
-});
+        console.log(`Cierre automático: ${aJuego} en juego, ${aPronto} cierran pronto.`);
+    })
+);
 
 /* ============================================================
    Cancelar un partido
@@ -835,7 +851,7 @@ export const buscarFixtures = onCall({ ...opcionesCall, secrets: [footballDataKe
    razonable de duración. Precarga el resultado para que el
    administrador lo confirme.
    ============================================================ */
-export const revisarResultados = onSchedule(
+export const revisarResultados = scheduler(() => onSchedule(
     { schedule: 'every 15 minutes', secrets: [footballDataKey] },
     async () => {
         const snap = await db.collection('partidos').where('status', '==', 'en-juego').get();
@@ -911,7 +927,7 @@ export const revisarResultados = onSchedule(
             console.log(`Resultado precargado para ${d.id}: ${local}-${visitante} → ${resultado}`);
         }
     },
-);
+));
 
 
 /* ============================================================
@@ -1780,7 +1796,7 @@ export const resolverPendientes = onCall(opcionesCall, async (req) => {
    Al vencer el plazo, el torneo arranca solo. Si no juntó al
    menos dos participantes, se cancela y se devuelve lo pagado.
    ============================================================ */
-export const cerrarInscripciones = onSchedule(
+export const cerrarInscripciones = scheduler(() => onSchedule(
     { schedule: 'every 15 minutes', timeZone: 'America/Mexico_City', secrets: [telegramToken] },
     async () => {
         const ahora = Timestamp.now();
@@ -1855,7 +1871,7 @@ export const cerrarInscripciones = onSchedule(
             );
         }
     },
-);
+));
 
 /* ============================================================
    Sincronizar puntos históricos con el saldo
@@ -2585,7 +2601,7 @@ export const solicitarReinicio = onCall(
 /** Cuánto antes del cierre se manda el recordatorio. */
 const AVISO_HORAS_ANTES = 2;
 
-export const recordarJornada = onSchedule(
+export const recordarJornada = scheduler(() => onSchedule(
     {
         /* Cada hora basta: con una ventana de dos, el aviso siempre
            alcanza a caer dentro con margen suficiente. */
@@ -2661,7 +2677,7 @@ export const recordarJornada = onSchedule(
 
         if (avisados > 0) logger.info(`Recordatorio enviado a ${avisados} jugador(es).`);
     },
-);
+));
 
 /* ============================================================
    REVIVIR EN SUPERVIVENCIA
@@ -3628,7 +3644,7 @@ export const calificarBracket = onCall(
  * hay participantes que no han aceptado. Corre cada hora y avisa una sola
  * vez por bracket (marca 'avisadoPendientes').
  */
-export const avisarDuenosPendientes = onSchedule(
+export const avisarDuenosPendientes = scheduler(() => onSchedule(
     { schedule: 'every 60 minutes', timeZone: 'America/Mexico_City', secrets: [telegramToken] },
     async () => {
         const ahora = Timestamp.now();
@@ -3659,9 +3675,9 @@ export const avisarDuenosPendientes = onSchedule(
             await d.ref.update({ avisadoPendientes: true });
         }
     },
-);
+));
 
-export const cerrarBrackets = onSchedule(
+export const cerrarBrackets = scheduler(() => onSchedule(
     { schedule: 'every 15 minutes', timeZone: 'America/Mexico_City', secrets: [telegramToken] },
     async () => {
         const ahora = Timestamp.now();
@@ -3690,7 +3706,7 @@ export const cerrarBrackets = onSchedule(
 
         logger.info(`Cerradas ${pendientes.size} eliminatorias.`);
     },
-);
+));
 
 /**
  * MODO DUEÑOS — al cerrar, a quienes no aceptaron ni rechazaron se les

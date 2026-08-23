@@ -1,4 +1,4 @@
-import { Component, computed, inject, input } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { CampanitaComponent } from './campanita.component';
 import { CommonModule, Location } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
@@ -43,7 +43,38 @@ import { TorneosService } from '../core/services/torneos.service';
       </div>
 
       @if (!back()) {
+        <a class="icono-top" routerLink="/ranking" aria-label="Ranking" title="Ranking">
+          <i class="ti ti-trophy"></i>
+        </a>
+
         <app-campanita />
+
+        @if (isAdmin()) {
+          <div class="menu-admin">
+            <button class="icono-top" (click)="menuAbierto.set(!menuAbierto())" aria-label="Menú de administración">
+              <i class="ti ti-dots-vertical"></i>
+              @if (pendientes() > 0) { <span class="punto-rojo"></span> }
+            </button>
+            @if (menuAbierto()) {
+              <div class="menu-fondo" (click)="menuAbierto.set(false)"></div>
+              <div class="menu-lista">
+                <span class="menu-tit">Administración</span>
+                <a routerLink="/admin/partidos" (click)="menuAbierto.set(false)"><i class="ti ti-ball-football"></i> Partidos</a>
+                <a routerLink="/admin/usuarios" (click)="menuAbierto.set(false)">
+                  <i class="ti ti-users"></i> Usuarios
+                  @if (pendientes() > 0) { <span class="menu-badge">{{ pendientes() }}</span> }
+                </a>
+                <a routerLink="/admin/torneos" (click)="menuAbierto.set(false)"><i class="ti ti-tournament"></i> Torneos</a>
+                <a routerLink="/admin/competiciones" (click)="menuAbierto.set(false)"><i class="ti ti-trophy"></i> Ligas</a>
+                <a routerLink="/admin/brackets" (click)="menuAbierto.set(false)"><i class="ti ti-sitemap"></i> Eliminatorias</a>
+              </div>
+            }
+          </div>
+        } @else if (esGestor()) {
+          <a class="icono-top" routerLink="/liga" aria-label="Mi liga" title="Mi liga">
+            <i class="ti ti-ball-football"></i>
+          </a>
+        }
       }
     </header>
 
@@ -59,31 +90,22 @@ import { TorneosService } from '../core/services/torneos.service';
       <a routerLink="/inicio" routerLinkActive="on">
         <i class="ti ti-home"></i><span>Inicio</span>
       </a>
+      <a routerLink="/partidos" routerLinkActive="on">
+        <i class="ti ti-ball-football"></i><span>Partidos</span>
+      </a>
       <a routerLink="/mis-pronosticos" routerLinkActive="on">
         <i class="ti ti-ticket"></i><span>Míos</span>
       </a>
-      <a routerLink="/ranking" routerLinkActive="on">
-        <i class="ti ti-trophy"></i><span>Ranking</span>
+      <a routerLink="/torneos" routerLinkActive="on">
+        <i class="ti ti-tournament"></i><span>Torneos</span>
       </a>
-      @if (isAdmin()) {
-        <a routerLink="/admin" routerLinkActive="on" class="con-badge">
-          <i class="ti ti-shield-check"></i><span>Admin</span>
-          @if (pendientes() > 0) {
-            <span class="badge">{{ pendientes() }}</span>
-          }
-        </a>
-      } @else if (esGestor()) {
-        <a routerLink="/liga" routerLinkActive="on">
-          <i class="ti ti-ball-football"></i><span>Mi liga</span>
-        </a>
-      }
     </nav>
   `,
   styles: [
     `
       .topbar {
         position: sticky; top: 0; z-index: 20;
-        display: flex; align-items: center; gap: 12px;
+        display: flex; align-items: center; gap: 6px;
         /* Deja libre la barra de estado cuando corre como app instalada. */
         padding: calc(12px + env(safe-area-inset-top)) 0 12px;
         background: var(--surface-0);
@@ -123,6 +145,48 @@ import { TorneosService } from '../core/services/torneos.service';
       }
       /* En rojo cuando debes puntos, para que se note. */
       .balance--negativo { background: var(--danger-bg); color: var(--danger-text); }
+
+      /* Botones de ícono en la barra superior (ranking, tres puntos). */
+      .icono-top {
+        position: relative; flex-shrink: 0;
+        width: 38px; height: 38px; border-radius: 50%; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        border: none; background: transparent; color: var(--text-secondary);
+        font-size: 20px; text-decoration: none;
+      }
+      .icono-top:hover { background: var(--surface-1); color: var(--text-primary); }
+      .punto-rojo {
+        position: absolute; top: 7px; right: 7px;
+        width: 8px; height: 8px; border-radius: 50%; background: var(--danger-text);
+      }
+
+      /* Menú desplegable de administración. */
+      .menu-admin { position: relative; flex-shrink: 0; }
+      .menu-fondo { position: fixed; inset: 0; z-index: 190; }
+      .menu-lista {
+        position: absolute; top: calc(100% + 6px); right: 0; z-index: 200;
+        min-width: 190px; display: flex; flex-direction: column;
+        background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+        padding: 6px; animation: menuAparece 0.15s ease;
+      }
+      @keyframes menuAparece { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+      .menu-tit {
+        font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
+        color: var(--text-muted); padding: 6px 10px 4px;
+      }
+      .menu-lista a {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px; border-radius: 8px; text-decoration: none;
+        color: var(--text-primary); font-size: 14px;
+      }
+      .menu-lista a:hover { background: var(--surface-1); }
+      .menu-lista a i { font-size: 18px; color: var(--text-secondary); }
+      .menu-badge {
+        margin-left: auto; font-size: 11px; font-weight: 700; min-width: 18px; height: 18px;
+        display: flex; align-items: center; justify-content: center; padding: 0 5px;
+        border-radius: 999px; background: var(--danger-text); color: #fff;
+      }
 
       .banner {
         display: flex; align-items: center; gap: 8px;
@@ -175,6 +239,9 @@ export class NavComponent {
   readonly title = input('');
   /** Si es true, muestra la barra superior sin nombre/avatar (solo marca + puntos + campanita). */
   readonly minimal = input(false);
+
+  /** Menú desplegable de administración (tres puntos). */
+  readonly menuAbierto = signal(false);
 
   readonly me = toSignal(this.users.me$, { initialValue: null });
   readonly isAdmin = toSignal(this.users.isAdmin$, { initialValue: false });

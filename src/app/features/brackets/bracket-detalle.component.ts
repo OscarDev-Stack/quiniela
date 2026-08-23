@@ -67,10 +67,6 @@ import { Bracket } from '../../core/models/bracket.model';
           </section>
         }
 
-        @if (b.estado === 'inscripcion' && resolviendo()) {
-          <p class="cargando">Cargando…</p>
-        }
-
         <!-- ── MODO DUEÑOS ── -->
         @if (b.modo === 'duenos') {
           @if (miDueno(); as d) {
