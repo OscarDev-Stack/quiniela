@@ -52,7 +52,7 @@ import { ConfirmarService } from '../../shared/confirmar.service';
       <div class="grid">
         <label class="field">
           <span>Nombre</span>
-          <input type="text" [(ngModel)]="form.nombre" placeholder="AutomatePower" />
+          <input type="text" [(ngModel)]="form.nombre" placeholder="Los del jueves, La Oficina…" />
           <small class="pista">Como le van a decir entre ustedes.</small>
         </label>
         <label class="field">
@@ -137,6 +137,17 @@ import { ConfirmarService } from '../../shared/confirmar.service';
             <option [ngValue]="500">500 pts</option>
             <option [ngValue]="1000">1000 pts</option>
           </select>
+        </label>
+        <label class="field">
+          <span>% al bote acumulado</span>
+          <select [(ngModel)]="form.porcentajeBote">
+            <option [ngValue]="0">Nada</option>
+            <option [ngValue]="5">5%</option>
+            <option [ngValue]="10">10%</option>
+            <option [ngValue]="15">15%</option>
+            <option [ngValue]="20">20%</option>
+          </select>
+          <small class="pista">Parte de la bolsa que se guarda para un torneo especial.</small>
         </label>
         <div class="field regla-fija">
           <span>Reglas</span>
@@ -444,6 +455,7 @@ export class AdminTorneosComponent {
     competicionId: '',
     jornadaInicial: 1,
     costoEntrada: 0,
+    porcentajeBote: 0,
     cierreInscripcion: '',
   };
 
@@ -609,6 +621,7 @@ export class AdminTorneosComponent {
         competicionNombre: comp.nombre,
         jornadaInicial: Number(this.form.jornadaInicial) || 1,
         costoEntrada: Number(this.form.costoEntrada),
+        porcentajeBote: Number(this.form.porcentajeBote),
         cierreInscripcion: cierre,
         modo: this.form.modo,
         jornadas: this.form.modo === 'quiniela' ? Number(this.form.jornadas) || 1 : 0,
@@ -626,6 +639,7 @@ export class AdminTorneosComponent {
         competicionId: '',
         jornadaInicial: 1,
         costoEntrada: 0,
+        porcentajeBote: 0,
         cierreInscripcion: '',
       };
       this.mensaje.set('Torneo creado. Comparte el enlace de invitación.');

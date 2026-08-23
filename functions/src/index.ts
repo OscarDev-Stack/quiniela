@@ -34,6 +34,52 @@ const PRONOSTICOS_POR_LOTE = 150;
 const MIN_RESUELTOS = 1;
 
 /**
+ * Calcula cuánto de un cobro se va al "bote" acumulado (sistema/reserva),
+ * según el porcentaje configurado en el torneo/partido. El % SALE de la
+ * bolsa: el jugador paga igual, pero esta parte no engorda la bolsa del
+ * torneo, sino el bote global que luego se jugará aparte.
+ *
+ * Devuelve el monto que va al bote (para restarlo de la bolsa). Escribir
+ * en la reserva y el ledger es responsabilidad de quien llama, usando
+ * apartarBote() dentro de una transacción o registrarBote() fuera.
+ */
+function calcularBote(monto: number, porcentaje: unknown): number {
+    const pct = Number(porcentaje ?? 0);
+    if (!pct || pct <= 0 || monto <= 0) return 0;
+    return Math.floor((monto * pct) / 100);
+}
+
+/** Suma al bote dentro de una transacción y deja constancia en el ledger. */
+function apartarBote(
+    tx: FirebaseFirestore.Transaction,
+    monto: number,
+    origen: string,
+): void {
+    if (monto <= 0) return;
+    tx.set(db.doc('sistema/reserva'), { total: FieldValue.increment(monto) }, { merge: true });
+    tx.set(db.collection('ledger').doc(), {
+        uid: 'reserva',
+        tipo: 'bote',
+        monto,
+        detalle: origen,
+        createdAt: FieldValue.serverTimestamp(),
+    });
+}
+
+/** Igual que apartarBote pero fuera de una transacción (con await). */
+async function registrarBote(monto: number, origen: string): Promise<void> {
+    if (monto <= 0) return;
+    await db.doc('sistema/reserva').set({ total: FieldValue.increment(monto) }, { merge: true });
+    await db.collection('ledger').add({
+        uid: 'reserva',
+        tipo: 'bote',
+        monto,
+        detalle: origen,
+        createdAt: FieldValue.serverTimestamp(),
+    });
+}
+
+/**
  * Techo de instancias simultáneas por función. Evita que un pico
  * (o un abuso) escale a cientos de contenedores y dispare el costo.
  */
@@ -334,7 +380,12 @@ export const liquidarPartido = onCall(opcionesCall, async (req) => {
         return { ok: true, participantes: 0, ganadores: 0, bolsa: 0, sobrante: 0 };
     }
 
-    const bolsa = pronosticos.reduce((acc, p) => acc + (p.apuesta ?? 0), 0);
+    const bolsaBruta = pronosticos.reduce((acc, p) => acc + (p.apuesta ?? 0), 0);
+    // El % del bote sale de la bolsa: se reparte lo que queda.
+    const alBote = pronosticos.length > 0
+        ? calcularBote(bolsaBruta, partido['porcentajeBote'])
+        : 0;
+    const bolsa = bolsaBruta - alBote;
     const ganadores = pronosticos.filter((p) => p.resultado === resultadoOficial);
     const perdedores = pronosticos.filter((p) => p.resultado !== resultadoOficial);
     const apostadoGanadores = ganadores.reduce((acc, p) => acc + (p.apuesta ?? 0), 0);
@@ -417,17 +468,30 @@ export const liquidarPartido = onCall(opcionesCall, async (req) => {
     }
 
     const sobrante = ganadores.length === 0 ? 0 : bolsa - repartido;
+    // El bote solo se aparta si hubo reparto (si se devolvió todo, no).
+    const boteFinal = ganadores.length === 0 ? 0 : alBote;
 
     // Acumulados globales: reserva, puntos repartidos y partidos liquidados.
     await db.doc('sistema/reserva').set(
         {
-            total: FieldValue.increment(sobrante),
+            total: FieldValue.increment(sobrante + boteFinal),
             repartido: FieldValue.increment(repartido),
             liquidados: FieldValue.increment(1),
             actualizado: FieldValue.serverTimestamp(),
         },
         { merge: true },
     );
+
+    if (boteFinal > 0) {
+        await db.collection('ledger').add({
+            uid: 'reserva',
+            tipo: 'bote',
+            monto: boteFinal,
+            detalle: `Partido (${partidoId})`,
+            partidoId,
+            createdAt: FieldValue.serverTimestamp(),
+        });
+    }
 
     if (sobrante > 0) {
         await db.collection('ledger').add({
@@ -1403,9 +1467,14 @@ export const resolverJornadaCompeticion = onCall(
                     `Siguen ${vivos.size} en pie. Puedes ver cómo termina en la app.`,
                 );
             }
-            const bolsa = Number(torneo['bolsa'] ?? 0);
+            const bolsaBruta = Number(torneo['bolsa'] ?? 0);
+            const alBote = calcularBote(bolsaBruta, torneo['porcentajeBote']);
+            const bolsa = bolsaBruta - alBote;
             const nombreTorneo = String(torneo['nombre'] ?? 'Torneo');
             const competicion = String(torneo['competicionNombre'] ?? '');
+            if (alBote > 0) {
+                await registrarBote(alBote, `Torneo ${nombreTorneo}`);
+            }
 
             const pagar = async (ganadores: Array<{ uid: string; alias: string }>) => {
                 if (bolsa <= 0 || ganadores.length === 0) return 0;
@@ -1560,8 +1629,13 @@ export const finalizarTorneo = onCall(opcionesCall, async (req) => {
         throw new HttpsError('failed-precondition', 'No queda nadie vivo en este torneo.');
     }
 
-    const bolsa = Number(t['bolsa'] ?? 0);
+    const bolsaBruta = Number(t['bolsa'] ?? 0);
     const nombreTorneo = String(t['nombre'] ?? 'Torneo');
+    const alBote = calcularBote(bolsaBruta, t['porcentajeBote']);
+    const bolsa = bolsaBruta - alBote;
+    if (alBote > 0) {
+        await registrarBote(alBote, `Torneo ${nombreTorneo}`);
+    }
     const ganadores = vivos.docs.map((d) => ({
         uid: d.id,
         alias: String(d.data()['alias'] ?? 'jugador'),
@@ -1725,8 +1799,13 @@ export const resolverPendientes = onCall(opcionesCall, async (req) => {
         if (torneo['estado'] !== 'en-curso' || !quedanPendientes.empty) continue;
         if (vivos.size > 1) continue;
 
-        const bolsa = Number(torneo['bolsa'] ?? 0);
+        const bolsaBruta = Number(torneo['bolsa'] ?? 0);
         const nombreTorneo = String(torneo['nombre'] ?? 'Torneo');
+        const alBote = calcularBote(bolsaBruta, torneo['porcentajeBote']);
+        const bolsa = bolsaBruta - alBote;
+        if (alBote > 0) {
+            await registrarBote(alBote, `Torneo ${nombreTorneo}`);
+        }
         const lista =
             vivos.size === 1
                 ? [{ uid: vivos.docs[0].id, alias: String(vivos.docs[0].data()['alias'] ?? 'jugador') }]
@@ -2080,8 +2159,13 @@ async function cerrarQuiniela(
     const mejorExactos = Math.max(...conMasPuntos.map((p) => p.exactos));
     const ganadores = conMasPuntos.filter((p) => p.exactos === mejorExactos);
 
-    const bolsa = Number(torneo['bolsa'] ?? 0);
+    const bolsaBruta = Number(torneo['bolsa'] ?? 0);
     const nombreTorneo = String(torneo['nombre'] ?? 'Torneo');
+    const alBote = calcularBote(bolsaBruta, torneo['porcentajeBote']);
+    const bolsa = bolsaBruta - alBote;
+    if (alBote > 0) {
+        await registrarBote(alBote, `Torneo ${nombreTorneo}`);
+    }
     let porCabeza = 0;
 
     if (bolsa > 0 && ganadores.length > 0) {
@@ -2987,6 +3071,7 @@ export const crearBracket = onCall(opcionesCall, async (req) => {
         codigo: codigoBracket(),
         cierraAt,
         costoEntrada: Number(req.data?.costoEntrada ?? 0),
+        porcentajeBote: Number(req.data?.porcentajeBote ?? 0),
         publico: req.data?.publico === true,
         bolsa: 0,
         gestores: [],
@@ -3136,6 +3221,16 @@ export const aceptarDuenoBracket = onCall(opcionesCall, async (req) => {
             const puntos = Number((userSnap.data() as Record<string, unknown>)?.['puntos'] ?? 0);
             if (puntos < costo) throw new HttpsError('failed-precondition', 'No tienes puntos suficientes.');
             tx.update(userRef, { puntos: FieldValue.increment(-costo) });
+            // Todo movimiento de puntos queda en el ledger.
+            tx.set(db.collection('ledger').doc(), {
+                uid,
+                tipo: 'bracket-entrada',
+                monto: -costo,
+                saldoDespues: puntos - costo,
+                detalle: `Entrada a ${String(b['nombre'] ?? 'eliminatoria')} (${mio.equipo})`,
+                bracketId,
+                createdAt: FieldValue.serverTimestamp(),
+            });
         }
 
         const actualizados = duenos.map((d) =>
@@ -3480,7 +3575,12 @@ async function calificarDuenos(
     llaves: LlaveBk[],
     bracketId: string,
 ): Promise<{ ok: boolean; calificados: number }> {
-    const bolsa = Number(b['bolsa'] ?? 0);
+    const bolsaBruta = Number(b['bolsa'] ?? 0);
+    const alBote = calcularBote(bolsaBruta, b['porcentajeBote']);
+    const bolsa = bolsaBruta - alBote;
+    if (alBote > 0) {
+        await registrarBote(alBote, `Eliminatoria ${String(b['nombre'] ?? '')}`);
+    }
     const duenos = (b['duenos'] as DuenoBk[] | undefined) ?? [];
 
     // El campeón es el ganador de la final (la llave de mayor ronda).
@@ -3504,9 +3604,21 @@ async function calificarDuenos(
     if (dueno?.uid) {
         if (bolsa > 0) {
             await db.doc(`users/${dueno.uid}`).set(
-                { puntos: FieldValue.increment(bolsa) },
+                {
+                    puntos: FieldValue.increment(bolsa),
+                    puntosHistoricos: FieldValue.increment(bolsa),
+                },
                 { merge: true },
             );
+            // Todo movimiento de puntos queda en el ledger.
+            await db.collection('ledger').add({
+                uid: dueno.uid,
+                tipo: 'bracket-premio',
+                monto: bolsa,
+                detalle: `Campeón con ${campeon} en ${String(b['nombre'] ?? 'eliminatoria')}`,
+                bracketId,
+                createdAt: FieldValue.serverTimestamp(),
+            });
         }
         await registrarTrofeos(
             [{ uid: dueno.uid, alias: dueno.nombre }],
@@ -3555,7 +3667,12 @@ export const calificarBracket = onCall(
 
         const puntaje = b['puntaje'] as PuntajeBk;
         const reparto = (b['config'] as Record<string, unknown>)['reparto'] as number[];
-        const bolsa = Number(b['bolsa'] ?? 0);
+        const bolsaBruta = Number(b['bolsa'] ?? 0);
+        const alBote = calcularBote(bolsaBruta, b['porcentajeBote']);
+        const bolsa = bolsaBruta - alBote;
+        if (alBote > 0) {
+            await registrarBote(alBote, `Eliminatoria ${String(b['nombre'] ?? '')}`);
+        }
 
         const pronosticos = await ref.collection('pronosticos').get();
         if (pronosticos.empty) return { ok: true, calificados: 0 };
@@ -3739,6 +3856,16 @@ async function cobrarDuenosPendientes(
             const puntos = Number((snap.data() as Record<string, unknown>)?.['puntos'] ?? 0);
             if (puntos < costo) return false; // sin saldo: se le quita el equipo.
             tx.update(userRef, { puntos: FieldValue.increment(-costo) });
+            // Todo movimiento de puntos queda en el ledger.
+            tx.set(db.collection('ledger').doc(), {
+                uid,
+                tipo: 'bracket-entrada',
+                monto: -costo,
+                saldoDespues: puntos - costo,
+                detalle: `Entrada a ${String(b['nombre'] ?? 'eliminatoria')} (${dn.equipo})`,
+                bracketId: ref.id,
+                createdAt: FieldValue.serverTimestamp(),
+            });
             return true;
         });
 

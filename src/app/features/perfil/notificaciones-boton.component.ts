@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { PushService } from '../../shared/push.service';
 import { ToastService } from '../../shared/toast.service';
 import { StatsService } from '../../shared/stats.service';
+import { InstalarService } from '../../shared/instalar.service';
 
 /**
  * Interruptor de notificaciones push para el perfil. Refleja el estado
@@ -18,6 +19,19 @@ import { StatsService } from '../../shared/stats.service';
   imports: [CommonModule],
   template: `
     @if (push.soportado()) {
+      @if (!instalar.yaInstalada() && instalar.esMovil()) {
+        <!-- En el navegador móvil las notificaciones no son confiables:
+             sugerimos agregar la app al inicio primero. -->
+        <div class="fila">
+          <div class="txt">
+            <span class="tit"><i class="ti ti-bell"></i> Notificaciones</span>
+            <small class="pista">
+              Para recibir avisos en tu teléfono, primero agrega Quiniela a tu
+              pantalla de inicio (arriba). Ya instalada, aquí podrás activarlas.
+            </small>
+          </div>
+        </div>
+      } @else {
       <div class="fila">
         <div class="txt">
           <span class="tit"><i class="ti ti-bell"></i> Notificaciones en este dispositivo</span>
@@ -43,6 +57,7 @@ import { StatsService } from '../../shared/stats.service';
           Bloqueaste las notificaciones. Actívalas desde los ajustes del
           navegador o del sistema para poder recibirlas.
         </p>
+      }
       }
     }
   `,
@@ -91,6 +106,7 @@ export class NotificacionesBotonComponent {
   readonly push = inject(PushService);
   private readonly toast = inject(ToastService);
   private readonly stats = inject(StatsService);
+  readonly instalar = inject(InstalarService);
 
   /** Estado guardado en el usuario (pushActivo), que llega desde el perfil. */
   readonly pushActivo = input(false);

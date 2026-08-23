@@ -148,6 +148,17 @@ interface Outcome {
           <option value="quien-pasa">¿Quién pasa? (ida y vuelta)</option>
         </select>
       </label>
+      <label class="field">
+        <span>% al bote acumulado</span>
+        <select [(ngModel)]="form.porcentajeBote">
+          <option [ngValue]="0">Nada</option>
+          <option [ngValue]="5">5%</option>
+          <option [ngValue]="10">10%</option>
+          <option [ngValue]="15">15%</option>
+          <option [ngValue]="20">20%</option>
+        </select>
+        <small class="pista">Parte de la bolsa que se guarda para un torneo especial.</small>
+      </label>
       <button class="btn-primary" [disabled]="saving()" (click)="crear()">
         {{ saving() ? 'Guardando…' : 'Crear partido' }}
       </button>
@@ -390,6 +401,7 @@ export class AdminPartidosComponent {
     competition: '',
     closesAt: '',
     type: '1x2' as TipoPartido,
+    porcentajeBote: 0,
   };
   readonly saving = signal(false);
 
@@ -587,8 +599,9 @@ export class AdminPartidosComponent {
         type: this.form.type,
         status: 'abierto',
         closesAt: Timestamp.fromDate(cierre),
+        porcentajeBote: Number(this.form.porcentajeBote),
       });
-      this.form = { homeTeam: '', awayTeam: '', competition: '', closesAt: '', type: '1x2' };
+      this.form = { homeTeam: '', awayTeam: '', competition: '', closesAt: '', type: '1x2', porcentajeBote: 0 };
       this.mensaje.set('Partido creado.');
     } finally {
       this.saving.set(false);

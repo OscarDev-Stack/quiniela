@@ -90,6 +90,7 @@ export class BracketsService {
         puntaje: PuntajeBracket;
         equipos: EquipoBracket[];
         costoEntrada: number;
+        porcentajeBote: number;
         cierraAt: Date | null;
         publico: boolean;
     }): Promise<{ id: string }> {
