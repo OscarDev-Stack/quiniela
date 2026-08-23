@@ -40,8 +40,8 @@ const MIN_RESUELTOS = 1;
  * torneo, sino el bote global que luego se jugará aparte.
  *
  * Devuelve el monto que va al bote (para restarlo de la bolsa). Escribir
- * en la reserva y el ledger es responsabilidad de quien llama, usando
- * apartarBote() dentro de una transacción o registrarBote() fuera.
+ * en la reserva y el ledger es responsabilidad de quien llama, con
+ * registrarBote().
  */
 function calcularBote(monto: number, porcentaje: unknown): number {
     const pct = Number(porcentaje ?? 0);
@@ -49,24 +49,7 @@ function calcularBote(monto: number, porcentaje: unknown): number {
     return Math.floor((monto * pct) / 100);
 }
 
-/** Suma al bote dentro de una transacción y deja constancia en el ledger. */
-function apartarBote(
-    tx: FirebaseFirestore.Transaction,
-    monto: number,
-    origen: string,
-): void {
-    if (monto <= 0) return;
-    tx.set(db.doc('sistema/reserva'), { total: FieldValue.increment(monto) }, { merge: true });
-    tx.set(db.collection('ledger').doc(), {
-        uid: 'reserva',
-        tipo: 'bote',
-        monto,
-        detalle: origen,
-        createdAt: FieldValue.serverTimestamp(),
-    });
-}
-
-/** Igual que apartarBote pero fuera de una transacción (con await). */
+/** Suma al bote (fuera de transacción) y deja constancia en el ledger. */
 async function registrarBote(monto: number, origen: string): Promise<void> {
     if (monto <= 0) return;
     await db.doc('sistema/reserva').set({ total: FieldValue.increment(monto) }, { merge: true });
