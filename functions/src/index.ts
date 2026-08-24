@@ -557,7 +557,7 @@ export const liquidarPartido = onCall(opcionesCall, async (req) => {
    Corre cada 5 minutos: marca "cierra pronto" los que están por
    cerrar y pasa a "en juego" los que ya alcanzaron su hora.
    ============================================================ */
-export const cerrarPartidos = onSchedule(cada(5), async () => {
+export const cerrarPartidos = onSchedule('every 5 minutes', async () => {
     const enTreintaMin = Timestamp.fromMillis(Date.now() + 30 * 60 * 1000);
     // Ventana hacia atrás: ignora el histórico y mantiene la consulta pequeña
     // sin importar cuántos partidos se acumulen con el tiempo.
