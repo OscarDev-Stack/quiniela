@@ -74,7 +74,7 @@ import { Bracket } from '../../core/models/bracket.model';
               <section class="panel panel--aviso">
                 <h2>Te tocó un equipo</h2>
                 <div class="tu-equipo">
-                  <app-escudo [equipo]="d.equipo" [size]="56" />
+                  <app-escudo [equipo]="d.equipo" [size]="88" />
                   <span class="tu-equipo-nom">{{ d.equipo }}</span>
                 </div>
                 <p class="aviso-txt">
@@ -96,7 +96,7 @@ import { Bracket } from '../../core/models/bracket.model';
               <section class="panel">
                 <h2>Tu equipo</h2>
                 <div class="tu-equipo">
-                  <app-escudo [equipo]="d.equipo" [size]="56" />
+                  <app-escudo [equipo]="d.equipo" [size]="88" />
                   <span class="tu-equipo-nom">{{ d.equipo }}</span>
                 </div>
                 <p class="aviso-txt">Ganas si {{ d.equipo }} es campeón. Sigue el cuadro de arriba.</p>
@@ -280,7 +280,7 @@ import { Bracket } from '../../core/models/bracket.model';
         display: flex; flex-direction: column; align-items: center; gap: 8px;
         padding: 14px 0;
       }
-      .tu-equipo-nom { font-size: 20px; font-weight: 800; color: var(--text-primary); }
+      .tu-equipo-nom { font-size: 24px; font-weight: 800; color: var(--text-primary); }
       .aviso-txt { font-size: 14px; color: var(--text-secondary); line-height: 1.5; margin: 0 0 14px; text-align: center; }
       .reglas-mini { margin: 0 0 16px; }
 

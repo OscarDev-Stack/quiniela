@@ -30,7 +30,7 @@ import { Bracket } from '../../core/models/bracket.model';
       }
 
       @for (t of visibles(); track t.id) {
-        <article class="card" (click)="abrir(t)">
+        <article class="card" [class.card--quin]="t.modo === 'quiniela'" [class.card--surv]="t.modo !== 'quiniela'" (click)="abrir(t)">
           <div class="top">
             <span class="competicion">{{ t.competicionNombre }}</span>
             @switch (t.estado) {
@@ -47,7 +47,7 @@ import { Bracket } from '../../core/models/bracket.model';
                 <span><i class="ti ti-list-numbers"></i> {{ t.jornadas }} jornadas</span>
               }
             } @else {
-              <span><i class="ti ti-heart"></i> 1 vida</span>
+              <span><i class="ti ti-heart"></i> {{ t.vidas === 1 ? '1 vida' : t.vidas + ' vidas' }}</span>
             }
             @if (t.estado === 'inscripcion') {
               <span><i class="ti ti-flag"></i> Inicia en J{{ t.jornadaInicial }}</span>
@@ -123,7 +123,9 @@ import { Bracket } from '../../core/models/bracket.model';
         font-size: 13px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
         color: var(--text-muted); margin: 22px 0 12px;
       }
-      .card--bracket { border-left: 3px solid var(--accent-fill); }
+      .card--bracket { border-left: 4px solid var(--tipo-elim-fill); }
+      .card--surv { border-left: 4px solid var(--tipo-surv-fill); }
+      .card--quin { border-left: 4px solid var(--tipo-quin-fill); }
     `,
   ],
 })

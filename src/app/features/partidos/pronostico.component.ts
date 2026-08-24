@@ -1,10 +1,10 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { Firestore, doc, docData } from '@angular/fire/firestore';
-import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { tap, switchMap } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
 import { CargandoComponent } from '../../shared/cargando.component';
 import { StatsService } from '../../shared/stats.service';
@@ -90,7 +90,7 @@ interface Opcion {
           <div class="hint">El premio se revela al iniciar el partido.</div>
 
           <button class="confirm" [disabled]="!resultado() || saving() || cerrado(p)" (click)="confirmar(p)">
-            {{ saving() ? 'Enviando…' : 'Confirmar pronóstico' }}
+            {{ saving() ? 'Enviando…' : (editando() ? 'Actualizar pronóstico' : 'Confirmar pronóstico') }}
           </button>
         </div>
       } @else if (cargando()) {
@@ -181,10 +181,38 @@ export class PronosticoComponent {
 
   private readonly me = toSignal(this.users.me$, { initialValue: null });
 
+  /** Mi pronóstico previo (si ya pronostiqué), para poder editarlo. */
+  private readonly miPronPrevio = toSignal(
+    toObservable(computed(() => this.me()?.id ?? null)).pipe(
+      switchMap((uid) =>
+        uid
+          ? (docData(doc(this.db, 'pronosticos', `${uid}_${this.id}`)) as Observable<
+            { resultado?: ResultadoPronostico; multiplicador?: number } | undefined
+          >)
+          : of(undefined),
+      ),
+    ),
+    { initialValue: undefined },
+  );
+
+  /** ¿Estoy editando un pronóstico ya hecho? */
+  readonly editando = computed(() => !!this.miPronPrevio());
+
   readonly resultado = signal<ResultadoPronostico | null>(null);
   readonly multiplicador = signal(1);
   readonly saving = signal(false);
   readonly error = signal('');
+
+  /** Precarga los valores del pronóstico previo una sola vez. */
+  private precargado = false;
+  private readonly precargar = effect(() => {
+    const prev = this.miPronPrevio();
+    if (prev && !this.precargado) {
+      this.precargado = true;
+      if (prev.resultado) this.resultado.set(prev.resultado);
+      if (prev.multiplicador) this.multiplicador.set(prev.multiplicador);
+    }
+  });
 
   readonly saldo = computed(() => this.me()?.puntos ?? 0);
   readonly apuesta = computed(() => APUESTA_BASE * this.multiplicador());

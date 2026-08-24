@@ -11,17 +11,22 @@ import { getMessaging } from 'firebase-admin/messaging';
 initializeApp();
 
 /* ============================================================
-   Entorno: en dev no corre ningún scheduler automático.
-   Se disparan a mano o desde el emulador. En prod corren todos.
+   Entorno: en dev los schedulers corren al DOBLE del intervalo de
+   prod (más espaciados, para no saturar el proyecto de pruebas),
+   pero siguen corriendo. En prod usan su intervalo normal.
    ============================================================ */
 const PROYECTO_PROD = 'quinelav1-e23eb';
 const esProd = process.env.GCLOUD_PROJECT === PROYECTO_PROD;
 
 /**
- * Envuelve una función programada: en producción la registra tal cual;
- * en dev devuelve undefined, así Firebase no la despliega y no corre sola.
+ * Devuelve el schedule de un job: en prod, cada `minutos`; en dev, cada
+ * `minutos * 2`. Así el mismo código sirve para ambos entornos sin tener
+ * intervalos fijos regados por el archivo.
  */
-const scheduler = <T>(fn: () => T): T | undefined => (esProd ? fn() : undefined);
+const cada = (minutos: number): string => {
+    const m = esProd ? minutos : minutos * 2;
+    return `every ${m} minutes`;
+};
 
 const db = getFirestore();
 
@@ -210,9 +215,10 @@ export const crearPronostico = onCall(opcionesCall, async (req) => {
             tx.get(partRef),
         ]);
 
-        if (pronSnap.exists) {
-            throw new HttpsError('already-exists', 'Ya hiciste un pronóstico para este partido.');
-        }
+        // Si ya existe, es una EDICIÓN: revertimos lo anterior y aplicamos lo nuevo.
+        const anterior = pronSnap.exists
+            ? (pronSnap.data() as Record<string, unknown>)
+            : null;
         if (!userSnap.exists) {
             throw new HttpsError('not-found', 'No encontramos tu perfil.');
         }
@@ -255,8 +261,12 @@ export const crearPronostico = onCall(opcionesCall, async (req) => {
             throw new HttpsError('invalid-argument', 'Ese resultado no aplica para este partido.');
         }
 
+        const apuestaPrevia = anterior ? Number(anterior['apuesta'] ?? 0) : 0;
+        const resultadoPrevio = anterior ? String(anterior['resultado'] ?? '') : '';
+
         const puntos = Number(me['puntos'] ?? 0);
-        const despues = puntos - apuesta;
+        // Devolvemos la apuesta anterior (si editaba) y cobramos la nueva.
+        const despues = puntos + apuestaPrevia - apuesta;
         if (despues < TOPE_INFERIOR) {
             throw new HttpsError(
                 'failed-precondition',
@@ -277,10 +287,25 @@ export const crearPronostico = onCall(opcionesCall, async (req) => {
 
         tx.update(userRef, {
             puntos: despues,
-            // El histórico acumula todo movimiento y nunca se reinicia.
-            puntosHistoricos: FieldValue.increment(-apuesta),
+            // El histórico acumula el neto: devuelve lo anterior, cobra lo nuevo.
+            puntosHistoricos: FieldValue.increment(apuestaPrevia - apuesta),
             bloqueado: despues - APUESTA_BASE < TOPE_INFERIOR,
         });
+
+        // Bolsa del partido: si editaba, quita lo anterior de su resultado viejo.
+        if (anterior && apuestaPrevia > 0) {
+            tx.set(
+                db.doc(`bolsas/${partidoId}`),
+                {
+                    partidoId,
+                    total: FieldValue.increment(-apuestaPrevia),
+                    [`porResultado.${resultadoPrevio}`]: FieldValue.increment(-apuestaPrevia),
+                    [`conteos.${resultadoPrevio}`]: FieldValue.increment(-1),
+                    actualizado: FieldValue.serverTimestamp(),
+                },
+                { merge: true },
+            );
+        }
 
         // Agregados en colección privada: solo los admins pueden leerlos,
         // así el premio sigue oculto para los jugadores.
@@ -298,8 +323,8 @@ export const crearPronostico = onCall(opcionesCall, async (req) => {
 
         tx.set(ledgerRef, {
             uid,
-            tipo: 'apuesta',
-            monto: -apuesta,
+            tipo: anterior ? 'apuesta-edicion' : 'apuesta',
+            monto: apuestaPrevia - apuesta,
             saldoDespues: despues,
             partidoId,
             createdAt: FieldValue.serverTimestamp(),
@@ -532,59 +557,57 @@ export const liquidarPartido = onCall(opcionesCall, async (req) => {
    Corre cada 5 minutos: marca "cierra pronto" los que están por
    cerrar y pasa a "en juego" los que ya alcanzaron su hora.
    ============================================================ */
-export const cerrarPartidos = scheduler(() =>
-    onSchedule('every 5 minutes', async () => {
-        const enTreintaMin = Timestamp.fromMillis(Date.now() + 30 * 60 * 1000);
-        // Ventana hacia atrás: ignora el histórico y mantiene la consulta pequeña
-        // sin importar cuántos partidos se acumulen con el tiempo.
-        const hace12Horas = Timestamp.fromMillis(Date.now() - 12 * 60 * 60 * 1000);
+export const cerrarPartidos = onSchedule(cada(5), async () => {
+    const enTreintaMin = Timestamp.fromMillis(Date.now() + 30 * 60 * 1000);
+    // Ventana hacia atrás: ignora el histórico y mantiene la consulta pequeña
+    // sin importar cuántos partidos se acumulen con el tiempo.
+    const hace12Horas = Timestamp.fromMillis(Date.now() - 12 * 60 * 60 * 1000);
 
-        // Rango sobre un solo campo: no requiere índice compuesto.
-        const snap = await db
-            .collection('partidos')
-            .where('closesAt', '>=', hace12Horas)
-            .where('closesAt', '<=', enTreintaMin)
-            .get();
+    // Rango sobre un solo campo: no requiere índice compuesto.
+    const snap = await db
+        .collection('partidos')
+        .where('closesAt', '>=', hace12Horas)
+        .where('closesAt', '<=', enTreintaMin)
+        .get();
 
-        let aJuego = 0;
-        let aPronto = 0;
+    let aJuego = 0;
+    let aPronto = 0;
 
-        for (const d of snap.docs) {
-            const p = d.data() as Record<string, unknown>;
-            const status = String(p['status'] ?? '');
-            if (status !== 'abierto' && status !== 'cierra-pronto') continue;
+    for (const d of snap.docs) {
+        const p = d.data() as Record<string, unknown>;
+        const status = String(p['status'] ?? '');
+        if (status !== 'abierto' && status !== 'cierra-pronto') continue;
 
-            const cierre = p['closesAt'] as Timestamp | undefined;
-            if (!cierre) continue;
+        const cierre = p['closesAt'] as Timestamp | undefined;
+        if (!cierre) continue;
 
-            if (cierre.toMillis() <= Date.now()) {
-                // Momento de revelar: se publican la bolsa y los premios por resultado.
-                const bolsaSnap = await db.doc(`bolsas/${d.id}`).get();
-                const total = Number(bolsaSnap.data()?.['total'] ?? 0);
-                const porResultado = (bolsaSnap.data()?.['porResultado'] ?? {}) as Record<string, number>;
+        if (cierre.toMillis() <= Date.now()) {
+            // Momento de revelar: se publican la bolsa y los premios por resultado.
+            const bolsaSnap = await db.doc(`bolsas/${d.id}`).get();
+            const total = Number(bolsaSnap.data()?.['total'] ?? 0);
+            const porResultado = (bolsaSnap.data()?.['porResultado'] ?? {}) as Record<string, number>;
 
-                // Cuánto pagaría cada 100 puntos apostados a ese resultado.
-                const premioPor100: Record<string, number> = {};
-                Object.entries(porResultado).forEach(([r, apostado]) => {
-                    premioPor100[r] = apostado > 0 ? Math.floor((100 * total) / apostado) : 0;
-                });
+            // Cuánto pagaría cada 100 puntos apostados a ese resultado.
+            const premioPor100: Record<string, number> = {};
+            Object.entries(porResultado).forEach(([r, apostado]) => {
+                premioPor100[r] = apostado > 0 ? Math.floor((100 * total) / apostado) : 0;
+            });
 
-                await d.ref.update({
-                    status: 'en-juego',
-                    poolTotal: total,
-                    porResultado,
-                    premioPor100,
-                });
-                aJuego++;
-            } else if (status === 'abierto') {
-                await d.ref.update({ status: 'cierra-pronto' });
-                aPronto++;
-            }
+            await d.ref.update({
+                status: 'en-juego',
+                poolTotal: total,
+                porResultado,
+                premioPor100,
+            });
+            aJuego++;
+        } else if (status === 'abierto') {
+            await d.ref.update({ status: 'cierra-pronto' });
+            aPronto++;
         }
+    }
 
-        console.log(`Cierre automático: ${aJuego} en juego, ${aPronto} cierran pronto.`);
-    })
-);
+    console.log(`Cierre automático: ${aJuego} en juego, ${aPronto} cierran pronto.`);
+});
 
 /* ============================================================
    Cancelar un partido
@@ -898,8 +921,8 @@ export const buscarFixtures = onCall({ ...opcionesCall, secrets: [footballDataKe
    razonable de duración. Precarga el resultado para que el
    administrador lo confirme.
    ============================================================ */
-export const revisarResultados = scheduler(() => onSchedule(
-    { schedule: 'every 15 minutes', secrets: [footballDataKey] },
+export const revisarResultados = onSchedule(
+    { schedule: cada(15), secrets: [footballDataKey] },
     async () => {
         const snap = await db.collection('partidos').where('status', '==', 'en-juego').get();
         if (snap.empty) {
@@ -974,7 +997,7 @@ export const revisarResultados = scheduler(() => onSchedule(
             console.log(`Resultado precargado para ${d.id}: ${local}-${visitante} → ${resultado}`);
         }
     },
-));
+);
 
 
 /* ============================================================
@@ -1858,8 +1881,8 @@ export const resolverPendientes = onCall(opcionesCall, async (req) => {
    Al vencer el plazo, el torneo arranca solo. Si no juntó al
    menos dos participantes, se cancela y se devuelve lo pagado.
    ============================================================ */
-export const cerrarInscripciones = scheduler(() => onSchedule(
-    { schedule: 'every 15 minutes', timeZone: 'America/Mexico_City', secrets: [telegramToken] },
+export const cerrarInscripciones = onSchedule(
+    { schedule: cada(15), timeZone: 'America/Mexico_City', secrets: [telegramToken] },
     async () => {
         const ahora = Timestamp.now();
 
@@ -1933,7 +1956,7 @@ export const cerrarInscripciones = scheduler(() => onSchedule(
             );
         }
     },
-));
+);
 
 /* ============================================================
    Sincronizar puntos históricos con el saldo
@@ -2668,11 +2691,11 @@ export const solicitarReinicio = onCall(
 /** Cuánto antes del cierre se manda el recordatorio. */
 const AVISO_HORAS_ANTES = 2;
 
-export const recordarJornada = scheduler(() => onSchedule(
+export const recordarJornada = onSchedule(
     {
         /* Cada hora basta: con una ventana de dos, el aviso siempre
            alcanza a caer dentro con margen suficiente. */
-        schedule: 'every 1 hours',
+        schedule: cada(60),
         timeZone: 'America/Mexico_City',
         secrets: [telegramToken],
     },
@@ -2744,7 +2767,7 @@ export const recordarJornada = scheduler(() => onSchedule(
 
         if (avisados > 0) logger.info(`Recordatorio enviado a ${avisados} jugador(es).`);
     },
-));
+);
 
 /* ============================================================
    REVIVIR EN SUPERVIVENCIA
@@ -3202,7 +3225,10 @@ export const aceptarDuenoBracket = onCall(opcionesCall, async (req) => {
         if (costo > 0) {
             const userSnap = await tx.get(userRef);
             const puntos = Number((userSnap.data() as Record<string, unknown>)?.['puntos'] ?? 0);
-            if (puntos < costo) throw new HttpsError('failed-precondition', 'No tienes puntos suficientes.');
+            // Igual que el resto de la app: se permite saldo negativo hasta el tope.
+            if (puntos - costo < TOPE_INFERIOR) {
+                throw new HttpsError('failed-precondition', 'No te alcanza el saldo para entrar.');
+            }
             tx.update(userRef, { puntos: FieldValue.increment(-costo) });
             // Todo movimiento de puntos queda en el ledger.
             tx.set(db.collection('ledger').doc(), {
@@ -3410,6 +3436,16 @@ export const guardarPronosticoBracket = onCall(opcionesCall, async (req) => {
             }
             tx.update(userRef, { puntos: FieldValue.increment(-costo) });
             tx.set(bracketRef, { bolsa: FieldValue.increment(costo) }, { merge: true });
+            // Todo movimiento de puntos queda en el ledger.
+            tx.set(db.collection('ledger').doc(), {
+                uid,
+                tipo: 'bracket-entrada',
+                monto: -costo,
+                saldoDespues: saldo - costo,
+                detalle: `Entrada a ${String(b['nombre'] ?? 'eliminatoria')}`,
+                bracketId,
+                createdAt: FieldValue.serverTimestamp(),
+            });
         }
 
         tx.set(
@@ -3687,9 +3723,21 @@ export const calificarBracket = onCall(
             if (premio > 0) {
                 batch.set(
                     db.doc(`users/${jug.uid}`),
-                    { puntos: FieldValue.increment(premio) },
+                    {
+                        puntos: FieldValue.increment(premio),
+                        puntosHistoricos: FieldValue.increment(premio),
+                    },
                     { merge: true },
                 );
+                // Todo movimiento de puntos queda en el ledger.
+                batch.set(db.collection('ledger').doc(), {
+                    uid: jug.uid,
+                    tipo: 'bracket-premio',
+                    monto: premio,
+                    detalle: `Premio de ${String(b['nombre'] ?? 'eliminatoria')} (${i + 1}° lugar)`,
+                    bracketId,
+                    createdAt: FieldValue.serverTimestamp(),
+                });
             }
         });
 
@@ -3744,8 +3792,8 @@ export const calificarBracket = onCall(
  * hay participantes que no han aceptado. Corre cada hora y avisa una sola
  * vez por bracket (marca 'avisadoPendientes').
  */
-export const avisarDuenosPendientes = scheduler(() => onSchedule(
-    { schedule: 'every 60 minutes', timeZone: 'America/Mexico_City', secrets: [telegramToken] },
+export const avisarDuenosPendientes = onSchedule(
+    { schedule: cada(60), timeZone: 'America/Mexico_City', secrets: [telegramToken] },
     async () => {
         const ahora = Timestamp.now();
         const enTresHoras = Timestamp.fromMillis(ahora.toMillis() + 3 * 60 * 60 * 1000);
@@ -3775,10 +3823,10 @@ export const avisarDuenosPendientes = scheduler(() => onSchedule(
             await d.ref.update({ avisadoPendientes: true });
         }
     },
-));
+);
 
-export const cerrarBrackets = scheduler(() => onSchedule(
-    { schedule: 'every 15 minutes', timeZone: 'America/Mexico_City', secrets: [telegramToken] },
+export const cerrarBrackets = onSchedule(
+    { schedule: cada(15), timeZone: 'America/Mexico_City', secrets: [telegramToken] },
     async () => {
         const ahora = Timestamp.now();
 
@@ -3806,7 +3854,7 @@ export const cerrarBrackets = scheduler(() => onSchedule(
 
         logger.info(`Cerradas ${pendientes.size} eliminatorias.`);
     },
-));
+);
 
 /**
  * MODO DUEÑOS — al cerrar, a quienes no aceptaron ni rechazaron se les

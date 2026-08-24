@@ -52,7 +52,7 @@ import { ConfirmarService } from '../../shared/confirmar.service';
       <div class="grid">
         <label class="field">
           <span>Nombre</span>
-          <input type="text" [(ngModel)]="form.nombre" placeholder="Los del jueves, La Oficina…" />
+          <input type="text" [(ngModel)]="form.nombre" placeholder="AutomatePower" />
           <small class="pista">Como le van a decir entre ustedes.</small>
         </label>
         <label class="field">
