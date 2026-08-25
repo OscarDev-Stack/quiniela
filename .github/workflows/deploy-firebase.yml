@@ -3,8 +3,8 @@ name: Deploy Firebase
 on:
   push:
     branches:
-      - develop # -> proyecto de desarrollo
-      - master # -> produccion (con aprobacion manual)
+      - develop   # -> proyecto de desarrollo
+      - master    # -> produccion (con aprobacion manual)
 
 permissions:
   contents: read
@@ -55,7 +55,7 @@ jobs:
       # Que se registre cada funcion lo decide el codigo segun el proyecto.
       - name: Deploy funciones
         run: |
-          firebase deploy --only functions,firestore:rules --force \
+          firebase deploy --only functions,firestore:rules \
             --project ${{ github.ref == 'refs/heads/master' && 'quinelav1-e23eb' || 'quiniela-dev-d203d' }} \
             --non-interactive
 
