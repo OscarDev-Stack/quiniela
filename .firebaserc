@@ -1,5 +1,7 @@
 {
   "projects": {
+    "dev": "quiniela-dev-d203d",
+    "prod": "quinelav1-e23eb",
     "default": "quinelav1-e23eb"
   },
   "targets": {
@@ -7,6 +9,13 @@
       "hosting": {
         "principal": [
           "automatepowerv1"
+        ]
+      }
+    },
+    "quiniela-dev-d203d": {
+      "hosting": {
+        "principal": [
+          "quiniela-dev-d203d"
         ]
       }
     }

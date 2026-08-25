@@ -47,14 +47,18 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
       }
 
       @for (m of visibles(); track m.id) {
-        <article class="card" [class.card--dim]="m.status !== 'abierto' && m.status !== 'cierra-pronto'">
+        <article class="card" [class.card--dim]="m.status !== 'abierto' && m.status !== 'cierra-pronto'"
+          [class.card--e-abierto]="m.status === 'abierto'"
+          [class.card--e-pronto]="m.status === 'cierra-pronto'"
+          [class.card--e-vivo]="m.status === 'en-juego'"
+          [class.card--e-cerrado]="m.status === 'cerrado'">
           <div class="card-top">
             <span class="competition">{{ m.competition }}</span>
             @switch (m.status) {
               @case ('abierto') { <span class="badge badge--open">Abierto</span> }
               @case ('cierra-pronto') { <span class="badge badge--soon">Cierra pronto</span> }
-              @case ('en-juego') { <span class="badge"><i class="ti ti-player-play"></i> En juego</span> }
-              @case ('cerrado') { <span class="badge">Finalizado</span> }
+              @case ('en-juego') { <span class="badge badge--live"><i class="ti ti-player-play"></i> En juego</span> }
+              @case ('cerrado') { <span class="badge badge--done">Finalizado</span> }
             }
           </div>
 
@@ -97,7 +101,12 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
             }
 
             <div class="pool">
-              <i class="ti ti-coins"></i> Bolsa: {{ m.poolTotal ?? 0 | number }} pts
+              <i class="ti ti-coins"></i>
+              @if (m.status === 'abierto' || m.status === 'cierra-pronto') {
+                Bolsa: se revela al cerrar
+              } @else {
+                Bolsa: {{ m.poolTotal ?? 0 | number }} pts
+              }
               @if (m.resultadoOficial) {
                 <span class="winner">· ganó {{ nombreResultado(m, m.resultadoOficial) }}</span>
               }
@@ -177,6 +186,14 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
       }
       .badge--open { color: var(--success-text); background: var(--success-bg); }
       .badge--soon { color: var(--warning-text); background: var(--warning-bg); }
+      .badge--live { color: #fff; background: #d63b3b; }
+      .badge--done { color: var(--text-muted); background: var(--surface-2); }
+
+      /* Indicador visual de estado en la orilla de la tarjeta. */
+      .card--e-abierto { border-left: 4px solid var(--success-text); }
+      .card--e-pronto { border-left: 4px solid var(--warning-text); }
+      .card--e-vivo { border-left: 4px solid #d63b3b; }
+      .card--e-cerrado { border-left: 4px solid var(--border); }
 
       .teams {
         display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;

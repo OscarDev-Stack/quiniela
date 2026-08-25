@@ -6,6 +6,7 @@ import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
     signOut,
+    sendPasswordResetEmail,
 } from '@angular/fire/auth';
 
 @Injectable({ providedIn: 'root' })
@@ -26,6 +27,15 @@ export class AuthService {
 
     logout() {
         return signOut(this.auth);
+    }
+
+    /**
+     * Manda el correo de recuperación. El enlace lleva a la página de cambio
+     * de contraseña de Firebase (genérica). La pantalla propia /recuperar es
+     * donde el usuario pide el correo con nuestro diseño.
+     */
+    recuperarContrasena(email: string) {
+        return sendPasswordResetEmail(this.auth, email.trim());
     }
 
     /** Avisa a los administradores que hay una cuenta nueva. */

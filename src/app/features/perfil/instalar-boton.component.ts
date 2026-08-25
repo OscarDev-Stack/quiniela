@@ -18,8 +18,8 @@ import { StatsService } from '../../shared/stats.service';
   template: `
     @if (mostrar()) {
       <button class="instalar" (click)="alTocar()">
-        <i class="ti ti-download"></i>
-        <span>Instalar app</span>
+        <i class="ti ti-device-mobile"></i>
+        <span>Agregar al inicio</span>
       </button>
     }
 
@@ -49,10 +49,15 @@ import { StatsService } from '../../shared/stats.service';
               <strong>Safari</strong>. Desde otros navegadores no se puede.
             </p>
           } @else {
-            <p class="nota">
-              Busca la opción <strong>Instalar</strong> en el menú de tu navegador,
-              o abre Quiniela desde tu teléfono para agregarla al inicio.
-            </p>
+            <ol class="pasos">
+              <li>Abre el menú de tu navegador (los <strong>tres puntos</strong> ⋮ arriba).</li>
+              <li>
+                Elige <strong>Instalar app</strong> o
+                <strong>Agregar a pantalla de inicio</strong>.
+              </li>
+              <li>Confirma, y el ícono de Quiniela quedará en tu inicio.</li>
+            </ol>
+            <p class="nota">Así la abres directo desde tu teléfono, como cualquier app.</p>
           }
         </div>
       </div>
@@ -128,7 +133,7 @@ export class InstalarBotonComponent {
       const ok = await this.instalar.instalarAndroid();
       if (ok) {
         this.stats.evento('app_instalada', { plataforma: 'android' });
-        this.toast.exito('¡Listo! Quiniela se está instalando.');
+        this.toast.exito('¡Listo! Quiniela se está agregando a tu inicio.');
       }
       return;
     }

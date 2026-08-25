@@ -194,6 +194,7 @@ export class TorneosService {
     jornadaInicial: number;
     vidas: number;
     costoEntrada: number;
+    porcentajeBote: number;
     cierreInscripcion: Date;
     modo: ModoTorneo;
     jornadas: number;

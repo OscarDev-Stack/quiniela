@@ -144,6 +144,18 @@ import {
               </select>
             </label>
 
+            <label class="field">
+              <span>% al bote acumulado</span>
+              <select [(ngModel)]="nuevo.porcentajeBote">
+                <option [ngValue]="0">Nada</option>
+                <option [ngValue]="5">5%</option>
+                <option [ngValue]="10">10%</option>
+                <option [ngValue]="15">15%</option>
+                <option [ngValue]="20">20%</option>
+              </select>
+              <small class="pista">Parte de la bolsa que se guarda para un torneo especial.</small>
+            </label>
+
             @if (nuevo.modo !== 'duenos') {
             <label class="field">
               <span>Reparto de la bolsa</span>
@@ -206,6 +218,40 @@ import {
                 {{ copiado() === b.id ? '¡Copiado!' : 'Copiar enlace' }}
               </button>
             </div>
+
+            <!-- Resumen de configuración -->
+            <div class="resumen-cfg">
+              <span class="dato"><i class="ti ti-dice"></i> {{ b.modo === 'duenos' ? 'Dueños' : 'Pronóstico' }}</span>
+              <span class="dato"><i class="ti ti-users"></i> {{ b.config.equipos }} equipos</span>
+              <span class="dato"><i class="ti ti-coins"></i> Entrada: {{ b.costoEntrada | number }} pts</span>
+              <span class="dato"><i class="ti ti-trophy"></i> Bolsa: {{ b.bolsa | number }} pts</span>
+              @if (b.publico) { <span class="dato"><i class="ti ti-world"></i> Pública</span> }
+              @if (b.ganadorAlias) { <span class="dato dato--gana"><i class="ti ti-crown"></i> {{ b.ganadorAlias }}</span> }
+            </div>
+
+            <!-- Participantes / dueños -->
+            @if (b.modo === 'duenos') {
+              <button class="part-cab" (click)="alternarParts(b.id)">
+                <i class="ti" [class.ti-chevron-down]="!partsVisibles(b.id)" [class.ti-chevron-up]="partsVisibles(b.id)"></i>
+                <strong>Participantes</strong>
+                <span class="sub">{{ aceptadosDe(b) }} aceptaron de {{ (b.duenos ?? []).length }} asignados</span>
+              </button>
+              @if (partsVisibles(b.id)) {
+                @if ((b.duenos ?? []).length === 0) {
+                  <p class="sub">Aún no asignas equipos.</p>
+                }
+                @for (d of b.duenos ?? []; track d.equipo) {
+                  <div class="part">
+                    <span class="part-alias">{{ d.equipo }} → {{ d.nombre }}</span>
+                    <span class="part-datos">
+                      @if (d.estado === 'aceptado') { <span class="part-estado ok">aceptó</span> }
+                      @else if (d.estado === 'invitado') { <span class="part-estado pend">pendiente</span> }
+                      @else { <span class="part-estado">invitado</span> }
+                    </span>
+                  </div>
+                }
+              }
+            }
 
             @if (b.estado === 'armando') {
               <h3 class="sub">Arma los cruces de la primera ronda</h3>
@@ -313,6 +359,33 @@ import {
       .aviso { font-size: 13px; color: var(--text-secondary); margin: 8px 0 0; }
       .aviso--error { color: var(--danger-text); }
       .invitar { display: flex; align-items: center; gap: 10px; margin: 10px 0 14px; }
+
+      /* Resumen de configuración */
+      .resumen-cfg { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 14px; }
+      .resumen-cfg .dato {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 12px; padding: 5px 10px; border-radius: 999px;
+        background: var(--surface-1); color: var(--text-secondary);
+      }
+      .resumen-cfg .dato i { font-size: 14px; }
+      .resumen-cfg .dato--gana { background: var(--accent-bg); color: var(--accent-text); font-weight: 600; }
+
+      /* Participantes / dueños */
+      .part-cab {
+        display: flex; align-items: center; gap: 8px; width: 100%;
+        background: transparent; border: none; cursor: pointer; padding: 8px 0;
+        color: var(--text-primary); font-size: 14px; text-align: left;
+      }
+      .part-cab .sub { font-size: 12px; font-weight: 400; color: var(--text-muted); margin: 0 0 0 auto; }
+      .part {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        padding: 8px 10px; border-radius: var(--radius); background: var(--surface-1); margin-bottom: 5px;
+      }
+      .part-alias { font-size: 13px; font-weight: 600; color: var(--text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .part-datos { flex-shrink: 0; }
+      .part-estado { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); }
+      .part-estado.ok { background: var(--success-bg); color: var(--success-text); }
+      .part-estado.pend { background: var(--warning-bg); color: var(--warning-text); }
       .codigo { font-size: 13px; color: var(--text-secondary); margin: 0; }
       .sub { font-size: 14px; font-weight: 600; margin: 18px 0 10px; }
       .captura { border-top: 1px solid var(--border); padding: 12px 0; }
@@ -376,6 +449,8 @@ export class AdminBracketsComponent {
   readonly verCrear = signal(false);
   readonly abierto = signal<string | null>(null);
   readonly copiado = signal<string | null>(null);
+  /** Qué paneles de participantes están desplegados (por id de bracket). */
+  private readonly partsAbiertos = signal<Set<string>>(new Set());
   readonly creando = signal(false);
   readonly calificando = signal(false);
   readonly mensaje = signal('');
@@ -398,9 +473,28 @@ export class AdminBracketsComponent {
     escala: 'normal' as 'normal' | 'final' | 'pareja',
     publico: false,
     costoEntrada: 100,
+    porcentajeBote: 0,
     cierre: '',
     listaEquipos: '',
   };
+
+  /** ¿Está desplegado el panel de participantes de este bracket? */
+  partsVisibles(id: string): boolean {
+    return this.partsAbiertos().has(id);
+  }
+
+  alternarParts(id: string): void {
+    this.partsAbiertos.update((set) => {
+      const nuevo = new Set(set);
+      nuevo.has(id) ? nuevo.delete(id) : nuevo.add(id);
+      return nuevo;
+    });
+  }
+
+  /** Cuántos dueños ya aceptaron (modo dueños). */
+  aceptadosDe(b: Bracket): number {
+    return (b.duenos ?? []).filter((d) => d.estado === 'aceptado').length;
+  }
 
   abrir(id: string): void {
     const nuevo = this.abierto() === id ? null : id;
@@ -497,6 +591,7 @@ export class AdminBracketsComponent {
         puntaje: this.puntajeDeEscala(),
         equipos,
         costoEntrada: Number(this.nuevo.costoEntrada),
+        porcentajeBote: Number(this.nuevo.porcentajeBote),
         cierraAt: this.nuevo.cierre ? new Date(this.nuevo.cierre) : null,
         publico: this.nuevo.publico,
       });

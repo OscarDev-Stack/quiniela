@@ -1,14 +1,15 @@
-import { Component, input, output } from '@angular/core';
+import { Component, computed, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { EscudoComponent } from '../../shared/escudo.component';
+import { PuntajeBracket } from '../../core/models/bracket.model';
 
 /**
  * Ejemplo concreto con el Clausura 2026 de la Liga MX: muestra el
  * cuadro real y cuánto habría ganado alguien que acertó a los
  * campeones. Aclara las reglas con un caso que la gente reconoce.
  *
- * Los puntos se calculan con la escala normal (10/20/40, campeón +30,
- * finalista +15) para ilustrar; el bracket real usa su propia escala.
+ * Los puntos son los REALES del bracket (se le pasa su puntaje), así el
+ * ejemplo siempre coincide con la escala que configuró el admin.
  */
 @Component({
   selector: 'app-ejemplo-bracket',
@@ -36,7 +37,7 @@ import { EscudoComponent } from '../../shared/escudo.component';
           <div class="llave"><app-escudo [equipo]="'Guadalajara'" [size]="18" /><span>Guadalajara</span><b>3</b><span class="vs">–</span><b>3</b><span>Tigres</span><app-escudo [equipo]="'Tigres'" [size]="18" /></div>
           <div class="nota">Guadalajara avanza (mejor posicionado)</div>
           <div class="llave llave--acierto"><app-escudo [equipo]="'Cruz Azul'" [size]="18" /><span>Cruz Azul</span><b>4</b><span class="vs">–</span><b>2</b><span>Atlas</span><app-escudo [equipo]="'Atlas'" [size]="18" /></div>
-          <div class="nota nota--ok">Acertaste: Cruz Azul avanza · +10</div>
+          <div class="nota nota--ok">Acertaste: Cruz Azul avanza · +{{ ptCuartos() }}</div>
           <div class="llave"><app-escudo [equipo]="'Pachuca'" [size]="18" /><span>Pachuca</span><b>3</b><span class="vs">–</span><b>0</b><span>Toluca</span><app-escudo [equipo]="'Toluca'" [size]="18" /></div>
           <div class="nota">Pachuca avanza</div>
         </div>
@@ -47,22 +48,22 @@ import { EscudoComponent } from '../../shared/escudo.component';
           <div class="llave"><app-escudo [equipo]="'Pumas'" [size]="18" /><span>Pumas</span><b>1</b><span class="vs">–</span><b>1</b><span>Pachuca</span><app-escudo [equipo]="'Pachuca'" [size]="18" /></div>
           <div class="nota">Pumas avanza (mejor posicionado) — a la final</div>
           <div class="llave llave--acierto"><app-escudo [equipo]="'Guadalajara'" [size]="18" /><span>Guadalajara</span><b>3</b><span class="vs">–</span><b>4</b><span>Cruz Azul</span><app-escudo [equipo]="'Cruz Azul'" [size]="18" /></div>
-          <div class="nota nota--ok">Acertaste: Cruz Azul a la final · +20 y +15 de finalista</div>
+          <div class="nota nota--ok">Acertaste: Cruz Azul a la final · +{{ ptSemi() }} y +{{ ptFinalista() }} de finalista</div>
         </div>
 
         <!-- Final -->
         <div class="ronda">
           <span class="ronda-tit">Final</span>
           <div class="llave llave--acierto"><app-escudo [equipo]="'Pumas'" [size]="18" /><span>Pumas</span><b>1</b><span class="vs">–</span><b>2</b><span>Cruz Azul</span><app-escudo [equipo]="'Cruz Azul'" [size]="18" /></div>
-          <div class="nota nota--ok">¡Acertaste al campeón! · +40 y +30 de campeón</div>
+          <div class="nota nota--ok">¡Acertaste al campeón! · +{{ ptFinal() }} y +{{ ptCampeon() }} de campeón</div>
         </div>
 
         <!-- Total -->
         <div class="total">
-          <div class="total-fila"><span>Cruz Azul pasa cuartos</span><b>+10</b></div>
-          <div class="total-fila"><span>Cruz Azul a la final (avance +20, finalista +15)</span><b>+35</b></div>
-          <div class="total-fila"><span>Cruz Azul campeón (final +40, campeón +30)</span><b>+70</b></div>
-          <div class="total-fila total-fila--gordo"><span>Total ganado</span><b>+115</b></div>
+          <div class="total-fila"><span>Cruz Azul pasa cuartos</span><b>+{{ ptCuartos() }}</b></div>
+          <div class="total-fila"><span>Cruz Azul a la final (avance +{{ ptSemi() }}, finalista +{{ ptFinalista() }})</span><b>+{{ totalSemi() }}</b></div>
+          <div class="total-fila"><span>Cruz Azul campeón (final +{{ ptFinal() }}, campeón +{{ ptCampeon() }})</span><b>+{{ totalFinal() }}</b></div>
+          <div class="total-fila total-fila--gordo"><span>Total ganado</span><b>+{{ totalTodo() }}</b></div>
         </div>
 
         <p class="pie">
@@ -143,4 +144,29 @@ import { EscudoComponent } from '../../shared/escudo.component';
 })
 export class EjemploBracketComponent {
   readonly cerrar = output<void>();
+
+  /** El puntaje real del bracket, para que el ejemplo use sus números. */
+  readonly puntaje = input.required<PuntajeBracket>();
+
+  /*
+   * El ejemplo muestra 3 rondas (cuartos → semi → final). Tomamos las
+   * ÚLTIMAS tres del puntaje real, que siempre terminan en la final, para
+   * que los números coincidan aunque el bracket tenga 4, 8 o 16 equipos.
+   */
+  private readonly tresRondas = computed(() => {
+    const arr = this.puntaje().avanzaPorRonda ?? [10, 20, 40];
+    return arr.slice(-3);
+  });
+
+  /** Puntos por avanzar en cada ronda del ejemplo. */
+  readonly ptCuartos = computed(() => this.tresRondas()[0] ?? 10);
+  readonly ptSemi = computed(() => this.tresRondas()[1] ?? 20);
+  readonly ptFinal = computed(() => this.tresRondas()[2] ?? 40);
+  readonly ptCampeon = computed(() => this.puntaje().campeon ?? 0);
+  readonly ptFinalista = computed(() => this.puntaje().finalista ?? 0);
+
+  /** Totales que se muestran al final. */
+  readonly totalSemi = computed(() => this.ptSemi() + this.ptFinalista());
+  readonly totalFinal = computed(() => this.ptFinal() + this.ptCampeon());
+  readonly totalTodo = computed(() => this.ptCuartos() + this.totalSemi() + this.totalFinal());
 }

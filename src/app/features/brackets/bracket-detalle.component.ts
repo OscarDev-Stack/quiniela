@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
@@ -67,10 +67,6 @@ import { Bracket } from '../../core/models/bracket.model';
           </section>
         }
 
-        @if (b.estado === 'inscripcion' && resolviendo()) {
-          <p class="cargando">Cargando…</p>
-        }
-
         <!-- ── MODO DUEÑOS ── -->
         @if (b.modo === 'duenos') {
           @if (miDueno(); as d) {
@@ -78,7 +74,7 @@ import { Bracket } from '../../core/models/bracket.model';
               <section class="panel panel--aviso">
                 <h2>Te tocó un equipo</h2>
                 <div class="tu-equipo">
-                  <app-escudo [equipo]="d.equipo" [size]="56" />
+                  <app-escudo [equipo]="d.equipo" [size]="88" />
                   <span class="tu-equipo-nom">{{ d.equipo }}</span>
                 </div>
                 <p class="aviso-txt">
@@ -100,7 +96,7 @@ import { Bracket } from '../../core/models/bracket.model';
               <section class="panel">
                 <h2>Tu equipo</h2>
                 <div class="tu-equipo">
-                  <app-escudo [equipo]="d.equipo" [size]="56" />
+                  <app-escudo [equipo]="d.equipo" [size]="88" />
                   <span class="tu-equipo-nom">{{ d.equipo }}</span>
                 </div>
                 <p class="aviso-txt">Ganas si {{ d.equipo }} es campeón. Sigue el cuadro de arriba.</p>
@@ -284,7 +280,7 @@ import { Bracket } from '../../core/models/bracket.model';
         display: flex; flex-direction: column; align-items: center; gap: 8px;
         padding: 14px 0;
       }
-      .tu-equipo-nom { font-size: 20px; font-weight: 800; color: var(--text-primary); }
+      .tu-equipo-nom { font-size: 24px; font-weight: 800; color: var(--text-primary); }
       .aviso-txt { font-size: 14px; color: var(--text-secondary); line-height: 1.5; margin: 0 0 14px; text-align: center; }
       .reglas-mini { margin: 0 0 16px; }
 
@@ -346,10 +342,7 @@ export class BracketDetalleComponent {
   readonly cargando = signal(true);
   private readonly inicioCarga = Date.now();
 
-  readonly bracket = toSignal(
-    this.service.bracket(this.id()).pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
-    { initialValue: null },
-  );
+  readonly bracket = toSignal(this.service.bracket(this.id()), { initialValue: null });
   readonly miUid = toSignal(user(this.auth).pipe(map((u) => u?.uid ?? null)), {
     initialValue: null,
   });
@@ -377,6 +370,25 @@ export class BracketDetalleComponent {
 
   /** Se pone en true cuando ya sabemos si hay pronóstico (evita parpadeo). */
   private readonly pronCargado = signal(false);
+
+  /**
+   * ¿Ya tenemos todo para mostrar sin saltos? Necesitamos el bracket, y
+   * además el pronóstico propio SALVO en modo dueños o cuando ya terminó
+   * (ahí el pronóstico individual no se espera).
+   */
+  private readonly listoParaMostrar = computed(() => {
+    const b = this.bracket();
+    if (!b) return false;
+    if (b.modo === 'duenos' || b.estado === 'finalizado') return true;
+    return this.pronCargado();
+  });
+
+  /** Apaga el overlay de carga solo cuando ya está todo listo (sin saltos). */
+  private readonly apagar = effect(() => {
+    if (this.listoParaMostrar()) {
+      apagarCargando(this.cargando, this.inicioCarga);
+    }
+  });
 
   /** ¿Ya tengo un pronóstico guardado? Entonces no pido aceptar de nuevo. */
   private readonly yaPronostico = computed(() => !!this.miPron());

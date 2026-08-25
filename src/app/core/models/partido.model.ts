@@ -23,20 +23,28 @@ export interface Partido {
     awayTeam: string;
     type: TipoPartido;
     status: EstadoPartido;
+    /* Fecha y hora real de cierre. El servidor cierra el partido solo. */
     closesAt?: Timestamp | { seconds: number } | Date | null;
+    /* Etiqueta antigua, se conserva por compatibilidad. */
     closesLabel?: string;
     poolTotal?: number;
+    /* Se publican al iniciar el partido. */
     porResultado?: Record<string, number>;
     premioPor100?: Record<string, number>;
     prizes?: PremioResultado[];
     resultadoOficial?: string;
+    /* Vínculo con el partido real de API-Football. */
     apiFixtureId?: number;
+    /* Resultado precargado por la API, a la espera de confirmación. */
     resultadoPropuesto?: string;
     marcadorPropuesto?: string;
     alertaApi?: string;
+    /* % de la bolsa que se desvía al bote acumulado (0 = nada). */
+    porcentajeBote?: number;
     liquidado?: boolean;
 }
 
+/** Convierte el campo de cierre a Date, venga como venga. */
 export function fechaCierre(p: Partido): Date | null {
     const v = p.closesAt as unknown;
     if (!v) return null;
@@ -47,6 +55,7 @@ export function fechaCierre(p: Partido): Date | null {
     return null;
 }
 
+/** Texto tipo "Cierra en 2h 15m" o "Cerrado". */
 export function textoRestante(p: Partido, ahora: number): string {
     const f = fechaCierre(p);
     if (!f) return p.closesLabel ?? 'Por definir';
