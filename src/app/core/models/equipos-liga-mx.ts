@@ -195,7 +195,7 @@ export const EQUIPOS_LIGA_MX: EquipoCatalogo[] = [
   { nombre: 'Aston Villa', escudo: 'astonvilla.png', alias: ['aston villa', 'aston villa fc'], liga: 'Premier League' },
   { nombre: 'Bournemouth', escudo: 'bournemouth.png', alias: ['bournemouth', 'afc bournemouth'], liga: 'Premier League' },
   { nombre: 'Brentford', escudo: 'brentford.png', alias: ['brentford', 'brentford fc'], liga: 'Premier League' },
-  { nombre: 'Brighton', escudo: 'brighton.png', alias: ['brighton', 'brighton & hove albion', 'brighton and hove albion'], liga: 'Premier League' },
+  { nombre: 'Brighton', escudo: 'brighton.png', alias: ['Brighton Hove', 'brighton', 'brighton & hove albion', 'brighton and hove albion'], liga: 'Premier League' },
   { nombre: 'Chelsea', escudo: 'chelsea.png', alias: ['chelsea', 'chelsea fc'], liga: 'Premier League' },
   { nombre: 'Coventry City', escudo: 'coventry.png', alias: ['coventry city', 'coventry', 'coventry city fc'], liga: 'Premier League' },
   { nombre: 'Crystal Palace', escudo: 'crystalpalace.png', alias: ['crystal palace', 'crystal palace fc'], liga: 'Premier League' },
