@@ -231,6 +231,28 @@ export const EQUIPOS_LIGA_MX: EquipoCatalogo[] = [
   { nombre: 'Strasbourg', escudo: 'racingetrasburgo.png', alias: ['strasbourg', 'rc strasbourg', 'rc strasbourg alsace', 'racing strasbourg'], liga: 'Ligue 1' },
   { nombre: 'Toulouse', escudo: 'toulouse.png', alias: ['toulouse', 'toulouse fc'], liga: 'Ligue 1' },
   { nombre: 'Troyes', escudo: 'troyes.png', alias: ['troyes', 'estac', 'estac troyes'], liga: 'Ligue 1' },
+
+  /* ---------------- Serie A 2026/27 (20 clubes) ---------------- */
+  { nombre: 'Atalanta', escudo: 'atalanta.png', alias: ['atalanta', 'atalanta bc', 'bergamo'], liga: 'Serie A' },
+  { nombre: 'Bologna', escudo: 'bologna.png', alias: ['bologna', 'bologna fc', 'bologna fc 1909'], liga: 'Serie A' },
+  { nombre: 'Cagliari', escudo: 'cagliari.png', alias: ['cagliari', 'cagliari calcio'], liga: 'Serie A' },
+  { nombre: 'Como', escudo: 'como.png', alias: ['como', 'como 1907', 'como calcio'], liga: 'Serie A' },
+  { nombre: 'Fiorentina', escudo: 'fiorentina.png', alias: ['fiorentina', 'acf fiorentina', 'fiorentina fc'], liga: 'Serie A' },
+  { nombre: 'Frosinone', escudo: 'frosinone.png', alias: ['frosinone', 'frosinone calcio'], liga: 'Serie A' },
+  { nombre: 'Genoa', escudo: 'genoa.png', alias: ['genoa', 'genoa cfc', 'genoa cricket and football club'], liga: 'Serie A' },
+  { nombre: 'Inter', escudo: 'inter.png', alias: ['inter', 'inter milan', 'internazionale', 'inter milan fc', 'fc internazionale'], liga: 'Serie A' },
+  { nombre: 'Juventus', escudo: 'juventus.png', alias: ['juventus', 'juve', 'juventus fc'], liga: 'Serie A' },
+  { nombre: 'Lazio', escudo: 'lazio.png', alias: ['lazio', 'ss lazio'], liga: 'Serie A' },
+  { nombre: 'Lecce', escudo: 'lecce.png', alias: ['lecce', 'us lecce', 'us lecce calcio'], liga: 'Serie A' },
+  { nombre: 'Milan', escudo: 'milan.png', alias: ['milan', 'ac milan', 'milan ac', 'acmilan'], liga: 'Serie A' },
+  { nombre: 'Monza', escudo: 'monza.png', alias: ['monza', 'ac monza', 'monza calcio'], liga: 'Serie A' },
+  { nombre: 'Napoli', escudo: 'napoli.png', alias: ['napoli', 'ssc napoli', 'napoli fc'], liga: 'Serie A' },
+  { nombre: 'Parma', escudo: 'parma.png', alias: ['parma', 'parma calcio', 'parma fc'], liga: 'Serie A' },
+  { nombre: 'Roma', escudo: 'roma.png', alias: ['roma', 'as roma', 'as roma calcio'], liga: 'Serie A' },
+  { nombre: 'Sassuolo', escudo: 'sassuolo.png', alias: ['sassuolo', 'us sassuolo', 'sassuolo calcio'], liga: 'Serie A' },
+  { nombre: 'Torino', escudo: 'torino.png', alias: ['torino', 'torino fc', 'torino calcio'], liga: 'Serie A' },
+  { nombre: 'Udinese', escudo: 'udinese.png', alias: ['udinese', 'udinese calcio'], liga: 'Serie A' },
+  { nombre: 'Venezia', escudo: 'venezia.png', alias: ['venezia', 'venezia fc', 'venice'], liga: 'Serie A' },
 ];
 
 /** Quita acentos y espacios extra, para comparar nombres sin fallar por tildes. */
