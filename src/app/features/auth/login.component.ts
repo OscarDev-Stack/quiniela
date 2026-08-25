@@ -12,8 +12,8 @@ import { APP_VERSION } from '../../core/version';
     <div class="auth-wrap">
       <div class="auth-card">
         <div class="brand">
-          <span class="brand-mark">Q</span>
-          <span class="brand-name">Quiniela</span>
+          <span class="brand-mark">A</span>
+          <span class="brand-name">AutomatePower</span>
         </div>
         <h1 class="auth-title">Iniciar sesión</h1>
         <p class="auth-subtitle">Entra para hacer tus pronósticos.</p>

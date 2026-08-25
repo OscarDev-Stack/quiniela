@@ -52,3 +52,7 @@ Thumbs.db
 .scannerwork/
 .sonarlint/
 sonar-project.properties
+
+# test
+scripts/service-account-dev.json
+scripts/config-dev.json

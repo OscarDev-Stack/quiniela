@@ -104,7 +104,6 @@ interface Opcion {
   `,
   styles: [
     `
-      .screen { max-width: 460px; margin: 0 auto; padding: 16px; }
       .card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 16px; padding: 18px; }
 
       .competition { font-size: 12px; color: var(--text-muted); text-align: center; margin-bottom: 6px; }

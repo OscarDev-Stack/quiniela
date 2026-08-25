@@ -64,7 +64,6 @@ import { Partido } from '../../core/models/partido.model';
   `,
   styles: [
     `
-      .screen { max-width: 460px; margin: 0 auto; padding: 16px; }
       .title { font-size: 18px; font-weight: 600; margin: 0 0 14px; }
       .empty { color: var(--text-muted); font-size: 14px; text-align: center; padding: 32px 0; }
 

@@ -108,11 +108,13 @@ import { TorneosService } from '../core/services/torneos.service';
       .topbar {
         position: sticky; top: 0; z-index: 20;
         display: flex; align-items: center; gap: 6px;
+        /* Ancho consistente en todas las vistas, aunque el contenedor
+           (p.ej. admin a 780px) sea más ancho: la barra se mantiene igual. */
+        width: 100%; max-width: 460px; margin: 0 auto 16px;
         /* Deja libre la barra de estado cuando corre como app instalada. */
         padding: calc(12px + env(safe-area-inset-top)) 0 12px;
         background: var(--surface-0);
         border-bottom: 1px solid var(--border);
-        margin-bottom: 16px;
       }
       .brand { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
       .avatar { cursor: pointer;

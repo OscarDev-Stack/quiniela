@@ -24,7 +24,6 @@ import { NavComponent } from '../../shared/nav.component';
   styles: [
     `
       .admin { max-width: 780px; }
-      .admin-top { margin-top: 2px; }
       .admin-top {
         display: flex; align-items: center; justify-content: space-between;
         flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
