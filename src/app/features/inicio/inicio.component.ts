@@ -16,11 +16,12 @@ import { Torneo } from '../../core/models/torneo.model';
 import { Bracket } from '../../core/models/bracket.model';
 
 /**
- * Hub de inicio: un panel con el resumen de todo lo que el jugador tiene en
- * juego. Arriba, contadores grandes por tipo. Abajo, las tarjetas con su
- * fecha de cierre. Las tarjetas son oscuras (como el resto de la app) con
- * un borde izquierdo de color que identifica el tipo:
- * pronósticos (morado), survivor (rojo), quiniela (verde), brackets (azul).
+ * Hub de inicio. Arriba, el saludo con el avatar y una fila compacta de
+ * stats (saldo, racha y trofeos; racha/trofeos solo si son > 0). Debajo,
+ * una tarjeta DESTACADA con lo más relevante para actuar ahora (un torneo
+ * en curso, o el próximo partido a cerrar). El resto se organiza en
+ * secciones por tipo, con su color: pronósticos (morado), survivor (rojo),
+ * quiniela (verde), eliminatorias (azul).
  */
 @Component({
   selector: 'app-inicio',
@@ -33,12 +34,20 @@ import { Bracket } from '../../core/models/bracket.model';
       @if (cargando()) {
         <app-cargando texto="Cargando tu inicio" />
       } @else {
-        <!-- Bienvenida (toca para ir a tu perfil) -->
-        <button class="bienvenida" (click)="ir('/perfil')">
-          <span class="bienvenida-avatar">{{ inicial() }}</span>
-          <span class="bienvenida-txt">
+        <!-- Saludo con avatar + stats compactos (toca para ir a tu perfil) -->
+        <button class="saludo" (click)="ir('/perfil')">
+          <span class="saludo-avatar">{{ inicial() }}</span>
+          <span class="saludo-txt">
             <span class="hola">Hola{{ alias() ? ', ' + alias() : '' }} 👋</span>
-            <span class="sub">Esto es todo lo que tienes en juego ahora mismo.</span>
+            <span class="stats">
+              <span class="stat"><b>{{ puntos() | number }}</b> pts</span>
+              @if (racha() > 0) {
+                <span class="stat"><i class="ti ti-flame"></i> <b>{{ racha() }}</b></span>
+              }
+              @if (trofeos() > 0) {
+                <span class="stat"><i class="ti ti-trophy"></i> <b>{{ trofeos() }}</b></span>
+              }
+            </span>
           </span>
           <i class="ti ti-chevron-right"></i>
         </button>
@@ -49,6 +58,18 @@ import { Bracket } from '../../core/models/bracket.model';
             <p>Aún no tienes nada en juego.</p>
             <p class="pista">En cuanto se abra un partido o te inviten a un torneo, aparecerá aquí.</p>
           </div>
+        }
+
+        <!-- TARJETA DESTACADA: lo más relevante para actuar ahora -->
+        @if (destacado(); as d) {
+          <button class="destacado" [class]="'destacado--' + d.tipo" (click)="ir(d.ruta)">
+            <span class="destacado-top">
+              <i class="ti" [class]="d.icono"></i>
+              <span class="destacado-eti">{{ d.etiqueta }}</span>
+            </span>
+            <span class="destacado-nom">{{ d.titulo }}</span>
+            <span class="destacado-sub">{{ d.sub }}</span>
+          </button>
         }
 
         <!-- PARTIDOS (morado) -->
@@ -156,29 +177,49 @@ import { Bracket } from '../../core/models/bracket.model';
     `
       .screen { padding-bottom: 96px; }
 
-      .bienvenida {
+      /* Saludo con avatar + stats compactos */
+      .saludo {
         width: 100%; display: flex; align-items: center; gap: 12px; text-align: left;
         margin: 4px 0 16px; padding: 12px 14px; cursor: pointer;
         border: 1px solid var(--border); border-radius: var(--radius-lg);
         background: var(--surface-1);
       }
-      .bienvenida-avatar {
-        flex-shrink: 0; width: 42px; height: 42px; border-radius: 50%;
+      .saludo-avatar {
+        flex-shrink: 0; width: 46px; height: 46px; border-radius: 50%;
         display: flex; align-items: center; justify-content: center;
         background: var(--accent-fill); color: #fff; font-size: 18px; font-weight: 700;
       }
-      .bienvenida-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-      .hola { font-size: 18px; font-weight: 800; color: var(--text-primary); }
-      .bienvenida .sub { font-size: 12px; color: var(--text-secondary); }
-      .bienvenida > .ti-chevron-right { color: var(--text-muted); flex-shrink: 0; }
+      .saludo-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+      .hola { font-size: 17px; font-weight: 800; color: var(--text-primary); }
+      .stats { display: flex; gap: 12px; }
+      .stat { font-size: 12px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 3px; }
+      .stat b { color: var(--text-primary); font-weight: 700; }
+      .stat .ti-flame { color: var(--tipo-surv-fill); font-size: 13px; }
+      .stat .ti-trophy { color: #c99a2e; font-size: 13px; }
+      .saludo > .ti-chevron-right { color: var(--text-muted); flex-shrink: 0; }
 
-      /* Contadores grandes: tarjeta oscura + borde izquierdo de color */
+      /* Tarjeta destacada: fondo de color con texto blanco */
+      .destacado {
+        width: 100%; display: flex; flex-direction: column; gap: 3px; text-align: left;
+        margin: 0 0 16px; padding: 16px; cursor: pointer;
+        border: none; border-radius: var(--radius-lg); color: #fff;
+      }
+      .destacado--surv { background: var(--tipo-surv-fill); }
+      .destacado--quin { background: var(--tipo-quin-fill); }
+      .destacado--elim { background: var(--tipo-elim-fill); }
+      .destacado--pron { background: var(--tipo-pron-fill); }
+      .destacado-top { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+      .destacado-top .ti { font-size: 17px; }
+      .destacado-eti { font-size: 11px; opacity: 0.9; letter-spacing: 0.5px; text-transform: uppercase; }
+      .destacado-nom { font-size: 18px; font-weight: 800; }
+      .destacado-sub { font-size: 13px; opacity: 0.92; }
+
       .vacio { text-align: center; padding: 40px 24px; color: var(--text-muted); }
       .vacio i { font-size: 40px; opacity: 0.5; }
       .vacio p { margin: 10px 0 0; font-size: 14px; }
       .vacio .pista { font-size: 12px; }
 
-      /* Bloques: tarjeta oscura + borde izquierdo de color */
+      /* Bloques: tarjeta + borde izquierdo de color */
       .bloque {
         margin: 0 0 16px; padding: 14px; border-radius: var(--radius-lg);
         border: 1px solid var(--border); border-left: 4px solid var(--c-fill);
@@ -228,6 +269,9 @@ export class InicioComponent {
   private readonly me = toSignal(this.usersSrv.me$, { initialValue: null });
   readonly alias = computed(() => this.me()?.alias ?? '');
   readonly inicial = computed(() => (this.me()?.alias ?? '?').charAt(0).toUpperCase());
+  readonly puntos = computed(() => this.me()?.puntos ?? 0);
+  readonly racha = computed(() => this.me()?.racha ?? 0);
+  readonly trofeos = computed(() => this.me()?.torneosGanados ?? 0);
 
   private readonly partidos = toSignal(
     this.partidosSrv.getPartidos().pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
@@ -259,6 +303,60 @@ export class InicioComponent {
   esPublicoNoMio(b: Bracket): boolean {
     return !this.idsMios().has(b.id);
   }
+
+  /**
+   * Lo más relevante para mostrar destacado. Prioriza torneos en curso
+   * (donde el jugador debe actuar), luego una quiniela/survivor en
+   * inscripción, y como último recurso el próximo partido por cerrar.
+   * Devuelve null si no hay nada, y entonces no se pinta la tarjeta.
+   */
+  readonly destacado = computed(() => {
+    const survEnCurso = this.survivors().find((t) => t.estado === 'en-curso');
+    if (survEnCurso) {
+      return {
+        tipo: 'surv',
+        icono: 'ti-activity-heartbeat',
+        etiqueta: 'Survivor · en curso',
+        titulo: survEnCurso.nombre,
+        sub: `Jornada ${survEnCurso.jornadaActual} · elige tu equipo`,
+        ruta: '/torneos/' + survEnCurso.id,
+      };
+    }
+    const quinEnCurso = this.quinielas().find((t) => t.estado === 'en-curso');
+    if (quinEnCurso) {
+      return {
+        tipo: 'quin',
+        icono: 'ti-list-check',
+        etiqueta: 'Quiniela · en curso',
+        titulo: quinEnCurso.nombre,
+        sub: `Jornada ${quinEnCurso.jornadaActual} · captura tus marcadores`,
+        ruta: '/torneos/' + quinEnCurso.id,
+      };
+    }
+    const elimEnCurso = this.eliminatorias().find((b) => b.estado === 'en-curso');
+    if (elimEnCurso) {
+      return {
+        tipo: 'elim',
+        icono: 'ti-sitemap',
+        etiqueta: 'Eliminatoria · en curso',
+        titulo: elimEnCurso.nombre,
+        sub: 'Sigue tu cuadro',
+        ruta: '/eliminatorias/' + elimEnCurso.id,
+      };
+    }
+    const prox = this.partidosAbiertos()[0];
+    if (prox) {
+      return {
+        tipo: 'pron',
+        icono: 'ti-ticket',
+        etiqueta: 'Partido abierto',
+        titulo: `${prox.homeTeam} — ${prox.awayTeam}`,
+        sub: prox.competition + ' · toca para pronosticar',
+        ruta: '/pronosticar/' + prox.id,
+      };
+    }
+    return null;
+  });
 
   readonly todoVacio = computed(
     () =>
