@@ -10,6 +10,7 @@ import { SelectorEquipoComponent } from '../../shared/selector-equipo.component'
 import { Partido, TipoPartido, fechaCierre } from '../../core/models/partido.model';
 import { Bolsa } from '../../core/models/bolsa.model';
 import { ConfirmarService } from '../../shared/confirmar.service';
+import { ToastService } from '../../shared/toast.service';
 
 interface Outcome {
   value: string;
@@ -21,13 +22,6 @@ interface Outcome {
   standalone: true,
   imports: [CommonModule, FormsModule, EscudoComponent, SelectorEquipoComponent],
   template: `
-    @if (mensaje()) {
-      <div class="msg" (click)="mensaje.set('')">
-        <i class="ti ti-info-circle"></i> {{ mensaje() }}
-        <i class="ti ti-x cerrar"></i>
-      </div>
-    }
-
     <div class="stats">
       <div class="stat"><div class="stat-label">Partidos</div><div class="stat-val">{{ partidos().length }}</div></div>
       <div class="stat"><div class="stat-label">Abiertos</div><div class="stat-val">{{ abiertos() }}</div></div>
@@ -57,7 +51,6 @@ interface Outcome {
         <label class="field">
           <span>Competición</span>
           <select [(ngModel)]="busqueda.competicion">
-            <option value="WC">Copa del Mundo</option>
             <option value="CL">Champions League</option>
             <option value="PL">Premier League</option>
             <option value="PD">LaLiga</option>
@@ -172,16 +165,36 @@ interface Outcome {
           {{ recalculando() ? 'Recalculando…' : 'Recalcular bolsas' }}
         </button>
       </div>
-      @if (partidos().length === 0) {
-        <p class="empty">Aún no hay partidos.</p>
+
+      <nav class="tabs">
+        <button class="tab" [class.tab--on]="tabPartidos() === 'en-juego'" (click)="tabPartidos.set('en-juego')">
+          En juego <span class="tab-num">{{ enJuego() }}</span>
+        </button>
+        <button class="tab" [class.tab--on]="tabPartidos() === 'abiertos'" (click)="tabPartidos.set('abiertos')">
+          Abiertos <span class="tab-num">{{ abiertos() }}</span>
+        </button>
+        <button class="tab" [class.tab--on]="tabPartidos() === 'cerrados'" (click)="tabPartidos.set('cerrados')">
+          Cerrados <span class="tab-num">{{ cerrados() }}</span>
+        </button>
+      </nav>
+
+      @if (partidosVisibles().length === 0) {
+        <p class="empty">No hay partidos en esta sección.</p>
       }
-      @for (p of partidos(); track p.id) {
+      @for (p of partidosVisibles(); track p.id) {
         <div class="row">
           <div class="row-main">
             <div class="row-title">{{ p.homeTeam }} vs {{ p.awayTeam }}</div>
             <div class="row-sub">
               {{ p.competition }} · {{ typeLabel(p.type) }}
               @if (cierre(p); as c) { · cierra {{ c | date: 'dd/MM, h:mm a' }} }
+            </div>
+            <div class="row-origen">
+              @if (p.apiFixtureId) {
+                <span class="origen origen--api"><i class="ti ti-cloud"></i> API</span>
+              } @else {
+                <span class="origen origen--manual"><i class="ti ti-hand-finger"></i> Manual</span>
+              }
             </div>
           </div>
           <span class="tag tag--{{ p.status }}">{{ p.status }}</span>
@@ -301,6 +314,25 @@ interface Outcome {
       .row-main { flex: 1; min-width: 160px; }
       .row-title { font-size: 14px; font-weight: 600; }
       .row-sub { font-size: 12px; color: var(--text-muted); }
+      .tabs { display: flex; gap: 6px; margin-top: 8px; margin-bottom: 18px; }
+      .tab {
+        flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+        padding: 9px 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-2); color: var(--text-secondary);
+      }
+      .tab--on { background: var(--accent-fill); color: #fff; border-color: var(--accent-fill); }
+      .tab-num {
+        flex-shrink: 0; width: 22px; height: 22px; box-sizing: border-box;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11px; border-radius: 999px;
+        background: rgba(0, 0, 0, 0.12);
+      }
+      .tab--on .tab-num { background: rgba(255, 255, 255, 0.25); }
+      .row-origen { margin-top: 6px; }
+      .origen { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 74px; box-sizing: border-box; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+      .origen--api { color: var(--tipo-elim-fill); background: var(--tipo-elim-bg, rgba(55, 138, 221, 0.12)); }
+      .origen--manual { color: var(--text-secondary); background: var(--surface-1); }
       .row-actions { display: flex; gap: 6px; align-items: center; }
       .result { font-size: 12px; color: var(--text-secondary); }
 
@@ -359,6 +391,7 @@ export class AdminPartidosComponent {
   readonly selectorVisita = signal(false);
 
   private readonly admin = inject(AdminService);
+  private readonly toast = inject(ToastService);
 
   readonly partidos = toSignal(this.admin.getPartidos(), { initialValue: [] as Partido[] });
 
@@ -366,6 +399,33 @@ export class AdminPartidosComponent {
     () => this.partidos().filter((p) => p.status === 'abierto' || p.status === 'cierra-pronto').length,
   );
   readonly cerrados = computed(() => this.partidos().filter((p) => p.status === 'cerrado').length);
+  readonly enJuego = computed(() => this.partidos().filter((p) => p.status === 'en-juego').length);
+
+  /** Tab activo de la lista de partidos. */
+  readonly tabPartidos = signal<'en-juego' | 'abiertos' | 'cerrados'>('abiertos');
+
+  /** Ordena por hora de cierre (el más próximo primero); sin fecha, al final. */
+  private porCierre(lista: Partido[]): Partido[] {
+    return [...lista].sort((a, b) => {
+      const fa = fechaCierre(a)?.getTime() ?? Infinity;
+      const fb = fechaCierre(b)?.getTime() ?? Infinity;
+      return fa - fb;
+    });
+  }
+
+  /** Partidos del tab activo, ya ordenados por cierre. */
+  readonly partidosVisibles = computed(() => {
+    const t = this.tabPartidos();
+    const todos = this.partidos();
+    if (t === 'en-juego') {
+      return this.porCierre(todos.filter((p) => p.status === 'en-juego'));
+    }
+    if (t === 'cerrados') {
+      return this.porCierre(todos.filter((p) => p.status === 'cerrado'));
+    }
+    // abiertos (incluye cierra-pronto)
+    return this.porCierre(todos.filter((p) => p.status === 'abierto' || p.status === 'cierra-pronto'));
+  });
 
   private readonly bolsas = toSignal(this.admin.getBolsas(), { initialValue: [] as Bolsa[] });
 
@@ -424,7 +484,7 @@ export class AdminPartidosComponent {
   >([]);
 
   busqueda = {
-    competicion: 'WC',
+    competicion: 'CL',
     desde: '',
     hasta: '',
     type: '1x2' as TipoPartido,
@@ -432,11 +492,10 @@ export class AdminPartidosComponent {
 
   async buscar(): Promise<void> {
     if (!this.busqueda.desde) {
-      this.mensaje.set('Elige al menos la fecha inicial.');
+      this.toast.error('Elige al menos la fecha inicial.');
       return;
     }
     this.buscando.set(true);
-    this.mensaje.set('');
     try {
       const r = await this.admin.buscarFixtures(
         this.busqueda.competicion,
@@ -444,9 +503,9 @@ export class AdminPartidosComponent {
         this.busqueda.hasta || this.busqueda.desde,
       );
       this.encontrados.set(r);
-      if (r.length === 0) this.mensaje.set('No se encontraron partidos próximos en esas fechas.');
+      if (r.length === 0) this.toast.error('No se encontraron partidos próximos en esas fechas.');
     } catch (e: unknown) {
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo buscar.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo buscar.');
     } finally {
       this.buscando.set(false);
     }
@@ -462,7 +521,7 @@ export class AdminPartidosComponent {
   }): Promise<void> {
     const inicio = new Date(f.fecha);
     if (inicio.getTime() <= Date.now()) {
-      this.mensaje.set('Ese partido ya empezó.');
+      this.toast.error('Ese partido ya empezó.');
       return;
     }
     await this.admin.crearPartido({
@@ -475,7 +534,7 @@ export class AdminPartidosComponent {
       apiFixtureId: f.apiFixtureId,
     });
     this.encontrados.set(this.encontrados().filter((x) => x.apiFixtureId !== f.apiFixtureId));
-    this.mensaje.set(`Partido creado: ${f.homeTeam} vs ${f.awayTeam}.`);
+    this.toast.exito(`Partido creado: ${f.homeTeam} vs ${f.awayTeam}.`);
   }
 
   /** Confirma el resultado precargado por la API y liquida. */
@@ -490,14 +549,13 @@ export class AdminPartidosComponent {
     if (!ok) return;
 
     this.liquidando.set(true);
-    this.mensaje.set('');
     try {
       const r = await this.admin.liquidar(p.id, p.resultadoPropuesto);
-      this.mensaje.set(
+      this.toast.exito(
         `Liquidado: ${r.ganadores} de ${r.participantes} · bolsa ${r.bolsa} · sobrante ${r.sobrante}.`,
       );
     } catch (e: unknown) {
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo liquidar.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo liquidar.');
     } finally {
       this.liquidando.set(false);
     }
@@ -505,17 +563,15 @@ export class AdminPartidosComponent {
 
   async recalcularBolsas(): Promise<void> {
     this.recalculando.set(true);
-    this.mensaje.set('');
     try {
       const r = await this.admin.recalcularBolsas();
-      this.mensaje.set(`Bolsas recalculadas: ${r.partidos} partido(s).`);
+      this.toast.exito(`Bolsas recalculadas: ${r.partidos} partido(s).`);
     } catch (e: unknown) {
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo recalcular.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo recalcular.');
     } finally {
       this.recalculando.set(false);
     }
   }
-  readonly mensaje = signal('');
   chosenOutcome = '';
 
   private readonly typeLabels: Record<TipoPartido, string> = {
@@ -579,16 +635,16 @@ export class AdminPartidosComponent {
     this.saving.set(true);
     try {
       if (!this.form.closesAt) {
-        this.mensaje.set('Elige la fecha y hora de cierre.');
+        this.toast.error('Elige la fecha y hora de cierre.');
         return;
       }
       const cierre = new Date(this.form.closesAt);
       if (isNaN(cierre.getTime())) {
-        this.mensaje.set('La fecha de cierre no es válida.');
+        this.toast.error('La fecha de cierre no es válida.');
         return;
       }
       if (cierre.getTime() <= Date.now()) {
-        this.mensaje.set('La hora de cierre debe estar en el futuro.');
+        this.toast.error('La hora de cierre debe estar en el futuro.');
         return;
       }
 
@@ -602,7 +658,7 @@ export class AdminPartidosComponent {
         porcentajeBote: Number(this.form.porcentajeBote),
       });
       this.form = { homeTeam: '', awayTeam: '', competition: '', closesAt: '', type: '1x2', porcentajeBote: 0 };
-      this.mensaje.set('Partido creado.');
+      this.toast.exito('Partido creado.');
     } finally {
       this.saving.set(false);
     }
@@ -617,14 +673,13 @@ export class AdminPartidosComponent {
       peligro: true,
     });
     if (!ok) return;
-    this.mensaje.set('');
     try {
       const r = await this.admin.cancelarPartido(p.id);
-      this.mensaje.set(
+      this.toast.exito(
         `Partido cancelado · ${r.devoluciones} devolución(es) · ${r.puntosDevueltos} pts devueltos.`,
       );
     } catch (e: unknown) {
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo cancelar.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo cancelar.');
     }
   }
 
@@ -644,16 +699,15 @@ export class AdminPartidosComponent {
     if (!ok) return;
 
     this.liquidando.set(true);
-    this.mensaje.set('');
     try {
       const r = await this.admin.liquidar(p.id, this.chosenOutcome);
-      this.mensaje.set(
+      this.toast.exito(
         `Liquidado: ${r.ganadores} ganadores de ${r.participantes} participantes · ` +
         `bolsa ${r.bolsa} pts · sobrante ${r.sobrante} pts a reserva.`,
       );
       this.resultFor.set(null);
     } catch (e: unknown) {
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo liquidar.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo liquidar.');
     } finally {
       this.liquidando.set(false);
     }

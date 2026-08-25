@@ -8,17 +8,13 @@ import { Torneo, Participante, ModoTorneo } from '../../core/models/torneo.model
 import { Competicion } from '../../core/models/competicion.model';
 import { CompeticionesService } from '../../core/services/competiciones.service';
 import { ConfirmarService } from '../../shared/confirmar.service';
+import { ToastService } from '../../shared/toast.service';
 
 @Component({
   selector: 'app-admin-torneos',
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    @if (mensaje()) {
-      <div class="msg" (click)="mensaje.set('')">
-        <i class="ti ti-info-circle"></i> {{ mensaje() }}
-      </div>
-    }
 
     <div class="stats">
       <div class="stat">
@@ -52,7 +48,7 @@ import { ConfirmarService } from '../../shared/confirmar.service';
       <div class="grid">
         <label class="field">
           <span>Nombre</span>
-          <input type="text" [(ngModel)]="form.nombre" placeholder="AutomatePower" />
+          <input type="text" [(ngModel)]="form.nombre" placeholder="Los del jueves, La Oficina…" />
           <small class="pista">Como le van a decir entre ustedes.</small>
         </label>
         <label class="field">
@@ -436,10 +432,10 @@ export class AdminTorneosComponent {
   private readonly service = inject(TorneosService);
   private readonly competicionesSrv = inject(CompeticionesService);
   private readonly confirmar = inject(ConfirmarService);
+  private readonly toast = inject(ToastService);
 
   readonly torneos = toSignal(this.service.torneos(), { initialValue: [] as Torneo[] });
   readonly guardando = signal(false);
-  readonly mensaje = signal('');
 
   readonly competiciones = toSignal(this.competicionesSrv.competiciones(), {
     initialValue: [] as Competicion[],
@@ -590,27 +586,27 @@ export class AdminTorneosComponent {
       if (!ok) return;
     }
     await this.service.cambiarGestor(t.id, uid, agregar);
-    this.mensaje.set(agregar ? 'Ahora administra el torneo.' : 'Permiso retirado.');
+    this.toast.exito(agregar ? 'Ahora administra el torneo.' : 'Permiso retirado.');
   }
 
 
   async crear(): Promise<void> {
     if (!this.form.nombre.trim()) {
-      this.mensaje.set('Ponle nombre al torneo.');
+      this.toast.exito('Ponle nombre al torneo.');
       return;
     }
     const comp = this.competiciones().find((c) => c.id === this.form.competicionId);
     if (!comp) {
-      this.mensaje.set('Elige una competición. Si no hay, créala en la pestaña Ligas.');
+      this.toast.error('Elige una competición. Si no hay, créala en la pestaña Ligas.');
       return;
     }
     if (!this.form.cierreInscripcion) {
-      this.mensaje.set('Indica hasta cuándo se puede entrar al torneo.');
+      this.toast.exito('Indica hasta cuándo se puede entrar al torneo.');
       return;
     }
     const cierre = new Date(this.form.cierreInscripcion);
     if (cierre.getTime() <= Date.now()) {
-      this.mensaje.set('Esa hora ya pasó. Elige una futura.');
+      this.toast.error('Esa hora ya pasó. Elige una futura.');
       return;
     }
     this.guardando.set(true);
@@ -642,9 +638,9 @@ export class AdminTorneosComponent {
         porcentajeBote: 0,
         cierreInscripcion: '',
       };
-      this.mensaje.set('Torneo creado. Comparte el enlace de invitación.');
+      this.toast.exito('Torneo creado. Comparte el enlace de invitación.');
     } catch (e: unknown) {
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo crear.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo crear.');
     } finally {
       this.guardando.set(false);
     }
@@ -653,7 +649,7 @@ export class AdminTorneosComponent {
   copiar(t: Torneo): void {
     const url = `${location.origin}/unirse/${t.codigo}`;
     navigator.clipboard?.writeText(url);
-    this.mensaje.set(`Enlace copiado: ${url}`);
+    this.toast.exito(`Enlace copiado: ${url}`);
   }
 
   async iniciar(t: Torneo): Promise<void> {
@@ -664,7 +660,7 @@ export class AdminTorneosComponent {
     });
     if (!ok) return;
     await this.service.cambiarEstado(t.id, 'en-curso');
-    this.mensaje.set('Torneo iniciado.');
+    this.toast.exito('Torneo iniciado.');
   }
 
   /** Cierra el torneo cuando ya no habrá más jornadas. */
@@ -679,12 +675,12 @@ export class AdminTorneosComponent {
     if (!ok) return;
     try {
       const r = await this.service.finalizar(t.id);
-      this.mensaje.set(
+      this.toast.exito(
         `Torneo cerrado: ${r.ganadores} ganador(es)` +
         (r.premioPorCabeza > 0 ? ` · ${r.premioPorCabeza} pts cada uno.` : '.'),
       );
     } catch (e: unknown) {
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo cerrar.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo cerrar.');
     }
   }
 

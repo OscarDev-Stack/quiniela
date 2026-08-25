@@ -37,10 +37,12 @@ import { TorneosService } from '../core/services/torneos.service';
         </div>
       }
 
-      <div class="balance" [class.balance--negativo]="(me()?.puntos ?? 0) < 0">
-        <i class="ti ti-coins"></i>
-        <span>{{ me()?.puntos ?? 0 | number }} pts</span>
-      </div>
+      @if (!ocultarSaldo()) {
+        <div class="balance" [class.balance--negativo]="(me()?.puntos ?? 0) < 0">
+          <i class="ti ti-coins"></i>
+          <span>{{ me()?.puntos ?? 0 | number }} pts</span>
+        </div>
+      }
 
       @if (!back()) {
         <a class="icono-top" routerLink="/ranking" aria-label="Ranking" title="Ranking">
@@ -239,6 +241,8 @@ export class NavComponent {
   readonly title = input('');
   /** Si es true, muestra la barra superior sin nombre/avatar (solo marca + puntos + campanita). */
   readonly minimal = input(false);
+  /** Si es true, oculta el saldo de la barra (útil cuando ya se muestra en la propia vista). */
+  readonly ocultarSaldo = input(false);
 
   /** Menú desplegable de administración (tres puntos). */
   readonly menuAbierto = signal(false);
