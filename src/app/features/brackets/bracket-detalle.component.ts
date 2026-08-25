@@ -53,6 +53,9 @@ import { Bracket } from '../../core/models/bracket.model';
           @if (b.bolsa > 0) {
             <span class="pill pill--premio">Bolsa: {{ b.bolsa | number }} pts</span>
           }
+          @if (b.estado !== 'finalizado' && fechaCierre(b); as fc) {
+            <span class="pill"><i class="ti ti-clock"></i> {{ b.modo === 'duenos' ? 'Inicia' : 'Cierra' }}: {{ fc }}</span>
+          }
         </div>
 
         <section class="panel">
@@ -439,6 +442,15 @@ export class BracketDetalleComponent {
     } finally {
       this.aceptando.set(false);
     }
+  }
+
+  /** Fecha de cierre/inicio del bracket, formateada. Null si no tiene. */
+  fechaCierre(b: { cierraAt?: { seconds: number } | Date | null }): string | null {
+    const v = b.cierraAt;
+    if (!v) return null;
+    const d = v instanceof Date ? v : new Date((v.seconds ?? 0) * 1000);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
 
   etiqueta(estado: string): string {

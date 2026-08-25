@@ -15,17 +15,13 @@ import {
 import { AppUser } from '../../core/models/user.model';
 import { nombreOficial } from '../../core/models/equipos-liga-mx';
 import { ConfirmarService } from '../../shared/confirmar.service';
+import { ToastService } from '../../shared/toast.service';
 
 @Component({
   selector: 'app-admin-competiciones',
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    @if (mensaje()) {
-      <div class="msg" (click)="mensaje.set('')">
-        <i class="ti ti-info-circle"></i> {{ mensaje() }}
-      </div>
-    }
 
     <section class="panel">
       <h2>Nueva competición</h2>
@@ -449,13 +445,13 @@ export class AdminCompeticionesComponent {
   private readonly service = inject(CompeticionesService);
   private readonly admin = inject(AdminService);
   private readonly confirmar = inject(ConfirmarService);
+  private readonly toast = inject(ToastService);
 
   readonly competiciones = toSignal(this.service.competiciones(), {
     initialValue: [] as Competicion[],
   });
   readonly usuarios = toSignal(this.admin.getUsers(), { initialValue: [] as AppUser[] });
 
-  readonly mensaje = signal('');
   readonly resolviendo = signal(false);
   nombre = '';
 
@@ -544,12 +540,9 @@ export class AdminCompeticionesComponent {
     return this.borrador[competicionId];
   }
 
-  /** Avisa y borra el mensaje solo, para que no se quede pegado. */
+  /** Avisa con un toast de éxito. */
   private avisar(texto: string): void {
-    this.mensaje.set(texto);
-    setTimeout(() => {
-      if (this.mensaje() === texto) this.mensaje.set('');
-    }, 6000);
+    this.toast.exito(texto);
   }
 
   /** Qué paneles de gestores están desplegados. */
@@ -755,11 +748,10 @@ export class AdminCompeticionesComponent {
   async alternarGestor(c: Competicion, uid: string): Promise<void> {
     const agregar = !this.esGestor(c, uid);
     await this.service.cambiarGestor(c.id, uid, agregar);
-    this.mensaje.set(agregar ? 'Ahora puede capturar resultados.' : 'Permiso retirado.');
+    this.toast.exito(agregar ? 'Ahora puede capturar resultados.' : 'Permiso retirado.');
   }
 
   async crear(): Promise<void> {
-    this.mensaje.set('');
     if (!this.nombre.trim()) {
       this.avisar('Ponle nombre a la competición.');
       return;
@@ -770,7 +762,6 @@ export class AdminCompeticionesComponent {
   }
 
   async agregarJornada(c: Competicion): Promise<void> {
-    this.mensaje.set('');
     const b = this.b(c.id);
     if (!b.cierra) {
       this.avisar('Indica la hora del primer partido.');
@@ -832,7 +823,7 @@ export class AdminCompeticionesComponent {
         (r.cerrados.length ? ` Cerrados: ${r.cerrados.join(', ')}.` : ''),
       );
     } catch (e: unknown) {
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo aplicar.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo aplicar.');
     } finally {
       this.resolviendo.set(false);
     }

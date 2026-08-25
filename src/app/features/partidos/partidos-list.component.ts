@@ -280,19 +280,42 @@ export class PartidosListComponent {
   readonly visibles = computed(() => {
     const activos = this.partidos().filter((p) => p.status !== 'cancelado');
     const f = this.filtro();
+    let lista: Partido[];
     if (f === 'Abiertos') {
       // Incluye los que ya iniciaron pero aún no se liquidan.
-      return activos.filter(
+      lista = activos.filter(
         (p) =>
           !p.liquidado &&
           (p.status === 'abierto' || p.status === 'cierra-pronto' || p.status === 'en-juego'),
       );
+    } else if (f === 'Finalizados') {
+      lista = activos.filter((p) => p.status === 'cerrado');
+    } else {
+      lista = activos;
     }
-    if (f === 'Finalizados') {
-      return activos.filter((p) => p.status === 'cerrado');
-    }
-    return activos;
+    return this.ordenar(lista);
   });
+
+  /**
+   * Orden de los partidos: primero los que están en juego, luego los que
+   * siguen abiertos (el más próximo a cerrar primero), y al final los
+   * cerrados. Dentro de cada grupo se ordena por su hora de cierre.
+   */
+  private ordenar(lista: Partido[]): Partido[] {
+    const grupo = (p: Partido): number => {
+      if (p.status === 'en-juego') return 0;
+      if (p.status === 'abierto' || p.status === 'cierra-pronto') return 1;
+      return 2; // cerrado y cualquier otro
+    };
+    return [...lista].sort((a, b) => {
+      const ga = grupo(a);
+      const gb = grupo(b);
+      if (ga !== gb) return ga - gb;
+      const fa = fechaCierre(a)?.getTime() ?? Infinity;
+      const fb = fechaCierre(b)?.getTime() ?? Infinity;
+      return fa - fb;
+    });
+  }
 
   /** Se actualiza cada 30 s para refrescar la cuenta regresiva. */
   private readonly ahora = signal(Date.now());

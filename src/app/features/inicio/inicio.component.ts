@@ -11,7 +11,7 @@ import { PartidosService } from '../../core/services/partidos.service';
 import { TorneosService } from '../../core/services/torneos.service';
 import { BracketsService } from '../../core/services/brackets.service';
 import { UserService } from '../../core/services/user.service';
-import { Partido } from '../../core/models/partido.model';
+import { Partido, fechaCierre } from '../../core/models/partido.model';
 import { Torneo } from '../../core/models/torneo.model';
 import { Bracket } from '../../core/models/bracket.model';
 
@@ -29,7 +29,7 @@ import { Bracket } from '../../core/models/bracket.model';
   imports: [CommonModule, NavComponent, CargandoComponent, EscudoComponent],
   template: `
     <div class="screen">
-      <app-nav [minimal]="true" title="Inicio" />
+      <app-nav [minimal]="true" title="Inicio" [ocultarSaldo]="true" />
 
       @if (cargando()) {
         <app-cargando texto="Cargando tu inicio" />
@@ -38,9 +38,9 @@ import { Bracket } from '../../core/models/bracket.model';
         <button class="saludo" (click)="ir('/perfil')">
           <span class="saludo-avatar">{{ inicial() }}</span>
           <span class="saludo-txt">
-            <span class="hola">¡Hola{{ alias() ? ', ' + alias() : '' }}! 👋</span>
-            <span class="sub">Demuestra cuánto sabes de fútbol 🔥</span>
-            <span class="sub">Esto es todo lo que tienes en juego ahora mismo.</span>
+            <span class="hola">¡Hola, {{ alias() || 'jugador' }}! 👋</span>
+            <span class="lema">Demuestra cuánto sabes de fútbol 🔥</span>
+            <span class="intro">Esto es todo lo que tienes en juego ahora mismo.</span>
             <span class="stats">
               <span class="stat"><b>{{ puntos() | number }}</b> pts</span>
               @if (racha() > 0) {
@@ -191,9 +191,11 @@ import { Bracket } from '../../core/models/bracket.model';
         display: flex; align-items: center; justify-content: center;
         background: var(--accent-fill); color: #fff; font-size: 18px; font-weight: 700;
       }
-      .saludo-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+      .saludo-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
       .hola { font-size: 17px; font-weight: 800; color: var(--text-primary); }
-      .stats { display: flex; gap: 12px; }
+      .lema { font-size: 12px; color: var(--tipo-surv-fill); font-weight: 600; }
+      .intro { font-size: 12px; color: var(--text-secondary); }
+      .stats { display: flex; gap: 12px; margin-top: 4px; }
       .stat { font-size: 12px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 3px; }
       .stat b { color: var(--text-primary); font-weight: 700; }
       .stat .ti-flame { color: var(--tipo-surv-fill); font-size: 13px; }
@@ -284,7 +286,14 @@ export class InicioComponent {
   private readonly bracketsPublicos = toSignal(this.bracketsSrv.bracketsPublicos(), { initialValue: [] as Bracket[] });
 
   readonly partidosAbiertos = computed(() =>
-    this.partidos().filter((m) => m.status === 'abierto' || m.status === 'cierra-pronto'),
+    this.partidos()
+      .filter((m) => m.status === 'abierto' || m.status === 'cierra-pronto')
+      .sort((a, b) => {
+        // El más próximo a cerrar primero. Sin fecha, al final.
+        const fa = fechaCierre(a)?.getTime() ?? Infinity;
+        const fb = fechaCierre(b)?.getTime() ?? Infinity;
+        return fa - fb;
+      }),
   );
   readonly survivors = computed(() =>
     this.torneos().filter((t) => (t.modo ?? 'supervivencia') === 'supervivencia' && t.estado !== 'finalizado'),

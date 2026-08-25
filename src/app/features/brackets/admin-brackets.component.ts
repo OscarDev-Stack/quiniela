@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { BracketsService } from '../../core/services/brackets.service';
+import { ToastService } from '../../shared/toast.service';
 import { nombreOficial } from '../../core/models/equipos-liga-mx';
 import { CuadroBracketComponent } from './cuadro-bracket.component';
 import { ArmarBracketComponent } from './armar-bracket.component';
@@ -192,9 +193,6 @@ import {
               <button class="btn btn--primary" [disabled]="creando()" (click)="crear()">
                 {{ creando() ? 'Creando…' : 'Crear eliminatoria' }}
               </button>
-              @if (mensaje()) {
-                <p class="aviso" [class.aviso--error]="error()">{{ mensaje() }}</p>
-              }
             </div>
           </div>
         }
@@ -205,8 +203,18 @@ import {
         <section class="panel">
           <button class="cab" (click)="abrir(b.id)">
             <i class="ti" [class.ti-chevron-down]="abierto() !== b.id" [class.ti-chevron-up]="abierto() === b.id"></i>
-            {{ b.nombre }}
-            <span class="badge">{{ etiqueta(b.estado) }}</span>
+            <span class="cab-txt">
+              <span class="cab-nom">
+                {{ b.nombre }}
+                <span class="badge">{{ etiqueta(b.estado) }}</span>
+              </span>
+              <span class="cab-sub">
+                {{ b.modo === 'duenos' ? 'Dueños' : 'Pronóstico' }}
+                · {{ b.config.equipos }} equipos
+                · {{ b.costoEntrada | number }} pts
+                @if (b.publico) { · Pública }
+              </span>
+            </span>
           </button>
 
           @if (abierto() === b.id) {
@@ -225,6 +233,9 @@ import {
               <span class="dato"><i class="ti ti-users"></i> {{ b.config.equipos }} equipos</span>
               <span class="dato"><i class="ti ti-coins"></i> Entrada: {{ b.costoEntrada | number }} pts</span>
               <span class="dato"><i class="ti ti-trophy"></i> Bolsa: {{ b.bolsa | number }} pts</span>
+              @if (fechaCierre(b); as fc) {
+                <span class="dato"><i class="ti ti-clock"></i> {{ b.modo === 'duenos' ? 'Cierre/inicio' : 'Cierra' }}: {{ fc }}</span>
+              }
               @if (b.publico) { <span class="dato"><i class="ti ti-world"></i> Pública</span> }
               @if (b.ganadorAlias) { <span class="dato dato--gana"><i class="ti ti-crown"></i> {{ b.ganadorAlias }}</span> }
             </div>
@@ -327,13 +338,16 @@ import {
         border-radius: 12px; padding: 14px 16px; margin-bottom: 14px;
       }
       .cab {
-        display: flex; align-items: center; gap: 8px; width: 100%;
+        display: flex; align-items: center; gap: 10px; width: 100%;
         cursor: pointer; text-align: left; background: transparent; border: none;
-        padding: 0; color: inherit; font-size: 15px; font-weight: 600;
+        padding: 0; color: inherit;
       }
-      .cab i { color: var(--text-muted); font-size: 17px; }
+      .cab i { color: var(--text-muted); font-size: 17px; flex-shrink: 0; }
+      .cab-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+      .cab-nom { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+      .cab-sub { font-size: 12px; font-weight: 400; color: var(--text-muted); }
       .badge {
-        margin-left: auto; font-size: 11px; font-weight: 600; padding: 2px 9px;
+        font-size: 11px; font-weight: 600; padding: 2px 9px;
         border-radius: 999px; background: var(--surface-1); color: var(--text-secondary);
       }
       .form { margin-top: 14px; display: grid; gap: 12px; }
@@ -444,6 +458,7 @@ import {
 })
 export class AdminBracketsComponent {
   private readonly service = inject(BracketsService);
+  private readonly toast = inject(ToastService);
   readonly brackets = toSignal(this.service.brackets(), { initialValue: [] as Bracket[] });
 
   readonly verCrear = signal(false);
@@ -453,8 +468,6 @@ export class AdminBracketsComponent {
   private readonly partsAbiertos = signal<Set<string>>(new Set());
   readonly creando = signal(false);
   readonly calificando = signal(false);
-  readonly mensaje = signal('');
-  readonly error = signal(false);
 
   /** Marcadores en captura, indexados por llave-partido-lado. */
   marc: Record<string, number | null> = {};
@@ -529,6 +542,15 @@ export class AdminBracketsComponent {
     return m[estado] ?? estado;
   }
 
+  /** Fecha de cierre/inicio del bracket, formateada. Null si no tiene. */
+  fechaCierre(b: Bracket): string | null {
+    const v = b.cierraAt as { seconds?: number } | Date | null | undefined;
+    if (!v) return null;
+    const d = v instanceof Date ? v : new Date((v.seconds ?? 0) * 1000);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
   etiquetaPartido(tipo: string): string {
     return tipo === 'ida' ? 'Ida' : tipo === 'vuelta' ? 'Vuelta' : 'Único';
   }
@@ -565,14 +587,11 @@ export class AdminBracketsComponent {
       .map((nombre, i) => ({ nombre, siembra: i + 1 }));
 
     if (this.nuevo.armado === 'siembra' && equipos.length !== this.nuevo.equipos) {
-      this.error.set(true);
-      this.mensaje.set(`Con el orden por posición necesitas exactamente ${this.nuevo.equipos} equipos.`);
+      this.toast.error(`Con el orden por posición necesitas exactamente ${this.nuevo.equipos} equipos.`);
       return;
     }
 
     this.creando.set(true);
-    this.mensaje.set('');
-    this.error.set(false);
     try {
       await this.service.crear({
         nombre: this.nuevo.nombre.trim(),
@@ -595,13 +614,12 @@ export class AdminBracketsComponent {
         cierraAt: this.nuevo.cierre ? new Date(this.nuevo.cierre) : null,
         publico: this.nuevo.publico,
       });
-      this.mensaje.set('Eliminatoria creada.');
+      this.toast.exito('Eliminatoria creada.');
       this.nuevo.nombre = '';
       this.nuevo.listaEquipos = '';
       this.nuevo.cierre = '';
     } catch (e: unknown) {
-      this.error.set(true);
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo crear.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo crear.');
     } finally {
       this.creando.set(false);
     }
@@ -625,14 +643,11 @@ export class AdminBracketsComponent {
 
   async calificar(b: Bracket): Promise<void> {
     this.calificando.set(true);
-    this.mensaje.set('');
-    this.error.set(false);
     try {
       const r = await this.service.calificar(b.id);
-      this.mensaje.set(`Calificados ${r.calificados} pronósticos. Bolsa repartida.`);
+      this.toast.exito(`Calificados ${r.calificados} pronósticos. Bolsa repartida.`);
     } catch (e: unknown) {
-      this.error.set(true);
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo calificar.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo calificar.');
     } finally {
       this.calificando.set(false);
     }
@@ -642,8 +657,7 @@ export class AdminBracketsComponent {
     const gl = Number(this.marc[`${l.id}-${indice}-L`] ?? NaN);
     const gv = Number(this.marc[`${l.id}-${indice}-V`] ?? NaN);
     if (!Number.isInteger(gl) || !Number.isInteger(gv)) {
-      this.error.set(true);
-      this.mensaje.set('Pon ambos marcadores antes de guardar.');
+      this.toast.error('Pon ambos marcadores antes de guardar.');
       return;
     }
 
@@ -660,8 +674,7 @@ export class AdminBracketsComponent {
     try {
       await this.service.capturar(b.id, l.id, indice, gl, gv, penales);
     } catch (e: unknown) {
-      this.error.set(true);
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo guardar.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo guardar.');
     }
   }
 }

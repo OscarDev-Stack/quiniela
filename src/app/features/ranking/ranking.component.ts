@@ -23,86 +23,43 @@ type Vista = 'puntos' | 'porcentaje';
   imports: [CommonModule, NavComponent, CargandoComponent],
   template: `
     <div class="screen">
-      <app-nav title="Estadísticas" />
-
-      @if (miFila(); as y) {
-        <div class="cards">
-          <div class="card">
-            <div class="card-label">% de acierto</div>
-            <div class="card-val accent">{{ y.porcentaje }}%</div>
-          </div>
-          <div class="card">
-            <div class="card-label">Aciertos</div>
-            <div class="card-val">{{ y.aciertos }} <span class="soft">/ {{ y.resueltos }}</span></div>
-          </div>
-          <div class="card">
-            <div class="card-label">Posición</div>
-            <div class="card-val">{{ miPosicion() ? '#' + miPosicion() : '—' }}</div>
-          </div>
-          <div class="card">
-            <div class="card-label">Puntos históricos</div>
-            <div class="card-val" [class.neg]="y.puntos < 0">{{ y.puntos | number }}</div>
-          </div>
-          <div class="card card--wide">
-            <div class="card-label">Racha actual</div>
-            <div class="card-val">
-              {{ y.racha ?? 0 }}
-              @if ((y.racha ?? 0) > 0) {
-                <i class="ti ti-flame fire"></i>
-              }
-              <span class="soft">· mejor {{ y.mejorRacha ?? 0 }}</span>
-            </div>
-          </div>
-        </div>
-      } @else {
-        <div class="cards-empty">
-          Aún no tienes estadísticas. Haz tu primer pronóstico para aparecer aquí.
-        </div>
-      }
+      <app-nav title="Clasificación" />
 
       <div class="head">
         <span class="head-title">Clasificación</span>
-        <div class="toggle">
-          <button [class.on]="vista() === 'porcentaje'" (click)="vista.set('porcentaje')">% acierto</button>
-          @if (isAdmin()) {
+        @if (isAdmin()) {
+          <div class="toggle">
+            <button [class.on]="vista() === 'porcentaje'" (click)="vista.set('porcentaje')">% acierto</button>
             <button [class.on]="vista() === 'puntos'" (click)="vista.set('puntos')">
               <i class="ti ti-shield-check"></i> Históricos
             </button>
-          }
-        </div>
+          </div>
+        }
       </div>
 
       @if (cargando()) {
         <app-cargando texto="Cargando la tabla" />
       } @else if (tabla().length === 0) {
         <p class="empty">Todavía no hay datos para la tabla.</p>
-      }
-
-      <!-- Podio: los tres primeros con su medalla. -->
-      @for (f of podio(); track f.id) {
-        <div
-          class="row row--podio"
-          [class.row--lider]="f.posicion === 1"
-          [class.row--me]="f.id === miUid()"
-          [class.row--clic]="isAdmin()"
-          (click)="verPerfil(f)"
-        >
-          <span class="medalla" [class]="'medalla--' + f.posicion">{{ f.posicion }}</span>
-          <span class="avatar">{{ inicial(f.alias) }}</span>
-          <span class="alias">{{ f.id === miUid() ? 'Tú' : f.alias }}</span>
-
-          @if (vista() === 'puntos' && isAdmin()) {
-            <span class="main" [class.neg]="f.puntos < 0">{{ f.puntos | number }}</span>
-            <span class="side">{{ f.porcentaje }}%</span>
-          } @else {
-            <span class="main">{{ f.porcentaje }}%</span>
-            <span class="side">
-              @if ((f.racha ?? 0) >= 3) {
-                <i class="ti ti-flame fire-sm"></i>{{ f.racha }}
-              } @else {
-                {{ f.aciertos }}/{{ f.resueltos }}
+      } @else {
+        <!-- Podio estilo F1: 2° a la izquierda, 1° al centro (más alto), 3° a la derecha. -->
+        <div class="podio">
+          @for (f of podioOrdenado(); track f.id) {
+            <div class="col col--{{ f.posicion }}" [class.col--me]="f.id === miUid()" [class.col--clic]="isAdmin()" (click)="verPerfil(f)">
+              @if (f.posicion === 1) {
+                <span class="estrella"><i class="ti ti-star-filled"></i></span>
               }
-            </span>
+              <span class="col-avatar" [class]="'col-avatar--' + f.posicion">{{ inicial(f.alias) }}</span>
+              <span class="col-alias">{{ f.id === miUid() ? 'Tú' : f.alias }}</span>
+              <span class="col-val">
+                @if (vista() === 'puntos' && isAdmin()) {
+                  {{ f.puntos | number }} pts
+                } @else {
+                  {{ f.porcentaje }}%
+                }
+              </span>
+              <span class="barra barra--{{ f.posicion }}">{{ f.posicion }}</span>
+            </div>
           }
         </div>
       }
@@ -175,19 +132,49 @@ type Vista = 'puntos' | 'porcentaje';
   `,
   styles: [
     `
-      .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 22px; }
-      .card { background: var(--surface-1); border-radius: var(--radius); padding: 12px 14px; }
-      .card-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
-      .card-val { font-size: 22px; font-weight: 600; }
-      .card-val.accent { color: var(--accent-text); }
-      .soft { font-size: 14px; color: var(--text-muted); font-weight: 400; }
-      .neg { color: var(--danger-text); }
-      .card--wide { grid-column: span 2; }
-      .fire { color: var(--warning-text); font-size: 19px; vertical-align: -1px; }
-      .cards-empty {
-        background: var(--surface-1); border-radius: var(--radius);
-        padding: 16px; font-size: 13px; color: var(--text-secondary); margin-bottom: 22px;
+      /* ===== Podio estilo F1 ===== */
+      .podio {
+        display: flex; align-items: flex-end; justify-content: center; gap: 8px;
+        margin: 8px 0 26px; min-height: 240px;
       }
+      .col {
+        flex: 1; display: flex; flex-direction: column; align-items: center;
+        cursor: default; max-width: 120px;
+      }
+      .col--clic { cursor: pointer; }
+      .estrella {
+        font-size: 22px; color: #f1c40f; margin-bottom: 2px;
+        animation: estrella-late 1.6s ease-in-out infinite;
+      }
+      @keyframes estrella-late {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.22); opacity: 0.7; }
+      }
+      .col-avatar {
+        width: 46px; height: 46px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        color: #fff; font-weight: 700; font-size: 18px; margin-bottom: 6px;
+      }
+      .col-avatar--1 { width: 56px; height: 56px; font-size: 22px; background: var(--accent-fill); box-shadow: 0 0 0 3px #f1c40f; }
+      .col-avatar--2 { background: #9aa0aa; }
+      .col-avatar--3 { background: #cd7f4d; }
+      .col-alias {
+        font-size: 13px; font-weight: 700; color: var(--text-primary);
+        max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .col--1 .col-alias { font-size: 14px; }
+      .col-val { font-size: 11px; color: var(--text-secondary); margin-bottom: 7px; }
+      .barra {
+        width: 100%; border-radius: 12px 12px 0 0;
+        display: flex; align-items: flex-start; justify-content: center; padding-top: 8px;
+        color: #fff; font-weight: 700;
+      }
+      .barra--1 { height: 130px; font-size: 26px; background: linear-gradient(180deg, #f4d03f, #e0a800); }
+      .barra--2 { height: 92px; font-size: 22px; background: linear-gradient(180deg, #c3c8d0, #a2a8b3); }
+      .barra--3 { height: 64px; font-size: 20px; background: linear-gradient(180deg, #d98e5f, #b46a3a); }
+      .col--me .col-alias { color: var(--accent-text); }
+
+      .neg { color: var(--danger-text); }
 
       .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 10px; }
       .head-title { font-size: 13px; color: var(--text-secondary); }
@@ -208,39 +195,6 @@ type Vista = 'puntos' | 'porcentaje';
         padding: 10px 8px; border-bottom: 1px solid var(--border);
       }
       .row--clic { cursor: pointer; }
-      .row--podio { padding: 13px 8px; }
-
-      /*
-       * Disco con el número dentro. Un icono de medalla se veía casi
-       * igual en los tres puestos; con fondo sólido y contraste alto,
-       * el oro, la plata y el bronce se distinguen de un vistazo.
-       */
-      .medalla {
-        width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 13px; font-weight: 800; color: #1c1c1e;
-        box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.18);
-      }
-      .medalla--1 {
-        background: linear-gradient(160deg, #ffdf7a 0%, #f0b429 55%, #c98a06 100%);
-      }
-      .medalla--2 {
-        background: linear-gradient(160deg, #f2f6fa 0%, #c3ccd8 55%, #94a1b2 100%);
-      }
-      .medalla--3 {
-        background: linear-gradient(160deg, #f0b184 0%, #cd7f45 55%, #9c5a29 100%);
-        color: #fff;
-      }
-
-      /* El líder se lleva un realce discreto en toda su fila. */
-      .row--lider {
-        background: linear-gradient(
-          90deg,
-          rgba(240, 180, 41, 0.13) 0%,
-          rgba(240, 180, 41, 0) 70%
-        );
-        border-radius: var(--radius);
-      }
 
       .separador {
         display: flex; align-items: center; gap: 10px;
@@ -359,6 +313,18 @@ export class RankingComponent {
 
   /** Los tres primeros lugares. */
   readonly podio = computed(() => this.tabla().slice(0, 3));
+
+  /**
+   * El podio en orden visual de F1: 2° a la izquierda, 1° al centro,
+   * 3° a la derecha. Si hay menos de 3, respeta lo que haya.
+   */
+  readonly podioOrdenado = computed(() => {
+    const top = this.tabla().slice(0, 3);
+    const p1 = top.find((f) => f.posicion === 1);
+    const p2 = top.find((f) => f.posicion === 2);
+    const p3 = top.find((f) => f.posicion === 3);
+    return [p2, p1, p3].filter((f): f is FilaRanking => !!f);
+  });
 
   /**
    * Mi fila destacada. Se muestra cuando no estoy en el podio y mi lugar

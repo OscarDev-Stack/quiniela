@@ -1,5 +1,6 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { tap } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
@@ -7,7 +8,9 @@ import { CargandoComponent } from '../../shared/cargando.component';
 import { apagarCargando } from '../../shared/cargando.util';
 import { EscudoComponent } from '../../shared/escudo.component';
 import { PronosticosService } from '../../core/services/pronosticos.service';
+import { PartidosService } from '../../core/services/partidos.service';
 import { Pronostico, gananciaNeta } from '../../core/models/pronostico.model';
+import { Partido } from '../../core/models/partido.model';
 
 @Component({
   selector: 'app-mis-pronosticos',
@@ -48,6 +51,12 @@ import { Pronostico, gananciaNeta } from '../../core/models/pronostico.model';
                 {{ neto(p) > 0 ? '+' : '' }}{{ neto(p) | number }} pts
               </div>
             }
+
+            @if (puedeEditar(p)) {
+              <button class="editar" (click)="editar(p)">
+                <i class="ti ti-pencil"></i> Editar
+              </button>
+            }
           </div>
         </div>
       }
@@ -67,23 +76,35 @@ import { Pronostico, gananciaNeta } from '../../core/models/pronostico.model';
       .row-main { flex: 1; }
       .row-title { font-size: 14px; font-weight: 600; }
       .row-sub { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
-      .row-right { text-align: right; }
+      .row-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 
       .tag {
-        font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+        width: 84px; box-sizing: border-box;
+        font-size: 12px; font-weight: 600; padding: 4px 0; border-radius: 999px;
         background: var(--surface-1); color: var(--text-secondary);
+        display: inline-flex; align-items: center; justify-content: center;
       }
       .tag--ok { color: var(--success-text); background: var(--success-bg); }
       .tag--warn { color: var(--warning-text); background: var(--warning-bg); }
 
-      .neto { font-size: 13px; font-weight: 600; margin-top: 4px; }
+      .neto { font-size: 13px; font-weight: 600; }
       .neto--pos { color: var(--success-text); }
       .neto--neg { color: var(--danger-text); }
+
+      .editar {
+        width: 84px; box-sizing: border-box;
+        display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+        font-size: 12px; font-weight: 600; cursor: pointer;
+        padding: 4px 0; border-radius: 999px;
+        border: 1px solid var(--accent-fill); background: transparent; color: var(--accent-fill);
+      }
     `,
   ],
 })
 export class MisPronosticosComponent {
   private readonly service = inject(PronosticosService);
+  private readonly partidosSrv = inject(PartidosService);
+  private readonly router = inject(Router);
 
   readonly cargando = signal(true);
   private readonly inicioCarga = Date.now();
@@ -92,6 +113,28 @@ export class MisPronosticosComponent {
     this.service.misPronosticos().pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
     { initialValue: [] as Pronostico[] },
   );
+
+  private readonly partidos = toSignal(this.partidosSrv.getPartidos(), { initialValue: [] as Partido[] });
+
+  /** IDs de los partidos que siguen aceptando pronósticos (abiertos). */
+  private readonly abiertos = computed(
+    () =>
+      new Set(
+        this.partidos()
+          .filter((m) => m.status === 'abierto' || m.status === 'cierra-pronto')
+          .map((m) => m.id),
+      ),
+  );
+
+  /** Solo se puede editar si el pronóstico sigue activo y su partido está abierto. */
+  puedeEditar(p: Pronostico): boolean {
+    return p.estado === 'activo' && this.abiertos().has(p.partidoId);
+  }
+
+  /** Va a la pantalla de pronóstico para modificarlo. */
+  editar(p: Pronostico): void {
+    this.router.navigate(['/pronosticar', p.partidoId]);
+  }
 
   neto(p: Pronostico): number {
     return gananciaNeta(p);

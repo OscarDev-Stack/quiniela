@@ -4,18 +4,13 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { AdminService } from '../../core/services/admin.service';
 import { AppUser } from '../../core/models/user.model';
 import { ConfirmarService } from '../../shared/confirmar.service';
+import { ToastService } from '../../shared/toast.service';
 
 @Component({
   selector: 'app-admin-usuarios',
   standalone: true,
   imports: [CommonModule],
   template: `
-    @if (mensaje()) {
-      <div class="msg" (click)="mensaje.set('')">
-        <i class="ti ti-info-circle"></i> {{ mensaje() }}
-        <i class="ti ti-x cerrar"></i>
-      </div>
-    }
 
     <section class="panel">
       <header class="cabecera">
@@ -188,9 +183,9 @@ import { ConfirmarService } from '../../shared/confirmar.service';
 export class AdminUsuariosComponent {
   private readonly admin = inject(AdminService);
   private readonly confirmar = inject(ConfirmarService);
+  private readonly toast = inject(ToastService);
 
   readonly users = toSignal(this.admin.getUsers(), { initialValue: [] as AppUser[] });
-  readonly mensaje = signal('');
   readonly trabajando = signal(false);
 
 
@@ -223,7 +218,7 @@ export class AdminUsuariosComponent {
 
   async validar(u: AppUser): Promise<void> {
     await this.admin.validarUsuario(u.id);
-    this.mensaje.set(`${this.nombre(u)} ya puede participar.`);
+    this.toast.exito(`${this.nombre(u)} ya puede participar.`);
   }
 
   async reiniciar(u: AppUser): Promise<void> {
@@ -235,7 +230,7 @@ export class AdminUsuariosComponent {
     });
     if (!ok) return;
     await this.admin.reiniciarPuntos(u.id);
-    this.mensaje.set(`Saldo de ${this.nombre(u)} reiniciado a 0.`);
+    this.toast.exito(`Saldo de ${this.nombre(u)} reiniciado a 0.`);
   }
 
   async eliminar(u: AppUser): Promise<void> {
@@ -246,21 +241,20 @@ export class AdminUsuariosComponent {
       peligro: true,
     });
     if (!ok) return;
-    this.mensaje.set('');
     try {
       const r = await this.admin.eliminarUsuarios([u.id]);
       if (r.borrados > 0) {
         this.eliminados.set([...this.eliminados(), u.id]);
-        this.mensaje.set('Cuenta eliminada.');
+        this.toast.exito('Cuenta eliminada.');
       } else {
-        this.mensaje.set(
+        this.toast.error(
           r.omitidos?.length
             ? `No se eliminó: ${r.omitidos.join(', ')}.`
             : 'No se pudo eliminar.',
         );
       }
     } catch (e: unknown) {
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo eliminar.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo eliminar.');
     }
   }
 
@@ -274,18 +268,17 @@ export class AdminUsuariosComponent {
       peligro: true,
     });
     if (!ok) return;
-    this.mensaje.set('');
     try {
       const r = await this.admin.eliminarUsuarios(sinValidar.map((u) => u.id));
       if (r.borrados > 0) {
         this.eliminados.set([...this.eliminados(), ...sinValidar.map((u) => u.id)]);
       }
-      this.mensaje.set(
+      this.toast.exito(
         `${r.borrados} cuenta(s) eliminada(s).` +
         (r.omitidos?.length ? ` Omitidas: ${r.omitidos.join(', ')}.` : ''),
       );
     } catch (e: unknown) {
-      this.mensaje.set((e as Error)?.message ?? 'No se pudieron eliminar.');
+      this.toast.error((e as Error)?.message ?? 'No se pudieron eliminar.');
     }
   }
 
@@ -304,21 +297,20 @@ export class AdminUsuariosComponent {
     this.trabajando.set(true);
     try {
       const r = await this.admin.sincronizarHistoricos();
-      this.mensaje.set(`${r.corregidos} cuenta(s) corregida(s).`);
+      this.toast.exito(`${r.corregidos} cuenta(s) corregida(s).`);
     } catch (e: unknown) {
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo sincronizar.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo sincronizar.');
     } finally {
       this.trabajando.set(false);
     }
   }
 
   async recalcular(): Promise<void> {
-    this.mensaje.set('');
     try {
       const r = await this.admin.recalcularRanking();
-      this.mensaje.set(`Ranking actualizado: ${r.jugadores} jugador(es).`);
+      this.toast.exito(`Ranking actualizado: ${r.jugadores} jugador(es).`);
     } catch (e: unknown) {
-      this.mensaje.set((e as Error)?.message ?? 'No se pudo recalcular.');
+      this.toast.error((e as Error)?.message ?? 'No se pudo recalcular.');
     }
   }
 }
