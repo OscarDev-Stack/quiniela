@@ -23,18 +23,6 @@ export const routes: Routes = [
         path: 'recuperar',
         loadComponent: () => import('./features/auth/recuperar.component').then((m) => m.RecuperarComponent),
     },
-    {
-        path: 'cambiar-contrasena',
-        loadComponent: () =>
-            import('./features/auth/cambiar-contrasena.component').then((m) => m.CambiarContrasenaComponent),
-    },
-    {
-        // Despachador de las acciones de correo de Firebase (/__/auth/action).
-        // El rewrite de firebase.json manda esa ruta aquí.
-        path: 'auth/action',
-        loadComponent: () =>
-            import('./features/auth/auth-action.component').then((m) => m.AuthActionComponent),
-    },
 
     {
         path: 'inicio',
