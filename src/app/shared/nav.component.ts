@@ -21,7 +21,7 @@ import { TorneosService } from '../core/services/torneos.service';
         </button>
         <span class="title">{{ title() }}</span>
       } @else if (minimal()) {
-        <span class="marca">{{ title() || 'Quiniela' }}</span>
+        <span class="marca">{{ title() || 'AutomatePower' }}</span>
       } @else {
         <div class="brand">
           <span class="avatar" routerLink="/perfil">{{ inicial() }}</span>
@@ -32,7 +32,7 @@ import { TorneosService } from '../core/services/torneos.service';
                 <i class="ti ti-rosette-discount-check-filled check" title="Cuenta validada"></i>
               }
             </span>
-            <span class="sub">{{ title() || 'Quiniela' }}</span>
+            <span class="sub">{{ title() || 'AutomatePower' }}</span>
           </span>
         </div>
       }
@@ -272,7 +272,7 @@ export class NavComponent {
     if (haremos) {
       this.location.back();
     } else {
-      this.router.navigate(['/partidos']);
+      this.router.navigate(['/inicio']);
     }
   }
 

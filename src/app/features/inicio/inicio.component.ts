@@ -38,7 +38,9 @@ import { Bracket } from '../../core/models/bracket.model';
         <button class="saludo" (click)="ir('/perfil')">
           <span class="saludo-avatar">{{ inicial() }}</span>
           <span class="saludo-txt">
-            <span class="hola">Hola{{ alias() ? ', ' + alias() : '' }} 👋</span>
+            <span class="hola">¡Hola{{ alias() ? ', ' + alias() : '' }}! 👋</span>
+            <span class="sub">Demuestra cuánto sabes de fútbol 🔥</span>
+            <span class="sub">Esto es todo lo que tienes en juego ahora mismo.</span>
             <span class="stats">
               <span class="stat"><b>{{ puntos() | number }}</b> pts</span>
               @if (racha() > 0) {
