@@ -6,6 +6,9 @@ import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
     signOut,
+    sendPasswordResetEmail,
+    verifyPasswordResetCode,
+    confirmPasswordReset,
 } from '@angular/fire/auth';
 
 @Injectable({ providedIn: 'root' })
@@ -26,6 +29,29 @@ export class AuthService {
 
     logout() {
         return signOut(this.auth);
+    }
+
+    /**
+     * Manda el correo de recuperación. El enlace del correo llevará a
+     * nuestra propia pantalla (/recuperar) gracias a la URL de continuación,
+     * que hay que configurar en la consola de Firebase → Authentication →
+     * Templates → Password reset → personalizar el dominio de acción.
+     */
+    recuperarContrasena(email: string) {
+        return sendPasswordResetEmail(this.auth, email.trim());
+    }
+
+    /**
+     * Verifica que el código del enlace (oobCode) sea válido y no haya
+     * expirado. Devuelve el correo asociado, para mostrarlo en la pantalla.
+     */
+    verificarCodigoReset(oobCode: string) {
+        return verifyPasswordResetCode(this.auth, oobCode);
+    }
+
+    /** Aplica la nueva contraseña usando el código del enlace. */
+    confirmarNuevaContrasena(oobCode: string, nueva: string) {
+        return confirmPasswordReset(this.auth, oobCode, nueva);
     }
 
     /** Avisa a los administradores que hay una cuenta nueva. */

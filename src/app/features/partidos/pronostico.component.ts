@@ -47,7 +47,8 @@ interface Opcion {
 
           @if (cerrado(p)) {
             <div class="error">Este partido ya cerró. Ya no se aceptan pronósticos.</div>
-          }
+            <button class="confirm" (click)="volver()">Volver a partidos</button>
+          } @else {
 
           <div class="label">¿Quién gana?</div>
           <div class="options">
@@ -89,9 +90,10 @@ interface Opcion {
 
           <div class="hint">El premio se revela al iniciar el partido.</div>
 
-          <button class="confirm" [disabled]="!resultado() || saving() || cerrado(p)" (click)="confirmar(p)">
+          <button class="confirm" [disabled]="!resultado() || saving()" (click)="confirmar(p)">
             {{ saving() ? 'Enviando…' : (editando() ? 'Actualizar pronóstico' : 'Confirmar pronóstico') }}
           </button>
+          }
         </div>
       } @else if (cargando()) {
         <app-cargando texto="Cargando partido" />

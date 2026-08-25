@@ -19,6 +19,15 @@ export const routes: Routes = [
         path: 'registro',
         loadComponent: () => import('./features/auth/register.component').then((m) => m.RegisterComponent),
     },
+    {
+        path: 'recuperar',
+        loadComponent: () => import('./features/auth/recuperar.component').then((m) => m.RecuperarComponent),
+    },
+    {
+        path: 'cambiar-contrasena',
+        loadComponent: () =>
+            import('./features/auth/cambiar-contrasena.component').then((m) => m.CambiarContrasenaComponent),
+    },
 
     {
         path: 'inicio',

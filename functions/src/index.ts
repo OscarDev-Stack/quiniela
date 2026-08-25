@@ -357,6 +357,18 @@ export const liquidarPartido = onCall(opcionesCall, async (req) => {
         throw new HttpsError('invalid-argument', 'Faltan datos del partido o del resultado.');
     }
 
+    return ejecutarLiquidacion(partidoId, resultadoOficial);
+});
+
+/**
+ * Reparte los premios de un partido y lo marca como liquidado. La usan
+ * tanto el admin (liquidarPartido) como el cierre automático por API
+ * (revisarResultados). Idempotente: si ya está liquidado, no repite.
+ */
+async function ejecutarLiquidacion(
+    partidoId: string,
+    resultadoOficial: string,
+): Promise<{ ok: boolean; participantes: number; ganadores: number; bolsa: number; sobrante: number }> {
     const partRef = db.doc(`partidos/${partidoId}`);
     const partSnap = await partRef.get();
     if (!partSnap.exists) {
@@ -549,7 +561,7 @@ export const liquidarPartido = onCall(opcionesCall, async (req) => {
         bolsa,
         sobrante,
     };
-});
+}
 
 
 /* ============================================================
@@ -987,14 +999,21 @@ export const revisarResultados = onSchedule(
                 continue;
             }
 
-            await d.ref.update({
-                resultadoPropuesto: resultado,
-                marcadorPropuesto: `${local}-${visitante}`,
-                propuestoAt: FieldValue.serverTimestamp(),
-                alertaApi: FieldValue.delete(),
-            });
-
-            console.log(`Resultado precargado para ${d.id}: ${local}-${visitante} → ${resultado}`);
+            // La API confirmó el resultado final: liquidamos solos, sin esperar
+            // al admin. Solo aplica a partidos de API (el filtro exige apiFixtureId).
+            // Si algo falla, dejamos el resultado propuesto para que el admin revise.
+            try {
+                await ejecutarLiquidacion(d.id, resultado);
+                console.log(`Liquidado automático ${d.id}: ${local}-${visitante} → ${resultado}`);
+            } catch (e) {
+                logger.warn(`No se pudo liquidar ${d.id} automáticamente; queda para el admin.`, e);
+                await d.ref.update({
+                    resultadoPropuesto: resultado,
+                    marcadorPropuesto: `${local}-${visitante}`,
+                    propuestoAt: FieldValue.serverTimestamp(),
+                    alertaApi: 'La liquidación automática falló. Revísalo y liquida a mano.',
+                });
+            }
         }
     },
 );

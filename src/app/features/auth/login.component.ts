@@ -53,6 +53,10 @@ import { APP_VERSION } from '../../core/version';
         </form>
 
         <p class="auth-alt">
+          <a routerLink="/recuperar">¿Olvidaste tu contraseña?</a>
+        </p>
+
+        <p class="auth-alt">
           ¿No tienes cuenta? <a routerLink="/registro">Crear cuenta</a>
         </p>
       </div>
