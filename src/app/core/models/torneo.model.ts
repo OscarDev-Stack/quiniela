@@ -40,6 +40,8 @@ export interface Torneo {
 
     codigo: string;
     estado: EstadoTorneo;
+    /* Grupo al que pertenece. null/ausente = torneo Global. */
+    grupoId?: string | null;
     ganadorAlias?: string;
     /* Quienes administran este torneo (invitar, iniciar, cerrar). */
     gestores?: string[];

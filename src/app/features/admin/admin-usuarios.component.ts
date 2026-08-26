@@ -79,6 +79,14 @@ import { ToastService } from '../../shared/toast.service';
                 </button>
               } @else {
                 <button class="btn" (click)="reiniciar(u)">Reiniciar</button>
+                <button
+                  class="btn"
+                  [class.btn--grupo-on]="u.esAdminGrupo"
+                  (click)="toggleAdminGrupo(u)"
+                >
+                  <i class="ti ti-shield-star"></i>
+                  {{ u.esAdminGrupo ? 'Admin grupo ✓' : 'Admin grupo' }}
+                </button>
               }
             </div>
           </li>
@@ -168,6 +176,7 @@ import { ToastService } from '../../shared/toast.service';
         background: var(--accent-fill); color: #fff; border-color: transparent; font-weight: 600;
       }
       .btn--icon { color: var(--danger-text); border-color: var(--danger-text); padding: 7px 11px; }
+      .btn--grupo-on { background: var(--tipo-elim-fill); color: #fff; border-color: var(--tipo-elim-fill); }
 
       @media (min-width: 620px) {
         .cabecera { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -219,6 +228,17 @@ export class AdminUsuariosComponent {
   async validar(u: AppUser): Promise<void> {
     await this.admin.validarUsuario(u.id);
     this.toast.exito(`${this.nombre(u)} ya puede participar.`);
+  }
+
+  /** Activa o quita el rol de administrador de grupo (crear/gestionar grupos). */
+  async toggleAdminGrupo(u: AppUser): Promise<void> {
+    const nuevo = !u.esAdminGrupo;
+    await this.admin.setAdminGrupo(u.id, nuevo);
+    this.toast.exito(
+      nuevo
+        ? `${this.nombre(u)} ahora puede crear y administrar grupos.`
+        : `${this.nombre(u)} ya no es administrador de grupo.`,
+    );
   }
 
   async reiniciar(u: AppUser): Promise<void> {

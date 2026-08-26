@@ -165,6 +165,11 @@ export class AdminService {
         await this.recalcularRanking();
     }
 
+    /** Activa o desactiva el rol de administrador de grupo. */
+    async setAdminGrupo(uid: string, esAdminGrupo: boolean): Promise<void> {
+        await updateDoc(doc(this.db, 'users', uid), { esAdminGrupo });
+    }
+
     /** Elimina cuentas sin validar (Authentication + documentos). */
     async eliminarUsuarios(uids: string[]): Promise<{ borrados: number; omitidos: string[] }> {
         const fn = httpsCallable<

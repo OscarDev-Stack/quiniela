@@ -569,7 +569,7 @@ async function ejecutarLiquidacion(
    Corre cada 5 minutos: marca "cierra pronto" los que están por
    cerrar y pasa a "en juego" los que ya alcanzaron su hora.
    ============================================================ */
-export const cerrarPartidos = onSchedule('every 5 minutes', async () => {
+export const cerrarPartidos = onSchedule(cada(5), async () => {
     const enTreintaMin = Timestamp.fromMillis(Date.now() + 30 * 60 * 1000);
     // Ventana hacia atrás: ignora el histórico y mantiene la consulta pequeña
     // sin importar cuántos partidos se acumulen con el tiempo.
@@ -3941,3 +3941,233 @@ async function cobrarDuenosPendientes(
 
     await ref.update({ duenos: finales, bolsa: FieldValue.increment(sumaBolsa) });
 }
+
+/* ============================================================
+   GRUPOS (competencias privadas)
+   Los puntos son globales; el grupo es solo organización.
+   ============================================================ */
+
+/** Genera un código corto de invitación (6 letras/números, sin ambiguos). */
+function generarCodigoGrupo(): string {
+    const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin I, O, 0, 1
+    let c = '';
+    for (let i = 0; i < 6; i++) c += abc[Math.floor(Math.random() * abc.length)];
+    return c;
+}
+
+/** Crea un grupo. Solo lo puede hacer un "admin de grupo". */
+export const crearGrupo = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) {
+        throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+    }
+    const nombre = String(req.data?.nombre ?? '').trim();
+    const icono = String(req.data?.icono ?? '⚽').trim();
+    if (nombre.length < 3) {
+        throw new HttpsError('invalid-argument', 'El nombre del grupo es muy corto.');
+    }
+
+    const userRef = db.doc(`users/${uid}`);
+    const userSnap = await userRef.get();
+    const u = userSnap.data();
+    if (!u) {
+        throw new HttpsError('not-found', 'No encontramos tu perfil.');
+    }
+    if (u['esAdminGrupo'] !== true) {
+        throw new HttpsError('permission-denied', 'No tienes permiso para crear grupos.');
+    }
+
+    // Genera un código único (reintenta si choca).
+    let codigo = generarCodigoGrupo();
+    for (let intento = 0; intento < 5; intento++) {
+        const existe = await db.collection('grupos').where('codigo', '==', codigo).limit(1).get();
+        if (existe.empty) break;
+        codigo = generarCodigoGrupo();
+    }
+
+    const grupoRef = db.collection('grupos').doc();
+    const alias = String(u['alias'] ?? 'Jugador');
+
+    await grupoRef.set({
+        nombre,
+        icono,
+        codigo,
+        adminUid: uid,
+        miembrosCount: 1,
+        createdAt: FieldValue.serverTimestamp(),
+    });
+    // El creador es el primer miembro, con rol admin.
+    await grupoRef.collection('miembros').doc(uid).set({
+        uid,
+        alias,
+        rol: 'admin',
+        entradaAt: FieldValue.serverTimestamp(),
+    });
+    // Índice inverso en el usuario.
+    await userRef.update({ grupos: FieldValue.arrayUnion(grupoRef.id) });
+
+    return { ok: true, grupoId: grupoRef.id, codigo };
+});
+
+/** Une al usuario a un grupo usando su código de invitación. */
+export const unirseAGrupo = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) {
+        throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+    }
+    const codigo = String(req.data?.codigo ?? '').trim().toUpperCase();
+    if (!codigo) {
+        throw new HttpsError('invalid-argument', 'Falta el código.');
+    }
+
+    const encontrados = await db.collection('grupos').where('codigo', '==', codigo).limit(1).get();
+    if (encontrados.empty) {
+        throw new HttpsError('not-found', 'No hay ningún grupo con ese código.');
+    }
+    const grupoDoc = encontrados.docs[0];
+    const grupoRef = grupoDoc.ref;
+
+    const miembroRef = grupoRef.collection('miembros').doc(uid);
+    if ((await miembroRef.get()).exists) {
+        throw new HttpsError('already-exists', 'Ya perteneces a este grupo.');
+    }
+
+    const userRef = db.doc(`users/${uid}`);
+    const u = (await userRef.get()).data();
+    const alias = String(u?.['alias'] ?? 'Jugador');
+
+    await miembroRef.set({
+        uid,
+        alias,
+        rol: 'miembro',
+        entradaAt: FieldValue.serverTimestamp(),
+    });
+    await grupoRef.update({ miembrosCount: FieldValue.increment(1) });
+    await userRef.update({ grupos: FieldValue.arrayUnion(grupoRef.id) });
+
+    return { ok: true, grupoId: grupoRef.id, nombre: grupoDoc.data()['nombre'] };
+});
+
+/** El admin de un grupo agrega manualmente a un usuario por su uid. */
+export const agregarMiembroGrupo = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) {
+        throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+    }
+    const grupoId = String(req.data?.grupoId ?? '');
+    const nuevoUid = String(req.data?.uid ?? '');
+    if (!grupoId || !nuevoUid) {
+        throw new HttpsError('invalid-argument', 'Faltan datos.');
+    }
+
+    const grupoRef = db.doc(`grupos/${grupoId}`);
+    const grupo = (await grupoRef.get()).data();
+    if (!grupo) {
+        throw new HttpsError('not-found', 'El grupo no existe.');
+    }
+    if (grupo['adminUid'] !== uid) {
+        throw new HttpsError('permission-denied', 'Solo el administrador del grupo puede agregar miembros.');
+    }
+
+    const miembroRef = grupoRef.collection('miembros').doc(nuevoUid);
+    if ((await miembroRef.get()).exists) {
+        throw new HttpsError('already-exists', 'Esa persona ya está en el grupo.');
+    }
+    const nuevoUser = (await db.doc(`users/${nuevoUid}`).get()).data();
+    if (!nuevoUser) {
+        throw new HttpsError('not-found', 'No encontramos a esa persona.');
+    }
+
+    await miembroRef.set({
+        uid: nuevoUid,
+        alias: String(nuevoUser['alias'] ?? 'Jugador'),
+        rol: 'miembro',
+        entradaAt: FieldValue.serverTimestamp(),
+    });
+    await grupoRef.update({ miembrosCount: FieldValue.increment(1) });
+    await db.doc(`users/${nuevoUid}`).update({ grupos: FieldValue.arrayUnion(grupoId) });
+
+    return { ok: true };
+});
+
+/**
+ * Saca al usuario de un grupo. Si es el admin, debe pasar el uid de quien
+ * hereda el rol (nuevoAdminUid); si es el único miembro, el grupo se elimina.
+ */
+export const salirDeGrupo = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) {
+        throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+    }
+    const grupoId = String(req.data?.grupoId ?? '');
+    const nuevoAdminUid = String(req.data?.nuevoAdminUid ?? '');
+    if (!grupoId) {
+        throw new HttpsError('invalid-argument', 'Falta el grupo.');
+    }
+
+    const grupoRef = db.doc(`grupos/${grupoId}`);
+    const grupo = (await grupoRef.get()).data();
+    if (!grupo) {
+        throw new HttpsError('not-found', 'El grupo no existe.');
+    }
+    const miembroRef = grupoRef.collection('miembros').doc(uid);
+    if (!(await miembroRef.get()).exists) {
+        throw new HttpsError('not-found', 'No perteneces a este grupo.');
+    }
+
+    const soyAdmin = grupo['adminUid'] === uid;
+    const total = Number(grupo['miembrosCount'] ?? 1);
+
+    // Si soy el único miembro, el grupo se elimina.
+    if (total <= 1) {
+        await miembroRef.delete();
+        await grupoRef.delete();
+        await db.doc(`users/${uid}`).update({
+            grupos: FieldValue.arrayRemove(grupoId),
+            gruposFavoritos: FieldValue.arrayRemove(grupoId),
+        });
+        return { ok: true, eliminado: true };
+    }
+
+    // Si soy admin y hay más gente, debo transferir el rol.
+    if (soyAdmin) {
+        if (!nuevoAdminUid) {
+            throw new HttpsError('failed-precondition', 'Debes transferir el rol de administrador antes de salir.');
+        }
+        const nuevoRef = grupoRef.collection('miembros').doc(nuevoAdminUid);
+        if (!(await nuevoRef.get()).exists) {
+            throw new HttpsError('not-found', 'La persona que elegiste no está en el grupo.');
+        }
+        await nuevoRef.update({ rol: 'admin' });
+        await grupoRef.update({ adminUid: nuevoAdminUid });
+    }
+
+    await miembroRef.delete();
+    await grupoRef.update({ miembrosCount: FieldValue.increment(-1) });
+    await db.doc(`users/${uid}`).update({
+        grupos: FieldValue.arrayRemove(grupoId),
+        gruposFavoritos: FieldValue.arrayRemove(grupoId),
+    });
+
+    return { ok: true, eliminado: false };
+});
+
+/** Marca o desmarca un grupo como favorito para el usuario. */
+export const marcarGrupoFavorito = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) {
+        throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+    }
+    const grupoId = String(req.data?.grupoId ?? '');
+    const favorito = req.data?.favorito === true;
+    if (!grupoId) {
+        throw new HttpsError('invalid-argument', 'Falta el grupo.');
+    }
+
+    const userRef = db.doc(`users/${uid}`);
+    await userRef.update({
+        gruposFavoritos: favorito ? FieldValue.arrayUnion(grupoId) : FieldValue.arrayRemove(grupoId),
+    });
+
+    return { ok: true };
+});

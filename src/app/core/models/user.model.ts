@@ -44,5 +44,13 @@ export interface AppUser {
     /* Código temporal mientras se conecta Telegram. */
     vinculoTelegram?: { codigo: string } | null;
 
+    /* GRUPOS (ligas privadas) */
+    /* Puede crear y administrar grupos. Lo activa el super admin. */
+    esAdminGrupo?: boolean;
+    /* Ids de los grupos a los que pertenezco. */
+    grupos?: string[];
+    /* Ids de los grupos marcados como favoritos (acceso rápido). */
+    gruposFavoritos?: string[];
+
     createdAt?: unknown;
 }
