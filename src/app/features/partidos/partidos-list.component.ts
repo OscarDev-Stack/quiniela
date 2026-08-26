@@ -10,6 +10,7 @@ import { EscudoComponent } from '../../shared/escudo.component';
 import { PartidosService } from '../../core/services/partidos.service';
 import { PronosticosService } from '../../core/services/pronosticos.service';
 import { BracketsService } from '../../core/services/brackets.service';
+import { ContextoService } from '../../shared/contexto.service';
 import { Pronostico } from '../../core/models/pronostico.model';
 import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/models/partido.model';
 
@@ -245,6 +246,7 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
 })
 export class PartidosListComponent {
   private readonly service = inject(PartidosService);
+  private readonly contexto = inject(ContextoService);
   private readonly pronosticos = inject(PronosticosService);
   private readonly brackets = inject(BracketsService);
   private readonly router = inject(Router);
@@ -278,7 +280,10 @@ export class PartidosListComponent {
   );
 
   readonly visibles = computed(() => {
-    const activos = this.partidos().filter((p) => p.status !== 'cancelado');
+    const ctx = this.contexto.grupoId(); // null = Global
+    const activos = this.partidos().filter(
+      (p) => p.status !== 'cancelado' && (p.grupoId ?? null) === ctx,
+    );
     const f = this.filtro();
     let lista: Partido[];
     if (f === 'Abiertos') {

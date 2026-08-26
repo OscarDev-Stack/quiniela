@@ -52,6 +52,18 @@ export const routes: Routes = [
     },
 
     {
+        path: 'grupos',
+        loadComponent: () => import('./features/grupos/grupos.component').then((m) => m.GruposComponent),
+        canActivate: [authGuard],
+    },
+    {
+        path: 'grupos/:id',
+        loadComponent: () =>
+            import('./features/grupos/grupo-detalle.component').then((m) => m.GrupoDetalleComponent),
+        canActivate: [authGuard],
+    },
+
+    {
         path: 'perfil',
         loadComponent: () => import('./features/perfil/perfil.component').then((m) => m.PerfilComponent),
         canActivate: [authGuard],

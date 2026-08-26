@@ -1,5 +1,6 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { CampanitaComponent } from './campanita.component';
+import { SelectorContextoComponent } from './selector-contexto.component';
 import { CommonModule, Location } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -11,7 +12,7 @@ import { TorneosService } from '../core/services/torneos.service';
 @Component({
   selector: 'app-nav',
   standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive, CampanitaComponent],
+  imports: [CommonModule, RouterLink, RouterLinkActive, CampanitaComponent, SelectorContextoComponent],
   template: `
     <!-- Encabezado -->
     <header class="topbar">
@@ -45,6 +46,10 @@ import { TorneosService } from '../core/services/torneos.service';
       }
 
       @if (!back()) {
+        @if (mostrarContexto()) {
+          <app-selector-contexto />
+        }
+
         <a class="icono-top" routerLink="/ranking" aria-label="Ranking" title="Ranking">
           <i class="ti ti-trophy"></i>
         </a>
@@ -69,6 +74,7 @@ import { TorneosService } from '../core/services/torneos.service';
                 <a routerLink="/admin/torneos" (click)="menuAbierto.set(false)"><i class="ti ti-tournament"></i> Torneos</a>
                 <a routerLink="/admin/competiciones" (click)="menuAbierto.set(false)"><i class="ti ti-trophy"></i> Ligas</a>
                 <a routerLink="/admin/brackets" (click)="menuAbierto.set(false)"><i class="ti ti-sitemap"></i> Eliminatorias</a>
+                <a routerLink="/grupos" (click)="menuAbierto.set(false)"><i class="ti ti-users-group"></i> Grupos</a>
               </div>
             }
           </div>
@@ -245,6 +251,8 @@ export class NavComponent {
   readonly minimal = input(false);
   /** Si es true, oculta el saldo de la barra (útil cuando ya se muestra en la propia vista). */
   readonly ocultarSaldo = input(false);
+  /** Si es true, muestra el selector de contexto (Global/grupos). Solo en el inicio. */
+  readonly mostrarContexto = input(false);
 
   /** Menú desplegable de administración (tres puntos). */
   readonly menuAbierto = signal(false);

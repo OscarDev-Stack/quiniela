@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { BracketsService } from '../../core/services/brackets.service';
+import { GruposService } from '../../core/services/grupos.service';
+import { Grupo } from '../../core/models/grupo.model';
 import { ToastService } from '../../shared/toast.service';
 import { nombreOficial } from '../../core/models/equipos-liga-mx';
 import { CuadroBracketComponent } from './cuadro-bracket.component';
@@ -43,6 +45,15 @@ import {
             <label class="field">
               <span>Nombre</span>
               <input [(ngModel)]="nuevo.nombre" placeholder="Liguilla Apertura 2026" />
+            </label>
+            <label class="field">
+              <span>¿Para quién?</span>
+              <select [(ngModel)]="nuevo.grupoId">
+                <option value="">🌎 Global (todos)</option>
+                @for (g of misGrupos(); track g.id) {
+                  <option [value]="g.id">{{ g.icono }} {{ g.nombre }}</option>
+                }
+              </select>
             </label>
 
             <label class="field">
@@ -458,6 +469,9 @@ import {
 })
 export class AdminBracketsComponent {
   private readonly service = inject(BracketsService);
+  private readonly gruposSrv = inject(GruposService);
+
+  readonly misGrupos = toSignal(this.gruposSrv.misGrupos(), { initialValue: [] as Grupo[] });
   private readonly toast = inject(ToastService);
   readonly brackets = toSignal(this.service.brackets(), { initialValue: [] as Bracket[] });
 
@@ -489,6 +503,7 @@ export class AdminBracketsComponent {
     porcentajeBote: 0,
     cierre: '',
     listaEquipos: '',
+    grupoId: '' as string, // '' = Global
   };
 
   /** ¿Está desplegado el panel de participantes de este bracket? */
@@ -613,9 +628,11 @@ export class AdminBracketsComponent {
         porcentajeBote: Number(this.nuevo.porcentajeBote),
         cierraAt: this.nuevo.cierre ? new Date(this.nuevo.cierre) : null,
         publico: this.nuevo.publico,
+        grupoId: this.nuevo.grupoId || null,
       });
       this.toast.exito('Eliminatoria creada.');
       this.nuevo.nombre = '';
+      this.nuevo.grupoId = '';
       this.nuevo.listaEquipos = '';
       this.nuevo.cierre = '';
     } catch (e: unknown) {

@@ -229,6 +229,18 @@ export const crearPronostico = onCall(opcionesCall, async (req) => {
         const me = userSnap.data() as Record<string, unknown>;
         const part = partSnap.data() as Record<string, unknown>;
 
+        // Si el partido es de un grupo, solo sus miembros pueden pronosticar.
+        const grupoId = part['grupoId'];
+        if (typeof grupoId === 'string' && grupoId) {
+            const miembroSnap = await tx.get(db.doc(`grupos/${grupoId}/miembros/${uid}`));
+            if (!miembroSnap.exists) {
+                throw new HttpsError(
+                    'permission-denied',
+                    'Este partido es de un grupo privado. Debes ser miembro del grupo para participar.',
+                );
+            }
+        }
+
         if (me['validada'] !== true) {
             throw new HttpsError(
                 'permission-denied',
@@ -365,6 +377,51 @@ export const liquidarPartido = onCall(opcionesCall, async (req) => {
  * tanto el admin (liquidarPartido) como el cierre automático por API
  * (revisarResultados). Idempotente: si ya está liquidado, no repite.
  */
+/**
+ * Actualiza la tabla (ranking) de un grupo tras liquidar algo de ese grupo.
+ * A cada participante le suma un "resuelto"; a los que acertaron, un "acierto".
+ * Recalcula el porcentaje. El alias se toma del documento de miembro.
+ */
+async function actualizarTablaGrupo(
+    grupoId: string,
+    participantes: Array<{ uid: string; acerto: boolean }>,
+): Promise<void> {
+    for (const { uid, acerto } of participantes) {
+        const filaRef = db.doc(`grupos/${grupoId}/tabla/${uid}`);
+        try {
+            await db.runTransaction(async (tx) => {
+                const [filaSnap, miembroSnap] = await Promise.all([
+                    tx.get(filaRef),
+                    tx.get(db.doc(`grupos/${grupoId}/miembros/${uid}`)),
+                ]);
+                // Si ya no es miembro del grupo, no lo agregamos a la tabla.
+                if (!miembroSnap.exists) return;
+
+                const prev = filaSnap.exists ? (filaSnap.data() as Record<string, unknown>) : {};
+                const aciertos = Number(prev['aciertos'] ?? 0) + (acerto ? 1 : 0);
+                const resueltos = Number(prev['resueltos'] ?? 0) + 1;
+                const alias = String((miembroSnap.data() as Record<string, unknown>)['alias'] ?? 'Jugador');
+
+                tx.set(
+                    filaRef,
+                    {
+                        uid,
+                        alias,
+                        aciertos,
+                        resueltos,
+                        porcentaje: resueltos > 0 ? Math.round((aciertos / resueltos) * 100) : 0,
+                        actualizado: FieldValue.serverTimestamp(),
+                    },
+                    { merge: true },
+                );
+            });
+        } catch {
+            // Si falla la actualización de un usuario, no rompe la liquidación:
+            // la tabla del grupo es secundaria frente al reparto de puntos.
+        }
+    }
+}
+
 async function ejecutarLiquidacion(
     partidoId: string,
     resultadoOficial: string,
@@ -553,6 +610,17 @@ async function ejecutarLiquidacion(
         liquidadoAt: FieldValue.serverTimestamp(),
         poolTotal: bolsa,
     });
+
+    // Si el partido es de un grupo, actualiza la tabla (ranking) de ese grupo:
+    // suma un "resuelto" a cada participante y un "acierto" a los ganadores.
+    const grupoId = partido['grupoId'];
+    if (typeof grupoId === 'string' && grupoId) {
+        const idsGanadores = new Set(ganadores.map((p) => p.uid));
+        await actualizarTablaGrupo(
+            grupoId,
+            pronosticos.map((p) => ({ uid: p.uid, acerto: idsGanadores.has(p.uid) })),
+        );
+    }
 
     return {
         ok: true,
@@ -1150,6 +1218,18 @@ export const unirseTorneo = onCall(opcionesCall, async (req) => {
     const t = torneo.data() as Record<string, unknown>;
     if (t['estado'] !== 'inscripcion') {
         throw new HttpsError('failed-precondition', 'Este torneo ya cerró inscripciones.');
+    }
+
+    // Si el torneo pertenece a un grupo, solo pueden unirse sus miembros.
+    const grupoId = t['grupoId'];
+    if (typeof grupoId === 'string' && grupoId) {
+        const esMiembro = (await db.doc(`grupos/${grupoId}/miembros/${uid}`).get()).exists;
+        if (!esMiembro) {
+            throw new HttpsError(
+                'permission-denied',
+                'Este torneo es de un grupo privado. Debes ser miembro del grupo para entrar.',
+            );
+        }
     }
 
     const cierre = t['cierreInscripcion'] as Timestamp | undefined;
@@ -2260,6 +2340,22 @@ export const consultarTorneo = onCall(opcionesCall, async (req) => {
     }
 
     const t = encontrados.docs[0].data() as Record<string, unknown>;
+
+    // Si el torneo es de un grupo, solo un miembro puede ver sus detalles.
+    const grupoId = t['grupoId'];
+    if (typeof grupoId === 'string' && grupoId) {
+        const uid = req.auth?.uid;
+        const esMiembro = uid
+            ? (await db.doc(`grupos/${grupoId}/miembros/${uid}`).get()).exists
+            : false;
+        if (!esMiembro) {
+            throw new HttpsError(
+                'permission-denied',
+                'Este torneo es de un grupo privado. Únete al grupo para poder verlo.',
+            );
+        }
+    }
+
     const participantes = await encontrados.docs[0].ref.collection('participantes').count().get();
 
     return {
@@ -3098,6 +3194,7 @@ export const crearBracket = onCall(opcionesCall, async (req) => {
         costoEntrada: Number(req.data?.costoEntrada ?? 0),
         porcentajeBote: Number(req.data?.porcentajeBote ?? 0),
         publico: req.data?.publico === true,
+        grupoId: typeof req.data?.grupoId === 'string' && req.data.grupoId ? req.data.grupoId : null,
         bolsa: 0,
         gestores: [],
         creadoPor: uid,
@@ -3497,6 +3594,19 @@ export const unirseBracket = onCall(opcionesCall, async (req) => {
 
     const encontrados = await db.collection('brackets').where('codigo', '==', codigo).limit(1).get();
     if (encontrados.empty) throw new HttpsError('not-found', 'No hay ninguna eliminatoria con ese código.');
+
+    // Si la eliminatoria es de un grupo, solo sus miembros pueden entrar.
+    const b = encontrados.docs[0].data() as Record<string, unknown>;
+    const grupoId = b['grupoId'];
+    if (typeof grupoId === 'string' && grupoId) {
+        const esMiembro = (await db.doc(`grupos/${grupoId}/miembros/${uid}`).get()).exists;
+        if (!esMiembro) {
+            throw new HttpsError(
+                'permission-denied',
+                'Esta eliminatoria es de un grupo privado. Debes ser miembro del grupo para entrar.',
+            );
+        }
+    }
 
     return { ok: true, id: encontrados.docs[0].id };
 });
@@ -4045,7 +4155,12 @@ export const unirseAGrupo = onCall(opcionesCall, async (req) => {
     await grupoRef.update({ miembrosCount: FieldValue.increment(1) });
     await userRef.update({ grupos: FieldValue.arrayUnion(grupoRef.id) });
 
-    return { ok: true, grupoId: grupoRef.id, nombre: grupoDoc.data()['nombre'] };
+    return {
+        ok: true,
+        grupoId: grupoRef.id,
+        nombre: grupoDoc.data()['nombre'],
+        icono: grupoDoc.data()['icono'] ?? '⚽',
+    };
 });
 
 /** El admin de un grupo agrega manualmente a un usuario por su uid. */
@@ -4170,4 +4285,46 @@ export const marcarGrupoFavorito = onCall(opcionesCall, async (req) => {
     });
 
     return { ok: true };
+});
+
+/**
+ * Busca usuarios por alias para que un admin de grupo pueda agregarlos.
+ * Devuelve SOLO datos públicos (uid + alias), nunca el correo, para no
+ * exponer información privada. Requiere que el llamante sea admin de grupo.
+ */
+export const buscarUsuariosPorAlias = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) {
+        throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+    }
+    const texto = String(req.data?.texto ?? '').trim();
+    if (texto.length < 2) {
+        throw new HttpsError('invalid-argument', 'Escribe al menos 2 letras.');
+    }
+
+    // Solo un admin de grupo puede buscar personas.
+    const yo = (await db.doc(`users/${uid}`).get()).data();
+    if (yo?.['esAdminGrupo'] !== true) {
+        throw new HttpsError('permission-denied', 'No tienes permiso para buscar usuarios.');
+    }
+
+    // Búsqueda por prefijo de alias (rango de Firestore). Case-sensitive:
+    // devolvemos coincidencias que empiezan con el texto tal cual.
+    // Nota: filtramos por rango de alias solamente (no combinamos con otro
+    // campo) para no requerir un índice compuesto.
+    const fin = texto + '\uf8ff';
+    const snap = await db
+        .collection('users')
+        .where('alias', '>=', texto)
+        .where('alias', '<=', fin)
+        .limit(15)
+        .get();
+
+    const resultados = snap.docs
+        .map((d) => ({ uid: d.id, alias: String(d.data()['alias'] ?? ''), validada: d.data()['validada'] === true }))
+        .filter((r) => r.uid !== uid && r.validada) // no me incluyo; solo validados
+        .map((r) => ({ uid: r.uid, alias: r.alias }))
+        .slice(0, 10);
+
+    return { usuarios: resultados };
 });

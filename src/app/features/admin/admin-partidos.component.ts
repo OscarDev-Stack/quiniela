@@ -11,6 +11,8 @@ import { Partido, TipoPartido, fechaCierre } from '../../core/models/partido.mod
 import { Bolsa } from '../../core/models/bolsa.model';
 import { ConfirmarService } from '../../shared/confirmar.service';
 import { ToastService } from '../../shared/toast.service';
+import { GruposService } from '../../core/services/grupos.service';
+import { Grupo } from '../../core/models/grupo.model';
 
 interface Outcome {
   value: string;
@@ -39,6 +41,21 @@ interface Outcome {
         <div class="stat-val">{{ sistema()?.total ?? 0 | number }}</div>
       </div>
     </div>
+
+    <section class="panel panel--contexto">
+      <label class="ctx-field">
+        <span><i class="ti ti-target"></i> ¿Para quién son los partidos que crees?</span>
+        <select [(ngModel)]="grupoParaCrear">
+          <option value="">🌎 Global (todos)</option>
+          @for (g of misGrupos(); track g.id) {
+            <option [value]="g.id">{{ g.icono }} {{ g.nombre }}</option>
+          }
+        </select>
+        <small class="ctx-pista">
+          Aplica a los partidos (manuales o de API) que crees abajo. Global lo ven todos; un grupo, solo sus miembros.
+        </small>
+      </label>
+    </section>
 
     <section class="panel">
       <button class="panel-title panel-title--boton" (click)="verApi.set(!verApi())">
@@ -271,6 +288,15 @@ interface Outcome {
         border-radius: 12px; padding: 16px 18px; margin-bottom: 18px;
       }
       .panel-title { font-size: 15px; font-weight: 600; margin: 0 0 14px; }
+      .panel--contexto { border: 1px solid var(--accent-fill); }
+      .ctx-field { display: block; }
+      .ctx-field > span { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+      .ctx-field select {
+        width: 100%; padding: 10px 12px; border: 1px solid var(--border);
+        border-radius: var(--radius); background: var(--surface-1);
+        color: var(--text-primary); font-size: 14px;
+      }
+      .ctx-pista { display: block; font-size: 12px; color: var(--text-muted); margin-top: 6px; }
       .panel-title--boton {
         display: flex; align-items: center; gap: 8px; width: 100%;
         cursor: pointer; text-align: left; margin: 0;
@@ -391,6 +417,12 @@ export class AdminPartidosComponent {
   readonly selectorVisita = signal(false);
 
   private readonly admin = inject(AdminService);
+  private readonly gruposSrv = inject(GruposService);
+
+  /** Grupos disponibles para asignar a los partidos que se creen. */
+  readonly misGrupos = toSignal(this.gruposSrv.misGrupos(), { initialValue: [] as Grupo[] });
+  /** Grupo elegido para los partidos que se creen ('' = Global). */
+  readonly grupoParaCrear = signal<string>('');
   private readonly toast = inject(ToastService);
 
   readonly partidos = toSignal(this.admin.getPartidos(), { initialValue: [] as Partido[] });
@@ -532,6 +564,7 @@ export class AdminPartidosComponent {
       status: 'abierto',
       closesAt: Timestamp.fromDate(inicio),
       apiFixtureId: f.apiFixtureId,
+      grupoId: this.grupoParaCrear() || null,
     });
     this.encontrados.set(this.encontrados().filter((x) => x.apiFixtureId !== f.apiFixtureId));
     this.toast.exito(`Partido creado: ${f.homeTeam} vs ${f.awayTeam}.`);
@@ -656,6 +689,7 @@ export class AdminPartidosComponent {
         status: 'abierto',
         closesAt: Timestamp.fromDate(cierre),
         porcentajeBote: Number(this.form.porcentajeBote),
+        grupoId: this.grupoParaCrear() || null,
       });
       this.form = { homeTeam: '', awayTeam: '', competition: '', closesAt: '', type: '1x2', porcentajeBote: 0 };
       this.toast.exito('Partido creado.');

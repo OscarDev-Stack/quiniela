@@ -200,10 +200,12 @@ export class TorneosService {
     jornadas: number;
     vidaCubre: 'empate' | 'tropiezo';
     permiteRevivir: boolean;
+    grupoId?: string | null;
   }): Promise<unknown> {
     const codigo = this.generarCodigo();
     return addDoc(collection(this.db, 'torneos'), {
       ...datos,
+      grupoId: datos.grupoId ?? null,
       codigo,
       estado: 'inscripcion',
       jornadaActual: datos.jornadaInicial,

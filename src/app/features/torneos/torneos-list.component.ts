@@ -8,6 +8,7 @@ import { CargandoComponent } from '../../shared/cargando.component';
 import { apagarCargando } from '../../shared/cargando.util';
 import { TorneosService } from '../../core/services/torneos.service';
 import { BracketsService } from '../../core/services/brackets.service';
+import { ContextoService } from '../../shared/contexto.service';
 import { Torneo } from '../../core/models/torneo.model';
 import { Bracket } from '../../core/models/bracket.model';
 
@@ -21,7 +22,7 @@ import { Bracket } from '../../core/models/bracket.model';
 
       @if (cargando()) {
         <app-cargando texto="Cargando torneos" />
-      } @else if (visibles().length === 0 && brackets().length === 0) {
+      } @else if (visibles().length === 0 && bracketsVisibles().length === 0) {
         <div class="vacio">
           <i class="ti ti-tournament"></i>
           <p>No participas en ningún torneo.</p>
@@ -67,9 +68,9 @@ import { Bracket } from '../../core/models/bracket.model';
         </article>
       }
 
-      @if (brackets().length > 0) {
+      @if (bracketsVisibles().length > 0) {
         <h3 class="seccion">Eliminatorias</h3>
-        @for (b of brackets(); track b.id) {
+        @for (b of bracketsVisibles(); track b.id) {
           <article class="card card--bracket" (click)="abrirBracket(b)">
             <div class="top">
               <span class="competicion">Eliminatoria</span>
@@ -133,6 +134,7 @@ export class TorneosListComponent {
   private readonly service = inject(TorneosService);
   private readonly bracketsService = inject(BracketsService);
   private readonly router = inject(Router);
+  private readonly contexto = inject(ContextoService);
 
   /** True hasta que llegan los primeros torneos. */
   readonly cargando = signal(true);
@@ -144,9 +146,18 @@ export class TorneosListComponent {
   );
   readonly brackets = toSignal(this.bracketsService.misBrackets(), { initialValue: [] as Bracket[] });
 
-  readonly visibles = computed(() =>
-    [...this.torneos()].sort((a, b) => a.estado.localeCompare(b.estado)),
-  );
+  readonly visibles = computed(() => {
+    const ctx = this.contexto.grupoId(); // null = Global
+    return [...this.torneos()]
+      .filter((t) => (t.grupoId ?? null) === ctx)
+      .sort((a, b) => a.estado.localeCompare(b.estado));
+  });
+
+  /** Brackets del contexto activo (Global o el grupo elegido). */
+  readonly bracketsVisibles = computed(() => {
+    const ctx = this.contexto.grupoId();
+    return this.brackets().filter((b) => (b.grupoId ?? null) === ctx);
+  });
 
   abrir(t: Torneo): void {
     this.router.navigate(['/torneos', t.id]);

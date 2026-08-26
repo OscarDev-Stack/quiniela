@@ -93,6 +93,7 @@ export class BracketsService {
         porcentajeBote: number;
         cierraAt: Date | null;
         publico: boolean;
+        grupoId?: string | null;
     }): Promise<{ id: string }> {
         const fn = httpsCallable<typeof datos, { ok: boolean; id: string }>(
             this.fns,

@@ -5,8 +5,10 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { Subscription } from 'rxjs';
 import { TorneosService } from '../../core/services/torneos.service';
 import { Torneo, Participante, ModoTorneo } from '../../core/models/torneo.model';
+import { Grupo } from '../../core/models/grupo.model';
 import { Competicion } from '../../core/models/competicion.model';
 import { CompeticionesService } from '../../core/services/competiciones.service';
+import { GruposService } from '../../core/services/grupos.service';
 import { ConfirmarService } from '../../shared/confirmar.service';
 import { ToastService } from '../../shared/toast.service';
 
@@ -50,6 +52,16 @@ import { ToastService } from '../../shared/toast.service';
           <span>Nombre</span>
           <input type="text" [(ngModel)]="form.nombre" placeholder="Los del jueves, La Oficina…" />
           <small class="pista">Como le van a decir entre ustedes.</small>
+        </label>
+        <label class="field">
+          <span>¿Para quién?</span>
+          <select [(ngModel)]="form.grupoId">
+            <option value="">🌎 Global (todos)</option>
+            @for (g of misGrupos(); track g.id) {
+              <option [value]="g.id">{{ g.icono }} {{ g.nombre }}</option>
+            }
+          </select>
+          <small class="pista">Global lo ven todos; un grupo, solo sus miembros.</small>
         </label>
         <label class="field">
           <span>Modo de juego</span>
@@ -430,6 +442,10 @@ import { ToastService } from '../../shared/toast.service';
 })
 export class AdminTorneosComponent {
   private readonly service = inject(TorneosService);
+  private readonly gruposSrv = inject(GruposService);
+
+  /** Grupos donde soy admin (puedo crearles torneos). */
+  readonly misGrupos = toSignal(this.gruposSrv.misGrupos(), { initialValue: [] as Grupo[] });
   private readonly competicionesSrv = inject(CompeticionesService);
   private readonly confirmar = inject(ConfirmarService);
   private readonly toast = inject(ToastService);
@@ -453,6 +469,7 @@ export class AdminTorneosComponent {
     costoEntrada: 0,
     porcentajeBote: 0,
     cierreInscripcion: '',
+    grupoId: '' as string, // '' = Global
   };
 
   /** Participantes por torneo. Suscripciones creadas una sola vez. */
@@ -624,6 +641,7 @@ export class AdminTorneosComponent {
         vidas: this.form.modo === 'supervivencia' ? Number(this.form.vidas) : 0,
         vidaCubre: this.form.vidaCubre,
         permiteRevivir: this.form.modo === 'supervivencia' && this.form.permiteRevivir,
+        grupoId: this.form.grupoId || null,
       });
       this.form = {
         nombre: '',
@@ -637,6 +655,7 @@ export class AdminTorneosComponent {
         costoEntrada: 0,
         porcentajeBote: 0,
         cierreInscripcion: '',
+        grupoId: '',
       };
       this.toast.exito('Torneo creado. Comparte el enlace de invitación.');
     } catch (e: unknown) {

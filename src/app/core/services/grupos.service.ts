@@ -72,6 +72,13 @@ export class GruposService {
         await fn({ grupoId, uid });
     }
 
+    /** Busca usuarios por alias (solo devuelve uid + alias, sin correos). */
+    async buscarUsuarios(texto: string): Promise<{ uid: string; alias: string }[]> {
+        const fn = httpsCallable(this.fns, 'buscarUsuariosPorAlias');
+        const r = await fn({ texto });
+        return (r.data as { usuarios: { uid: string; alias: string }[] }).usuarios ?? [];
+    }
+
     async salir(grupoId: string, nuevoAdminUid?: string): Promise<{ eliminado: boolean }> {
         const fn = httpsCallable(this.fns, 'salirDeGrupo');
         const r = await fn({ grupoId, nuevoAdminUid: nuevoAdminUid ?? '' });
