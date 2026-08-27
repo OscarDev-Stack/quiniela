@@ -66,10 +66,20 @@ import { Grupo } from '../core/models/grupo.model';
 
       .fondo { position: fixed; inset: 0; z-index: 30; }
       .menu {
-        position: absolute; top: calc(100% + 6px); left: 0; z-index: 31;
-        min-width: 230px; background: var(--surface-2);
+        position: absolute; top: calc(100% + 6px); right: 0; z-index: 31;
+        min-width: 230px; max-width: calc(100vw - 24px); background: var(--surface-2);
         border: 1px solid var(--border); border-radius: 12px;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); overflow: hidden; padding: 6px;
+      }
+      /* En móvil, el icono no está pegado al borde derecho (le siguen el
+         trofeo y el menú ⋮), así que anclar 'right: 0' al icono deja que el
+         menú se salga. Lo fijamos al borde derecho de la ventana. */
+      @media (max-width: 560px) {
+        .menu {
+          position: fixed; right: 12px; left: auto;
+          top: calc(env(safe-area-inset-top, 0px) + 58px);
+          min-width: 220px; max-width: calc(100vw - 24px);
+        }
       }
       .menu-tit {
         display: block; font-size: 11px; color: var(--text-muted);

@@ -20,7 +20,7 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
   imports: [CommonModule, NavComponent, CargandoComponent, EscudoComponent],
   template: `
     <div class="screen">
-      <app-nav />
+      <app-nav title="Partidos" />
 
       <nav class="filters">
         @for (f of filtros; track f) {

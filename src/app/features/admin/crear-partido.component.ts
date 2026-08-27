@@ -12,6 +12,7 @@ import { ToastService } from '../../shared/toast.service';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { GruposService } from '../../core/services/grupos.service';
 import { Grupo } from '../../core/models/grupo.model';
+import { NavComponent } from '../../shared/nav.component';
 
 /**
  * Pantalla dedicada SOLO a crear partidos (por API o manuales). La gestión y
@@ -21,8 +22,9 @@ import { Grupo } from '../../core/models/grupo.model';
 @Component({
   selector: 'app-crear-partido',
   standalone: true,
-  imports: [CommonModule, FormsModule, EscudoComponent, SelectorEquipoComponent],
+  imports: [CommonModule, FormsModule, EscudoComponent, SelectorEquipoComponent, NavComponent],
   template: `
+    <app-nav [back]="true" [minimal]="true" title="Crear partido" [ocultarSaldo]="true" />
     <section class="panel panel--contexto">
       <label class="ctx-field">
         <span><i class="ti ti-target"></i> ¿Para quién son los partidos que crees?</span>

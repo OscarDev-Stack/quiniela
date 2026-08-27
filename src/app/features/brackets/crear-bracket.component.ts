@@ -9,6 +9,7 @@ import { Grupo } from '../../core/models/grupo.model';
 import { ToastService } from '../../shared/toast.service';
 import { nombreOficial } from '../../core/models/equipos-liga-mx';
 import { EquipoBracket } from '../../core/models/bracket.model';
+import { NavComponent } from '../../shared/nav.component';
 
 /**
  * Pantalla dedicada SOLO a crear una eliminatoria (bracket). La gestión de
@@ -16,12 +17,12 @@ import { EquipoBracket } from '../../core/models/bracket.model';
  * la eliminatoria se crea para ese grupo (selector fijo).
  */
 @Component({
-    selector: 'app-crear-bracket',
-    standalone: true,
-    imports: [CommonModule, FormsModule],
-    template: `
+  selector: 'app-crear-bracket',
+  standalone: true,
+  imports: [CommonModule, FormsModule, NavComponent],
+  template: `
+    <app-nav [back]="true" [minimal]="true" title="Crear eliminatoria" [ocultarSaldo]="true" />
     <section class="panel">
-      <h2 class="titulo">Crear eliminatoria</h2>
           <div class="form">
             <label class="field">
               <span>Nombre</span>
@@ -189,532 +190,237 @@ import { EquipoBracket } from '../../core/models/bracket.model';
           </div>
     </section>
   `,
-    styles: [
-        `
-  .wrap {
-    padding: 18px 16px 40px;
-  }
+  styles: [
+    `
+      .wrap { padding: 18px 16px 40px; }
+      h1 { font-size: 20px; font-weight: 700; margin: 0 0 16px; }
+      .panel {
+        background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: 12px; padding: 14px 16px; margin-bottom: 14px;
+      }
+      .cab {
+        display: flex; align-items: center; gap: 10px; width: 100%;
+        cursor: pointer; text-align: left; background: transparent; border: none;
+        padding: 0; color: inherit;
+      }
+      .cab i { color: var(--text-muted); font-size: 17px; flex-shrink: 0; }
+      .cab-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+      .cab-nom { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+      .cab-sub { font-size: 12px; font-weight: 400; color: var(--text-muted); }
+      .badge {
+        font-size: 11px; font-weight: 600; padding: 2px 9px;
+        border-radius: 999px; background: var(--surface-1); color: var(--text-secondary);
+      }
+      .form { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; }
+      .field { display: block; }
+      .field--ancho { grid-column: 1 / -1; }
+      .acciones-crear { grid-column: 1 / -1; }
+      @media (max-width: 620px) {
+        .form { grid-template-columns: 1fr; gap: 14px; }
+      }
+      .acciones-crear .btn--primary { width: 100%; }
+      .field span { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 5px; }
+      .field input, .field select, .field textarea {
+        width: 100%; min-height: 42px; padding: 9px 11px; font-size: 14px;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-1); color: var(--text-primary);
+      }
+      .field textarea { min-height: auto; font-family: inherit; resize: vertical; }
+      .btn {
+        padding: 10px 16px; border-radius: var(--radius); cursor: pointer;
+        font-size: 14px; font-weight: 600;
+        border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
+      }
+      .btn--primary { background: var(--accent-fill); color: #fff; border-color: transparent; }
+      .btn.sm { padding: 7px 12px; font-size: 13px; }
+      .btn:disabled { opacity: 0.5; }
+      .aviso { font-size: 13px; color: var(--text-secondary); margin: 8px 0 0; }
+      .aviso--error { color: var(--danger-text); }
+      .invitar { display: flex; align-items: center; gap: 10px; margin: 10px 0 14px; }
 
-  h1 {
-    font-size: 20px;
-    font-weight: 700;
-    margin: 0 0 16px;
-  }
+      /* Resumen de configuración */
+      .resumen-cfg { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 14px; }
+      .resumen-cfg .dato {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 12px; padding: 5px 10px; border-radius: 999px;
+        background: var(--surface-1); color: var(--text-secondary);
+      }
+      .resumen-cfg .dato i { font-size: 14px; }
+      .resumen-cfg .dato--gana { background: var(--accent-bg); color: var(--accent-text); font-weight: 600; }
 
-  .panel {
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 14px 16px;
-    margin-bottom: 14px;
-  }
-
-  .cab {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    cursor: pointer;
-    text-align: left;
-    background: transparent;
-    border: none;
-    padding: 0;
-    color: inherit;
-  }
-
-  .cab i {
-    color: var(--text-muted);
-    font-size: 17px;
-    flex-shrink: 0;
-  }
-
-  .cab-txt {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    min-width: 0;
-  }
-
-  .cab-nom {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 15px;
-    font-weight: 600;
-  }
-
-  .cab-sub {
-    font-size: 12px;
-    font-weight: 400;
-    color: var(--text-muted);
-  }
-
-  .badge {
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 9px;
-    border-radius: 999px;
-    background: var(--surface-1);
-    color: var(--text-secondary);
-  }
-
-  .form {
-    margin-top: 14px;
-    display: grid;
-    gap: 12px;
-  }
-
-  .field {
-    display: block;
-  }
-
-  .field--ancho {
-    grid-column: 1 / -1;
-  }
-
-  .acciones-crear {
-    grid-column: 1 / -1;
-  }
-
-  .acciones-crear .btn--primary {
-    width: 100%;
-  }
-
-  .field span {
-    display: block;
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-bottom: 5px;
-  }
-
-  .field input,
-  .field select,
-  .field textarea {
-    width: 100%;
-    min-height: 42px;
-    padding: 9px 11px;
-    font-size: 14px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface-1);
-    color: var(--text-primary);
-  }
-
-  .field textarea {
-    min-height: auto;
-    font-family: inherit;
-    resize: vertical;
-  }
-
-  .btn {
-    padding: 10px 16px;
-    border-radius: var(--radius);
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    border: 1px solid var(--border);
-    background: var(--surface-1);
-    color: var(--text-primary);
-  }
-
-  .btn--primary {
-    background: var(--accent-fill);
-    color: #fff;
-    border-color: transparent;
-  }
-
-  .btn.sm {
-    padding: 7px 12px;
-    font-size: 13px;
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-  }
-
-  .aviso {
-    font-size: 13px;
-    color: var(--text-secondary);
-    margin: 8px 0 0;
-  }
-
-  .aviso--error {
-    color: var(--danger-text);
-  }
-
-  .invitar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 10px 0 14px;
-  }
-
-  /* Resumen de configuración */
-  .resumen-cfg {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-    margin: 0 0 14px;
-  }
-
-  .resumen-cfg .dato {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 12px;
-    padding: 5px 10px;
-    border-radius: 999px;
-    background: var(--surface-1);
-    color: var(--text-secondary);
-  }
-
-  .resumen-cfg .dato i {
-    font-size: 14px;
-  }
-
-  .resumen-cfg .dato--gana {
-    background: var(--accent-bg);
-    color: var(--accent-text);
-    font-weight: 600;
-  }
-
-  /* Participantes / dueños */
-  .part-cab {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 8px 0;
-    color: var(--text-primary);
-    font-size: 14px;
-    text-align: left;
-  }
-
-  .part-cab .sub {
-    font-size: 12px;
-    font-weight: 400;
-    color: var(--text-muted);
-    margin: 0 0 0 auto;
-  }
-
-  .part {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: var(--radius);
-    background: var(--surface-1);
-    margin-bottom: 5px;
-  }
-
-  .part-alias {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-primary);
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .part-datos {
-    flex-shrink: 0;
-  }
-
-  .part-estado {
-    font-size: 11px;
-    font-weight: 700;
-    padding: 3px 9px;
-    border-radius: 999px;
-    background: var(--surface-2);
-    color: var(--text-muted);
-  }
-
-  .part-estado.ok {
-    background: var(--success-bg);
-    color: var(--success-text);
-  }
-
-  .part-estado.pend {
-    background: var(--warning-bg);
-    color: var(--warning-text);
-  }
-
-  .codigo {
-    font-size: 13px;
-    color: var(--text-secondary);
-    margin: 0;
-  }
-
-  .sub {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 18px 0 10px;
-  }
-
-  .captura {
-    border-top: 1px solid var(--border);
-    padding: 12px 0;
-  }
-
-  .captura-cab {
-    font-size: 13px;
-    color: var(--text-secondary);
-    margin-bottom: 8px;
-  }
-
-  .pista {
-    display: block;
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 4px;
-  }
-
-  .partido {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 10px;
-    margin-bottom: 8px;
-    background: var(--surface-1);
-  }
-
-  .partido-cab {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-  }
-
-  .tipo {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-  }
-
-  /* Rejilla fija: nombre | casilla | guion | casilla | nombre.
-     Las casillas quedan siempre centradas, sin importar el largo
-     de los nombres, que se recortan con puntos suspensivos. */
-  .marcador {
-    display: grid;
-    grid-template-columns: 1fr 48px 12px 48px 1fr;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .partido input {
-    width: 48px;
-    text-align: center;
-    padding: 8px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface-2);
-    color: var(--text-primary);
-    font-size: 15px;
-  }
-
-  .sep {
-    color: var(--text-muted);
-    text-align: center;
-  }
-
-  .eq-nom {
-    font-size: 13px;
-    color: var(--text-secondary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .eq-nom--der {
-    text-align: left;
-  }
-
-  .partido-btn {
-    width: 100%;
-    margin-top: 10px;
-  }
-
-  .check-ok {
-    color: var(--success-text);
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .calif {
-    width: 100%;
-    margin: 6px 0 12px;
-  }
-
-  .switch {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 14px;
-    cursor: pointer;
-    margin-top: 4px;
-  }
-
-  .switch-texto {
-    flex: 1;
-    font-size: 14px;
-  }
-
-  .switch-input {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-
-  .switch-pista {
-    position: relative;
-    flex-shrink: 0;
-    margin-top: 2px;
-    width: 46px;
-    height: 26px;
-    border-radius: 999px;
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    transition: background 0.18s ease, border-color 0.18s ease;
-  }
-
-  .switch-pista::after {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--text-muted);
-    transition: transform 0.18s ease, background 0.18s ease;
-  }
-
-  .switch-input:checked + .switch-pista {
-    background: var(--accent-fill);
-    border-color: transparent;
-  }
-
-  .switch-input:checked + .switch-pista::after {
-    transform: translateX(20px);
-    background: #fff;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .switch-pista,
-    .switch-pista::after {
-      transition: none;
-    }
-  }
-  `,
-    ],
+      /* Participantes / dueños */
+      .part-cab {
+        display: flex; align-items: center; gap: 8px; width: 100%;
+        background: transparent; border: none; cursor: pointer; padding: 8px 0;
+        color: var(--text-primary); font-size: 14px; text-align: left;
+      }
+      .part-cab .sub { font-size: 12px; font-weight: 400; color: var(--text-muted); margin: 0 0 0 auto; }
+      .part {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        padding: 8px 10px; border-radius: var(--radius); background: var(--surface-1); margin-bottom: 5px;
+      }
+      .part-alias { font-size: 13px; font-weight: 600; color: var(--text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .part-datos { flex-shrink: 0; }
+      .part-estado { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); }
+      .part-estado.ok { background: var(--success-bg); color: var(--success-text); }
+      .part-estado.pend { background: var(--warning-bg); color: var(--warning-text); }
+      .codigo { font-size: 13px; color: var(--text-secondary); margin: 0; }
+      .sub { font-size: 14px; font-weight: 600; margin: 18px 0 10px; }
+      .captura { border-top: 1px solid var(--border); padding: 12px 0; }
+      .captura-cab { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+      .pista { display: block; font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+      .partido {
+        border: 1px solid var(--border); border-radius: var(--radius);
+        padding: 10px; margin-bottom: 8px; background: var(--surface-1);
+      }
+      .partido-cab { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+      .tipo { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+      /* Rejilla fija: nombre | casilla | guion | casilla | nombre.
+         Las casillas quedan siempre centradas, sin importar el largo
+         de los nombres, que se recortan con puntos suspensivos. */
+      .marcador {
+        display: grid;
+        grid-template-columns: 1fr 48px 12px 48px 1fr;
+        align-items: center; gap: 8px;
+      }
+      .partido input {
+        width: 48px; text-align: center; padding: 8px;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-2); color: var(--text-primary); font-size: 15px;
+      }
+      .sep { color: var(--text-muted); text-align: center; }
+      .eq-nom {
+        font-size: 13px; color: var(--text-secondary);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .eq-nom--der { text-align: left; }
+      .partido-btn { width: 100%; margin-top: 10px; }
+      .check-ok { color: var(--success-text); font-size: 12px; font-weight: 600; }
+      .calif { width: 100%; margin: 6px 0 12px; }
+      .switch {
+        display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
+        cursor: pointer; margin-top: 4px;
+      }
+      .switch-texto { flex: 1; font-size: 14px; }
+      .switch-input { position: absolute; opacity: 0; width: 0; height: 0; }
+      .switch-pista {
+        position: relative; flex-shrink: 0; margin-top: 2px;
+        width: 46px; height: 26px; border-radius: 999px;
+        background: var(--surface-1); border: 1px solid var(--border);
+        transition: background 0.18s ease, border-color 0.18s ease;
+      }
+      .switch-pista::after {
+        content: ''; position: absolute; top: 2px; left: 2px;
+        width: 20px; height: 20px; border-radius: 50%;
+        background: var(--text-muted); transition: transform 0.18s ease, background 0.18s ease;
+      }
+      .switch-input:checked + .switch-pista { background: var(--accent-fill); border-color: transparent; }
+      .switch-input:checked + .switch-pista::after { transform: translateX(20px); background: #fff; }
+      @media (prefers-reduced-motion: reduce) { .switch-pista, .switch-pista::after { transition: none; } }
+    `,
+  ],
 })
 export class CrearBracketComponent {
-    private readonly service = inject(BracketsService);
-    private readonly gruposSrv = inject(GruposService);
-    private readonly toast = inject(ToastService);
-    private readonly router = inject(Router);
+  private readonly service = inject(BracketsService);
+  private readonly gruposSrv = inject(GruposService);
+  private readonly toast = inject(ToastService);
+  private readonly router = inject(Router);
 
-    readonly misGrupos = toSignal(this.gruposSrv.misGrupos(), { initialValue: [] as Grupo[] });
-    readonly grupoBloqueado = signal(false);
-    readonly creando = signal(false);
+  readonly misGrupos = toSignal(this.gruposSrv.misGrupos(), { initialValue: [] as Grupo[] });
+  readonly grupoBloqueado = signal(false);
+  readonly creando = signal(false);
 
-    nuevo = {
-        nombre: '',
-        modo: 'pronostico' as 'pronostico' | 'duenos',
-        equipos: 8,
-        armado: 'siembra' as 'siembra' | 'manual',
-        avance: 'reordena' as 'reordena' | 'fijo',
-        formatoRondas: 'ida-vuelta' as 'ida-vuelta' | 'unico',
-        formatoFinal: 'unico' as 'ida-vuelta' | 'unico',
-        desempateRondas: 'mejor-sembrado' as 'mejor-sembrado' | 'penales',
-        desempateFinal: 'penales' as 'mejor-sembrado' | 'penales',
-        reparto: '80,20',
-        escala: 'normal' as 'normal' | 'final' | 'pareja',
-        publico: false,
-        costoEntrada: 100,
-        porcentajeBote: 0,
-        cierre: '',
-        listaEquipos: '',
-        grupoId: '' as string, // '' = Global
+  nuevo = {
+    nombre: '',
+    modo: 'pronostico' as 'pronostico' | 'duenos',
+    equipos: 8,
+    armado: 'siembra' as 'siembra' | 'manual',
+    avance: 'reordena' as 'reordena' | 'fijo',
+    formatoRondas: 'ida-vuelta' as 'ida-vuelta' | 'unico',
+    formatoFinal: 'unico' as 'ida-vuelta' | 'unico',
+    desempateRondas: 'mejor-sembrado' as 'mejor-sembrado' | 'penales',
+    desempateFinal: 'penales' as 'mejor-sembrado' | 'penales',
+    reparto: '80,20',
+    escala: 'normal' as 'normal' | 'final' | 'pareja',
+    publico: false,
+    costoEntrada: 100,
+    porcentajeBote: 0,
+    cierre: '',
+    listaEquipos: '',
+    grupoId: '' as string, // '' = Global
+  };
+
+
+  private readonly grupoUrl = inject(ActivatedRoute).snapshot.queryParamMap.get('grupo');
+
+  constructor() {
+    if (this.grupoUrl) {
+      this.nuevo.grupoId = this.grupoUrl;
+      this.grupoBloqueado.set(true);
+    }
+  }
+
+  async crear(): Promise<void> {
+    const equipos: EquipoBracket[] = this.nuevo.listaEquipos
+      .split('\n')
+      .map((n) => nombreOficial(n))
+      .filter(Boolean)
+      .map((nombre, i) => ({ nombre, siembra: i + 1 }));
+
+    if (this.nuevo.armado === 'siembra' && equipos.length !== this.nuevo.equipos) {
+      this.toast.error(`Con el orden por posición necesitas exactamente ${this.nuevo.equipos} equipos.`);
+      return;
+    }
+
+    this.creando.set(true);
+    try {
+      await this.service.crear({
+        nombre: this.nuevo.nombre.trim(),
+        modo: this.nuevo.modo,
+        config: {
+          equipos: this.nuevo.equipos,
+          armado: this.nuevo.armado,
+          avance: this.nuevo.avance,
+          formatoRondas: this.nuevo.formatoRondas,
+          formatoFinal: this.nuevo.formatoFinal,
+          desempateRondas: this.nuevo.desempateRondas,
+          desempateFinal: this.nuevo.desempateFinal,
+          reparto:
+            this.nuevo.modo === 'duenos' ? [100] : this.nuevo.reparto.split(',').map(Number),
+        },
+        puntaje: this.puntajeDeEscala(),
+        equipos,
+        costoEntrada: Number(this.nuevo.costoEntrada),
+        porcentajeBote: Number(this.nuevo.porcentajeBote),
+        cierraAt: this.nuevo.cierre ? new Date(this.nuevo.cierre) : null,
+        publico: this.nuevo.publico,
+        grupoId: this.nuevo.grupoId || null,
+      });
+      this.toast.exito('Eliminatoria creada.');
+      if (this.grupoUrl) {
+        this.router.navigate(['/grupos', this.grupoUrl]);
+      } else {
+        this.router.navigate(['/admin/brackets']);
+      }
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudo crear.');
+    } finally {
+      this.creando.set(false);
+    }
+  }
+
+  /** Traduce la escala elegida a los valores de puntos. */
+  private puntajeDeEscala() {
+    const escalas = {
+      normal: { avanzaPorRonda: [10, 20, 40, 60], campeon: 30, finalista: 15 },
+      final: { avanzaPorRonda: [10, 25, 60, 120], campeon: 50, finalista: 20 },
+      pareja: { avanzaPorRonda: [15, 20, 30, 45], campeon: 20, finalista: 12 },
     };
-
-
-    private readonly grupoUrl = inject(ActivatedRoute).snapshot.queryParamMap.get('grupo');
-
-    constructor() {
-        if (this.grupoUrl) {
-            this.nuevo.grupoId = this.grupoUrl;
-            this.grupoBloqueado.set(true);
-        }
-    }
-
-    async crear(): Promise<void> {
-        const equipos: EquipoBracket[] = this.nuevo.listaEquipos
-            .split('\n')
-            .map((n) => nombreOficial(n))
-            .filter(Boolean)
-            .map((nombre, i) => ({ nombre, siembra: i + 1 }));
-
-        if (this.nuevo.armado === 'siembra' && equipos.length !== this.nuevo.equipos) {
-            this.toast.error(`Con el orden por posición necesitas exactamente ${this.nuevo.equipos} equipos.`);
-            return;
-        }
-
-        this.creando.set(true);
-        try {
-            await this.service.crear({
-                nombre: this.nuevo.nombre.trim(),
-                modo: this.nuevo.modo,
-                config: {
-                    equipos: this.nuevo.equipos,
-                    armado: this.nuevo.armado,
-                    avance: this.nuevo.avance,
-                    formatoRondas: this.nuevo.formatoRondas,
-                    formatoFinal: this.nuevo.formatoFinal,
-                    desempateRondas: this.nuevo.desempateRondas,
-                    desempateFinal: this.nuevo.desempateFinal,
-                    reparto:
-                        this.nuevo.modo === 'duenos' ? [100] : this.nuevo.reparto.split(',').map(Number),
-                },
-                puntaje: this.puntajeDeEscala(),
-                equipos,
-                costoEntrada: Number(this.nuevo.costoEntrada),
-                porcentajeBote: Number(this.nuevo.porcentajeBote),
-                cierraAt: this.nuevo.cierre ? new Date(this.nuevo.cierre) : null,
-                publico: this.nuevo.publico,
-                grupoId: this.nuevo.grupoId || null,
-            });
-            this.toast.exito('Eliminatoria creada.');
-            if (this.grupoUrl) {
-                this.router.navigate(['/grupos', this.grupoUrl]);
-            } else {
-                this.router.navigate(['/admin/brackets']);
-            }
-        } catch (e: unknown) {
-            this.toast.error((e as Error)?.message ?? 'No se pudo crear.');
-        } finally {
-            this.creando.set(false);
-        }
-    }
-
-    /** Traduce la escala elegida a los valores de puntos. */
-    private puntajeDeEscala() {
-        const escalas = {
-            normal: { avanzaPorRonda: [10, 20, 40, 60], campeon: 30, finalista: 15 },
-            final: { avanzaPorRonda: [10, 25, 60, 120], campeon: 50, finalista: 20 },
-            pareja: { avanzaPorRonda: [15, 20, 30, 45], campeon: 20, finalista: 12 },
-        };
-        const e = escalas[this.nuevo.escala];
-        return {
-            ...e,
-            marcadorExacto: 0,
-            marcadorResultado: 0,
-        };
-    }
+    const e = escalas[this.nuevo.escala];
+    return {
+      ...e,
+      marcadorExacto: 0,
+      marcadorResultado: 0,
+    };
+  }
 }

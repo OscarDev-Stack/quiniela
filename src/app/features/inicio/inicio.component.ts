@@ -2,6 +2,7 @@ import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
 import { CargandoComponent } from '../../shared/cargando.component';
@@ -272,13 +273,22 @@ export class InicioComponent {
   private readonly contexto = inject(ContextoService);
   private readonly gruposSrv = inject(GruposService);
 
-  private readonly misGrupos = toSignal(this.gruposSrv.misGrupos(), { initialValue: [] as Grupo[] });
+  // undefined = todavía no cargó de Firestore; [] = cargó y no tiene grupos.
+  // Distinguirlos evita resolver el contexto con la lista vacía inicial (que
+  // forzaría Global antes de que los grupos lleguen).
+  private readonly misGruposRaw = toSignal(
+    this.gruposSrv.misGrupos() as Observable<Grupo[] | undefined>,
+  );
+  private readonly misGrupos = computed(() => this.misGruposRaw() ?? []);
 
   constructor() {
     // Al conocer los grupos del usuario, decide el contexto inicial:
     // si pertenece a un grupo, entra a un grupo (no a Global por defecto).
+    // Solo resolvemos cuando los grupos YA cargaron (no en el estado inicial).
     effect(() => {
-      this.contexto.resolverInicial(this.misGrupos());
+      const grupos = this.misGruposRaw();
+      if (grupos === undefined) return; // aún no carga: esperamos
+      this.contexto.resolverInicial(grupos);
     });
   }
 
