@@ -24,38 +24,110 @@ const SITE_KEY = '0x4AAAAAAEdUWtaENzy8lzBw';
     imports: [CommonModule],
     template: `
     <div class="acceso">
-      <div class="marca">⚽ Quiniela</div>
-      <h1 class="titulo">Verificando tu conexión</h1>
-      <p class="sub">Un momento, confirmamos que eres una persona.</p>
+      <div class="fondo-glow"></div>
 
-      <div id="turnstile-widget" class="widget"></div>
+      <div class="contenido">
+        <div class="logo-wrap">
+          <div class="logo-glow"></div>
+          <div class="logo">⚽</div>
+        </div>
 
-      @if (verificando()) {
-        <p class="estado"><i class="ti ti-loader"></i> Validando…</p>
-      }
-      @if (error()) {
-        <p class="estado estado--error">{{ error() }}</p>
-        <button class="reintentar" (click)="reintentar()">Reintentar</button>
-      }
+        <div class="marca">
+          <span class="marca-nombre">Fut</span>
+          <span class="marca-by">by AutomatePower</span>
+        </div>
+
+        <h1 class="titulo">Verificando tu conexión</h1>
+        <p class="sub">Un momento, confirmamos que eres una persona.</p>
+
+        <div class="tarjeta">
+          <div id="turnstile-widget" class="widget"></div>
+
+          @if (verificando()) {
+            <p class="estado"><i class="ti ti-loader"></i> Validando…</p>
+          }
+          @if (error()) {
+            <p class="estado estado--error"><i class="ti ti-alert-circle"></i> {{ error() }}</p>
+            <button class="reintentar" (click)="reintentar()">
+              <i class="ti ti-refresh"></i> Reintentar
+            </button>
+          }
+        </div>
+
+        <p class="pie">Protegido por Cloudflare</p>
+      </div>
     </div>
   `,
     styles: [
         `
       .acceso {
-        min-height: 100vh; display: flex; flex-direction: column;
-        align-items: center; justify-content: center; gap: 14px;
-        padding: 24px; text-align: center;
+        position: relative; min-height: 100vh; overflow: hidden;
+        background: var(--surface-0); color: var(--text-primary);
+        display: flex; align-items: center; justify-content: center; padding: 24px;
       }
-      .marca { font-size: 26px; font-weight: 800; color: var(--accent-text); }
-      .titulo { font-size: 20px; font-weight: 700; margin: 8px 0 0; }
-      .sub { font-size: 14px; color: var(--text-secondary); margin: 0 0 8px; }
-      .widget { min-height: 65px; }
-      .estado { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
-      .estado--error { color: var(--danger-text); }
+      /* Halo azul difuso arriba, como en las pantallas de referencia. */
+      .fondo-glow {
+        position: absolute; top: -120px; left: 50%; transform: translateX(-50%);
+        width: 360px; height: 360px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(55, 138, 221, 0.28), transparent 70%);
+        filter: blur(20px); pointer-events: none;
+      }
+      .contenido {
+        position: relative; z-index: 1; width: 100%; max-width: 360px;
+        display: flex; flex-direction: column; align-items: center; text-align: center;
+      }
+
+      /* Logo con halo azul */
+      .logo-wrap { position: relative; margin-bottom: 20px; }
+      .logo-glow {
+        position: absolute; inset: -18px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(55, 138, 221, 0.45), transparent 70%);
+        filter: blur(14px);
+      }
+      .logo {
+        position: relative; width: 84px; height: 84px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center; font-size: 44px;
+        background: var(--surface-2); border: 1px solid rgba(55, 138, 221, 0.4);
+        box-shadow: 0 0 30px rgba(55, 138, 221, 0.25);
+      }
+
+      /* Marca: Fut grande + by AutomatePower pequeño */
+      .marca { display: flex; flex-direction: column; align-items: center; margin-bottom: 28px; }
+      .marca-nombre { font-size: 40px; font-weight: 800; letter-spacing: -0.5px; line-height: 1; }
+      .marca-by {
+        font-size: 13px; font-weight: 500; color: var(--accent-text);
+        margin-top: 4px; letter-spacing: 0.3px;
+      }
+
+      .titulo { font-size: 20px; font-weight: 700; margin: 0 0 6px; }
+      .sub { font-size: 14px; color: var(--text-secondary); margin: 0 0 26px; line-height: 1.4; }
+
+      /* Tarjeta que contiene el widget */
+      .tarjeta {
+        width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: 18px; padding: 22px 18px;
+        display: flex; flex-direction: column; align-items: center; gap: 14px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+      }
+      .widget { min-height: 65px; display: flex; align-items: center; justify-content: center; }
+
+      .estado {
+        font-size: 13px; color: var(--text-secondary); margin: 0;
+        display: flex; align-items: center; gap: 6px;
+      }
+      .estado--error { color: var(--danger-text, #e0533d); }
       .reintentar {
-        padding: 9px 18px; border-radius: var(--radius); border: 1px solid var(--border);
-        background: var(--surface-1); color: var(--text-primary); cursor: pointer; font-size: 14px;
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 10px 20px; border-radius: 999px; border: none; cursor: pointer;
+        background: var(--accent-fill); color: #fff; font-size: 14px; font-weight: 600;
       }
+      .reintentar:hover { filter: brightness(1.08); }
+
+      .pie {
+        font-size: 12px; color: var(--text-muted, #7a7a7a); margin: 22px 0 0;
+        letter-spacing: 0.3px;
+      }
+
       @keyframes girar { to { transform: rotate(360deg); } }
       .ti-loader { display: inline-block; animation: girar 1s linear infinite; }
     `,

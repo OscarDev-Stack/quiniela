@@ -19,10 +19,10 @@ import { Grupo } from '../../core/models/grupo.model';
  * Si llega con ?grupo=ID, los partidos se crean para ese grupo (selector fijo).
  */
 @Component({
-    selector: 'app-crear-partido',
-    standalone: true,
-    imports: [CommonModule, FormsModule, EscudoComponent, SelectorEquipoComponent],
-    template: `
+  selector: 'app-crear-partido',
+  standalone: true,
+  imports: [CommonModule, FormsModule, EscudoComponent, SelectorEquipoComponent],
+  template: `
     <section class="panel panel--contexto">
       <label class="ctx-field">
         <span><i class="ti ti-target"></i> ¿Para quién son los partidos que crees?</span>
@@ -157,8 +157,8 @@ import { Grupo } from '../../core/models/grupo.model';
     </section>
 
   `,
-    styles: [
-        `
+  styles: [
+    `
       .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
       .stat { background: var(--surface-1); border-radius: var(--radius); padding: 12px 14px; }
       .stat-label { font-size: 12px; color: var(--text-secondary); }
@@ -292,168 +292,168 @@ import { Grupo } from '../../core/models/grupo.model';
       }
       .result-box select { flex: 1; }
     `,
-    ],
+  ],
 })
 export class CrearPartidoComponent {
-    private readonly admin = inject(AdminService);
-    private readonly gruposSrv = inject(GruposService);
-    private readonly toast = inject(ToastService);
-    private readonly router = inject(Router);
+  private readonly admin = inject(AdminService);
+  private readonly gruposSrv = inject(GruposService);
+  private readonly toast = inject(ToastService);
+  private readonly router = inject(Router);
 
-    readonly misGrupos = toSignal(this.gruposSrv.misGrupos(), { initialValue: [] as Grupo[] });
-    readonly grupoParaCrear = signal<string>('');
-    readonly grupoBloqueado = signal(false);
+  readonly misGrupos = toSignal(this.gruposSrv.misGrupos(), { initialValue: [] as Grupo[] });
+  readonly grupoParaCrear = signal<string>('');
+  readonly grupoBloqueado = signal(false);
 
-    readonly selectorLocal = signal(false);
-    readonly selectorVisita = signal(false);
-    readonly verApi = signal(false);
-    readonly verManual = signal(false);
-    readonly buscando = signal(false);
-    readonly saving = signal(false);
+  readonly selectorLocal = signal(false);
+  readonly selectorVisita = signal(false);
+  readonly verApi = signal(false);
+  readonly verManual = signal(false);
+  readonly buscando = signal(false);
+  readonly saving = signal(false);
 
-    readonly minFecha = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
-        .toISOString()
-        .slice(0, 16);
+  readonly minFecha = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
 
-    readonly encontrados = signal<
-        Array<{ apiFixtureId: number; fecha: string; homeTeam: string; awayTeam: string; competition: string }>
-    >([]);
+  readonly encontrados = signal<
+    Array<{ apiFixtureId: number; fecha: string; homeTeam: string; awayTeam: string; competition: string }>
+  >([]);
 
-    busqueda = {
-        competicion: 'CL',
-        desde: '',
-        hasta: '',
-        type: '1x2' as TipoPartido,
-    };
+  busqueda = {
+    competicion: 'CL',
+    desde: '',
+    hasta: '',
+    type: '1x2' as TipoPartido,
+  };
 
-    form = {
-        homeTeam: '',
-        awayTeam: '',
-        competition: '',
-        closesAt: '',
-        type: '1x2' as TipoPartido,
-        porcentajeBote: 0,
-    };
+  form = {
+    homeTeam: '',
+    awayTeam: '',
+    competition: '',
+    closesAt: '',
+    type: '1x2' as TipoPartido,
+    porcentajeBote: 0,
+  };
 
-    private readonly grupoUrl = inject(ActivatedRoute).snapshot.queryParamMap.get('grupo');
+  private readonly grupoUrl = inject(ActivatedRoute).snapshot.queryParamMap.get('grupo');
 
-    constructor() {
-        if (this.grupoUrl) {
-            this.grupoParaCrear.set(this.grupoUrl);
-            this.grupoBloqueado.set(true);
-        }
+  constructor() {
+    if (this.grupoUrl) {
+      this.grupoParaCrear.set(this.grupoUrl);
+      this.grupoBloqueado.set(true);
     }
+  }
 
-    async buscar(): Promise<void> {
-        if (!this.busqueda.desde) {
-            this.toast.error('Elige al menos la fecha inicial.');
-            return;
-        }
-        this.buscando.set(true);
-        try {
-            const r = await this.admin.buscarFixtures(
-                this.busqueda.competicion,
-                this.busqueda.desde,
-                this.busqueda.hasta || this.busqueda.desde,
-            );
-            this.encontrados.set(r);
-            if (r.length === 0) this.toast.error('No se encontraron partidos próximos en esas fechas.');
-        } catch (e: unknown) {
-            this.toast.error((e as Error)?.message ?? 'No se pudo buscar.');
-        } finally {
-            this.buscando.set(false);
-        }
+  async buscar(): Promise<void> {
+    if (!this.busqueda.desde) {
+      this.toast.error('Elige al menos la fecha inicial.');
+      return;
     }
-
-    /** Crea el partido con los datos reales y su vínculo con la API. */
-    async crearDesdeApi(f: {
-        apiFixtureId: number;
-        fecha: string;
-        homeTeam: string;
-        awayTeam: string;
-        competition: string;
-    }): Promise<void> {
-        const inicio = new Date(f.fecha);
-        if (inicio.getTime() <= Date.now()) {
-            this.toast.error('Ese partido ya empezó.');
-            return;
-        }
-        const grupoSel = this.grupoParaCrear();
-        if (grupoSel) {
-            await this.admin.crearPartidoGrupo({
-                grupoId: grupoSel,
-                competition: f.competition,
-                homeTeam: nombreOficial(f.homeTeam),
-                awayTeam: nombreOficial(f.awayTeam),
-                type: this.busqueda.type,
-                closesAtMs: inicio.getTime(),
-                apiFixtureId: f.apiFixtureId,
-            });
-        } else {
-            await this.admin.crearPartido({
-                competition: f.competition,
-                homeTeam: nombreOficial(f.homeTeam),
-                awayTeam: nombreOficial(f.awayTeam),
-                type: this.busqueda.type,
-                status: 'abierto',
-                closesAt: Timestamp.fromDate(inicio),
-                apiFixtureId: f.apiFixtureId,
-                grupoId: null,
-            });
-        }
-        this.encontrados.set(this.encontrados().filter((x) => x.apiFixtureId !== f.apiFixtureId));
-        this.toast.exito(`Partido creado: ${f.homeTeam} vs ${f.awayTeam}.`);
+    this.buscando.set(true);
+    try {
+      const r = await this.admin.buscarFixtures(
+        this.busqueda.competicion,
+        this.busqueda.desde,
+        this.busqueda.hasta || this.busqueda.desde,
+      );
+      this.encontrados.set(r);
+      if (r.length === 0) this.toast.error('No se encontraron partidos próximos en esas fechas.');
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudo buscar.');
+    } finally {
+      this.buscando.set(false);
     }
+  }
 
-    async crear(): Promise<void> {
-        if (!this.form.homeTeam.trim() || !this.form.awayTeam.trim()) return;
-        this.saving.set(true);
-        try {
-            if (!this.form.closesAt) {
-                this.toast.error('Elige la fecha y hora de cierre.');
-                return;
-            }
-            const cierre = new Date(this.form.closesAt);
-            if (isNaN(cierre.getTime())) {
-                this.toast.error('La fecha de cierre no es válida.');
-                return;
-            }
-            if (cierre.getTime() <= Date.now()) {
-                this.toast.error('La hora de cierre debe estar en el futuro.');
-                return;
-            }
-
-            const grupoSel = this.grupoParaCrear();
-            if (grupoSel) {
-                await this.admin.crearPartidoGrupo({
-                    grupoId: grupoSel,
-                    competition: this.form.competition.trim() || 'Partido',
-                    homeTeam: nombreOficial(this.form.homeTeam),
-                    awayTeam: nombreOficial(this.form.awayTeam),
-                    type: this.form.type,
-                    closesAtMs: cierre.getTime(),
-                    porcentajeBote: Number(this.form.porcentajeBote),
-                });
-            } else {
-                await this.admin.crearPartido({
-                    competition: this.form.competition.trim() || 'Partido',
-                    homeTeam: nombreOficial(this.form.homeTeam),
-                    awayTeam: nombreOficial(this.form.awayTeam),
-                    type: this.form.type,
-                    status: 'abierto',
-                    closesAt: Timestamp.fromDate(cierre),
-                    porcentajeBote: Number(this.form.porcentajeBote),
-                    grupoId: null,
-                });
-            }
-            this.form = { homeTeam: '', awayTeam: '', competition: '', closesAt: '', type: '1x2', porcentajeBote: 0 };
-            this.toast.exito('Partido creado.');
-            // Si vino de un grupo, volver al grupo.
-            if (this.grupoUrl) {
-                this.router.navigate(['/grupos', this.grupoUrl]);
-            }
-        } finally {
-            this.saving.set(false);
-        }
+  /** Crea el partido con los datos reales y su vínculo con la API. */
+  async crearDesdeApi(f: {
+    apiFixtureId: number;
+    fecha: string;
+    homeTeam: string;
+    awayTeam: string;
+    competition: string;
+  }): Promise<void> {
+    const inicio = new Date(f.fecha);
+    if (inicio.getTime() <= Date.now()) {
+      this.toast.error('Ese partido ya empezó.');
+      return;
     }
+    const grupoSel = this.grupoParaCrear();
+    if (grupoSel) {
+      await this.admin.crearPartidoGrupo({
+        grupoId: grupoSel,
+        competition: f.competition,
+        homeTeam: nombreOficial(f.homeTeam),
+        awayTeam: nombreOficial(f.awayTeam),
+        type: this.busqueda.type,
+        closesAtMs: inicio.getTime(),
+        apiFixtureId: f.apiFixtureId,
+      });
+    } else {
+      await this.admin.crearPartido({
+        competition: f.competition,
+        homeTeam: nombreOficial(f.homeTeam),
+        awayTeam: nombreOficial(f.awayTeam),
+        type: this.busqueda.type,
+        status: 'abierto',
+        closesAt: Timestamp.fromDate(inicio),
+        apiFixtureId: f.apiFixtureId,
+        grupoId: null,
+      });
+    }
+    this.encontrados.set(this.encontrados().filter((x) => x.apiFixtureId !== f.apiFixtureId));
+    this.toast.exito(`Partido creado: ${f.homeTeam} vs ${f.awayTeam}.`);
+  }
+
+  async crear(): Promise<void> {
+    if (!this.form.homeTeam.trim() || !this.form.awayTeam.trim()) return;
+    this.saving.set(true);
+    try {
+      if (!this.form.closesAt) {
+        this.toast.error('Elige la fecha y hora de cierre.');
+        return;
+      }
+      const cierre = new Date(this.form.closesAt);
+      if (isNaN(cierre.getTime())) {
+        this.toast.error('La fecha de cierre no es válida.');
+        return;
+      }
+      if (cierre.getTime() <= Date.now()) {
+        this.toast.error('La hora de cierre debe estar en el futuro.');
+        return;
+      }
+
+      const grupoSel = this.grupoParaCrear();
+      if (grupoSel) {
+        await this.admin.crearPartidoGrupo({
+          grupoId: grupoSel,
+          competition: this.form.competition.trim() || 'Partido',
+          homeTeam: nombreOficial(this.form.homeTeam),
+          awayTeam: nombreOficial(this.form.awayTeam),
+          type: this.form.type,
+          closesAtMs: cierre.getTime(),
+          porcentajeBote: Number(this.form.porcentajeBote),
+        });
+      } else {
+        await this.admin.crearPartido({
+          competition: this.form.competition.trim() || 'Partido',
+          homeTeam: nombreOficial(this.form.homeTeam),
+          awayTeam: nombreOficial(this.form.awayTeam),
+          type: this.form.type,
+          status: 'abierto',
+          closesAt: Timestamp.fromDate(cierre),
+          porcentajeBote: Number(this.form.porcentajeBote),
+          grupoId: null,
+        });
+      }
+      this.form = { homeTeam: '', awayTeam: '', competition: '', closesAt: '', type: '1x2', porcentajeBote: 0 };
+      this.toast.exito('Partido creado.');
+      // Si vino de un grupo, volver al grupo.
+      if (this.grupoUrl) {
+        this.router.navigate(['/grupos', this.grupoUrl]);
+      }
+    } finally {
+      this.saving.set(false);
+    }
+  }
 }

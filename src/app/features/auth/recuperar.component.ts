@@ -10,15 +10,18 @@ import { APP_VERSION } from '../../core/version';
  * mismo exista o no la cuenta (no revelamos qué correos están registrados).
  */
 @Component({
-    selector: 'app-recuperar',
-    standalone: true,
-    imports: [FormsModule, RouterLink],
-    template: `
+  selector: 'app-recuperar',
+  standalone: true,
+  imports: [FormsModule, RouterLink],
+  template: `
     <div class="auth-wrap">
       <div class="auth-card">
         <div class="brand">
-          <span class="brand-mark">Q</span>
-          <span class="brand-name">Quiniela</span>
+          <span class="brand-mark">⚽</span>
+          <span class="brand-text">
+            <span class="brand-name">Fut</span>
+            <span class="brand-by">by AutomatePower</span>
+          </span>
         </div>
         <h1 class="auth-title">Recuperar contraseña</h1>
         <p class="auth-subtitle">Te enviaremos un enlace para crear una nueva.</p>
@@ -60,8 +63,8 @@ import { APP_VERSION } from '../../core/version';
       <p class="version">v{{ version }}</p>
     </div>
   `,
-    styles: [
-        `
+  styles: [
+    `
       .version {
         position: absolute; bottom: calc(14px + env(safe-area-inset-bottom));
         left: 0; right: 0; text-align: center;
@@ -87,7 +90,9 @@ import { APP_VERSION } from '../../core/version';
         background: var(--accent-bg); color: var(--accent-text);
         display: flex; align-items: center; justify-content: center; font-weight: 600;
       }
-      .brand-name { font-size: 18px; font-weight: 600; }
+      .brand-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1; }
+      .brand-name { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; }
+      .brand-by { font-size: 11px; font-weight: 500; color: var(--accent-text); margin-top: 2px; }
       .auth-title { font-size: 20px; font-weight: 600; text-align: center; margin: 0 0 4px; }
       .auth-subtitle { font-size: 14px; color: var(--text-secondary); text-align: center; margin: 0 0 22px; }
 
@@ -120,36 +125,36 @@ import { APP_VERSION } from '../../core/version';
       .auth-alt { text-align: center; font-size: 14px; color: var(--text-secondary); margin-top: 18px; }
       .auth-alt a { color: var(--accent-text); text-decoration: none; }
     `,
-    ],
+  ],
 })
 export class RecuperarComponent {
-    private readonly auth = inject(AuthService);
-    readonly version = APP_VERSION;
+  private readonly auth = inject(AuthService);
+  readonly version = APP_VERSION;
 
-    email = '';
-    readonly loading = signal(false);
-    readonly enviado = signal(false);
-    readonly error = signal('');
+  email = '';
+  readonly loading = signal(false);
+  readonly enviado = signal(false);
+  readonly error = signal('');
 
-    async onSubmit(): Promise<void> {
-        if (!this.email.trim()) return;
-        this.loading.set(true);
-        this.error.set('');
-        try {
-            await this.auth.recuperarContrasena(this.email);
-            // Éxito neutro: no revelamos si el correo existe o no.
-            this.enviado.set(true);
-        } catch (e: unknown) {
-            const code = (e as { code?: string })?.code ?? '';
-            // Un correo mal formado sí lo avisamos; el resto se trata como éxito
-            // neutro para no filtrar qué cuentas existen.
-            if (code === 'auth/invalid-email') {
-                this.error.set('Ese correo no tiene un formato válido.');
-            } else {
-                this.enviado.set(true);
-            }
-        } finally {
-            this.loading.set(false);
-        }
+  async onSubmit(): Promise<void> {
+    if (!this.email.trim()) return;
+    this.loading.set(true);
+    this.error.set('');
+    try {
+      await this.auth.recuperarContrasena(this.email);
+      // Éxito neutro: no revelamos si el correo existe o no.
+      this.enviado.set(true);
+    } catch (e: unknown) {
+      const code = (e as { code?: string })?.code ?? '';
+      // Un correo mal formado sí lo avisamos; el resto se trata como éxito
+      // neutro para no filtrar qué cuentas existen.
+      if (code === 'auth/invalid-email') {
+        this.error.set('Ese correo no tiene un formato válido.');
+      } else {
+        this.enviado.set(true);
+      }
+    } finally {
+      this.loading.set(false);
     }
+  }
 }

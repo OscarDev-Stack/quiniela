@@ -12,8 +12,11 @@ import { AuthService } from '../../core/services/auth.service';
     <div class="auth-wrap">
       <div class="auth-card">
         <div class="brand">
-          <span class="brand-mark">Q</span>
-          <span class="brand-name">Quiniela</span>
+          <span class="brand-mark">⚽</span>
+          <span class="brand-text">
+            <span class="brand-name">Fut</span>
+            <span class="brand-by">by AutomatePower</span>
+          </span>
         </div>
         <h1 class="auth-title">Crear cuenta</h1>
         <p class="auth-subtitle">Regístrate para empezar a competir.</p>
@@ -61,7 +64,9 @@ import { AuthService } from '../../core/services/auth.service';
       .auth-card { width: 100%; max-width: 380px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px; }
       .brand { display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 18px; }
       .brand-mark { width: 34px; height: 34px; border-radius: 50%; background: var(--accent-bg); color: var(--accent-text); display: flex; align-items: center; justify-content: center; font-weight: 600; }
-      .brand-name { font-size: 18px; font-weight: 600; }
+      .brand-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1; }
+      .brand-name { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; }
+      .brand-by { font-size: 11px; font-weight: 500; color: var(--accent-text); margin-top: 2px; }
       .auth-title { font-size: 20px; font-weight: 600; text-align: center; margin: 0 0 4px; }
       .auth-subtitle { font-size: 14px; color: var(--text-secondary); text-align: center; margin: 0 0 22px; }
       .auth-error { background: var(--danger-bg); color: var(--danger-text); font-size: 13px; padding: 10px 12px; border-radius: var(--radius); margin-bottom: 16px; }
