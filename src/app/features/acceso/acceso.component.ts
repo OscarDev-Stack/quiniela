@@ -16,7 +16,7 @@ declare const turnstile: {
   reset: (id?: string) => void;
 } | undefined;
 
-const SITE_KEY = 'SITE_KEY_DE_TURNSTILE';
+const SITE_KEY = '0x4AAAAAAEdUWtaENzy8lzBw';
 
 @Component({
   selector: 'app-acceso',
