@@ -9,6 +9,7 @@ import { apagarCargando } from '../../shared/cargando.util';
 import { EscudoComponent } from '../../shared/escudo.component';
 import { PronosticosService } from '../../core/services/pronosticos.service';
 import { PartidosService } from '../../core/services/partidos.service';
+import { ContextoService } from '../../shared/contexto.service';
 import { Pronostico, gananciaNeta } from '../../core/models/pronostico.model';
 import { Partido } from '../../core/models/partido.model';
 
@@ -104,16 +105,31 @@ export class MisPronosticosComponent {
   private readonly service = inject(PronosticosService);
   private readonly partidosSrv = inject(PartidosService);
   private readonly router = inject(Router);
+  private readonly contexto = inject(ContextoService);
 
   readonly cargando = signal(true);
   private readonly inicioCarga = Date.now();
 
-  readonly pronosticos = toSignal(
+  private readonly pronosticosRaw = toSignal(
     this.service.misPronosticos().pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
     { initialValue: [] as Pronostico[] },
   );
 
   private readonly partidos = toSignal(this.partidosSrv.getPartidos(), { initialValue: [] as Partido[] });
+
+  /** Mapa partidoId → grupoId, para saber a qué contexto pertenece cada pronóstico. */
+  private readonly grupoDePartido = computed(() => {
+    const m = new Map<string, string | null>();
+    for (const p of this.partidos()) m.set(p.id, p.grupoId ?? null);
+    return m;
+  });
+
+  /** Pronósticos del contexto activo (Global o el grupo elegido). */
+  readonly pronosticos = computed(() => {
+    const ctx = this.contexto.grupoId();
+    const mapa = this.grupoDePartido();
+    return this.pronosticosRaw().filter((p) => (mapa.get(p.partidoId) ?? null) === ctx);
+  });
 
   /** IDs de los partidos que siguen aceptando pronósticos (abiertos). */
   private readonly abiertos = computed(

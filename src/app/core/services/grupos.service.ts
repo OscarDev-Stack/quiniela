@@ -61,10 +61,10 @@ export class GruposService {
         return r.data as { grupoId: string; codigo: string };
     }
 
-    async unirse(codigo: string): Promise<{ grupoId: string; nombre: string }> {
+    async unirse(codigo: string): Promise<{ grupoId: string; nombre: string; icono: string }> {
         const fn = httpsCallable(this.fns, 'unirseAGrupo');
         const r = await fn({ codigo });
-        return r.data as { grupoId: string; nombre: string };
+        return r.data as { grupoId: string; nombre: string; icono: string };
     }
 
     async agregarMiembro(grupoId: string, uid: string): Promise<void> {

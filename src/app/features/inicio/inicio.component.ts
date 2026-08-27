@@ -8,6 +8,8 @@ import { CargandoComponent } from '../../shared/cargando.component';
 import { apagarCargando } from '../../shared/cargando.util';
 import { EscudoComponent } from '../../shared/escudo.component';
 import { ContextoService } from '../../shared/contexto.service';
+import { GruposService } from '../../core/services/grupos.service';
+import { Grupo } from '../../core/models/grupo.model';
 import { PartidosService } from '../../core/services/partidos.service';
 import { TorneosService } from '../../core/services/torneos.service';
 import { BracketsService } from '../../core/services/brackets.service';
@@ -268,13 +270,15 @@ export class InicioComponent {
   private readonly usersSrv = inject(UserService);
   private readonly router = inject(Router);
   private readonly contexto = inject(ContextoService);
+  private readonly gruposSrv = inject(GruposService);
+
+  private readonly misGrupos = toSignal(this.gruposSrv.misGrupos(), { initialValue: [] as Grupo[] });
 
   constructor() {
-    // Si el contexto guardado apunta a un grupo del que el usuario ya salió,
-    // se vuelve a Global automáticamente.
+    // Al conocer los grupos del usuario, decide el contexto inicial:
+    // si pertenece a un grupo, entra a un grupo (no a Global por defecto).
     effect(() => {
-      const ids = this.me()?.grupos ?? [];
-      this.contexto.validarContra(ids);
+      this.contexto.resolverInicial(this.misGrupos());
     });
   }
 

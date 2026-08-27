@@ -106,11 +106,13 @@ service cloud.firestore {
       allow write: if false;
 
       match /pronosticos/{pid} {
-        // Solo ves el tuyo, hasta que la eliminatoria termine (para la
-        // tabla final). Así nadie espía cuadros ajenos antes del cierre.
+        // Ves el tuyo siempre. Los de los demás, solo una vez que el
+        // pronóstico cerró (estado 'en-curso' o 'finalizado'): así nadie
+        // espía cuadros ajenos mientras todavía se puede pronosticar, pero
+        // hay transparencia total en cuanto cierra.
         allow read: if request.auth != null && (
           request.auth.uid == pid ||
-          get(/databases/$(database)/documents/brackets/$(bracketId)).data.estado == 'finalizado'
+          get(/databases/$(database)/documents/brackets/$(bracketId)).data.estado in ['en-curso', 'finalizado']
         );
         allow write: if false;
       }

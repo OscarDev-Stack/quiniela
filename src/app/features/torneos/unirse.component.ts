@@ -5,6 +5,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { Auth, user } from '@angular/fire/auth';
 import { TorneosService } from '../../core/services/torneos.service';
 import { StatsService } from '../../shared/stats.service';
+import { ToastService } from '../../shared/toast.service';
 import { ModoTorneo } from '../../core/models/torneo.model';
 import { UserService } from '../../core/services/user.service';
 import { ReglasTorneoComponent } from './reglas-torneo.component';
@@ -204,6 +205,7 @@ export class UnirseComponent {
   private readonly auth = inject(Auth);
   private readonly torneos = inject(TorneosService);
   private readonly stats = inject(StatsService);
+  private readonly toast = inject(ToastService);
   private readonly users = inject(UserService);
 
   readonly codigo = (this.route.snapshot.paramMap.get('codigo') ?? '').toUpperCase();
@@ -273,7 +275,9 @@ export class UnirseComponent {
       this.stats.evento('torneo_union');
       localStorage.removeItem('invitacion');
       if (r.costo > 0) {
-        alert(`Quedaste inscrito. Se descontaron ${r.costo} puntos de tu saldo.`);
+        this.toast.exito(`Quedaste inscrito. Se descontaron ${r.costo} puntos de tu saldo.`);
+      } else {
+        this.toast.exito('¡Quedaste inscrito!');
       }
       this.router.navigate(['/torneos', r.torneoId]);
     } catch (e: unknown) {

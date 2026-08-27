@@ -8,16 +8,17 @@ import { CargandoComponent } from '../../shared/cargando.component';
 import { GruposService } from '../../core/services/grupos.service';
 import { UserService } from '../../core/services/user.service';
 import { ToastService } from '../../shared/toast.service';
+import { ContextoService } from '../../shared/contexto.service';
 import { Grupo } from '../../core/models/grupo.model';
 
 /** Emojis que el usuario puede elegir como ícono del grupo. */
 const EMOJIS = ['⚽', '🏆', '🔥', '🎯', '🥅', '🏅', '🎮', '👑', '💪', '🚀', '⭐', '🍺'];
 
 @Component({
-    selector: 'app-grupos',
-    standalone: true,
-    imports: [CommonModule, FormsModule, NavComponent, CargandoComponent],
-    template: `
+  selector: 'app-grupos',
+  standalone: true,
+  imports: [CommonModule, FormsModule, NavComponent, CargandoComponent],
+  template: `
     <div class="screen">
       <app-nav [back]="true" title="Mis grupos" />
 
@@ -120,8 +121,8 @@ const EMOJIS = ['⚽', '🏆', '🔥', '🎯', '🥅', '🏅', '🎮', '👑', '
       }
     </div>
   `,
-    styles: [
-        `
+  styles: [
+    `
       .acciones { display: flex; gap: 8px; margin-bottom: 18px; }
       .btn {
         flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -188,89 +189,97 @@ const EMOJIS = ['⚽', '🏆', '🔥', '🎯', '🥅', '🏅', '🎮', '👑', '
       .emoji--on { border-color: var(--accent-fill); box-shadow: 0 0 0 2px var(--accent-fill); }
       .dialogo-acciones { display: flex; gap: 8px; }
     `,
-    ],
+  ],
 })
 export class GruposComponent {
-    private readonly gruposSrv = inject(GruposService);
-    private readonly users = inject(UserService);
-    private readonly toast = inject(ToastService);
-    private readonly router = inject(Router);
+  private readonly gruposSrv = inject(GruposService);
+  private readonly contexto = inject(ContextoService);
+  private readonly users = inject(UserService);
+  private readonly toast = inject(ToastService);
+  private readonly router = inject(Router);
 
-    readonly emojis = EMOJIS;
+  readonly emojis = EMOJIS;
 
-    private readonly me = toSignal(this.users.me$, { initialValue: null });
-    readonly esAdminGrupo = computed(() => this.me()?.esAdminGrupo === true);
-    readonly miUid = computed(() => this.me()?.id ?? '');
-    private readonly favoritos = computed(() => new Set(this.me()?.gruposFavoritos ?? []));
+  private readonly me = toSignal(this.users.me$, { initialValue: null });
+  readonly esAdminGrupo = computed(() => this.me()?.esAdminGrupo === true);
+  readonly miUid = computed(() => this.me()?.id ?? '');
+  private readonly favoritos = computed(() => new Set(this.me()?.gruposFavoritos ?? []));
 
-    private readonly gruposRaw = toSignal(this.gruposSrv.misGrupos(), { initialValue: null });
-    readonly cargando = computed(() => this.gruposRaw() === null);
-    readonly grupos = computed(() => this.gruposRaw() ?? []);
+  private readonly gruposRaw = toSignal(this.gruposSrv.misGrupos(), { initialValue: null });
+  readonly cargando = computed(() => this.gruposRaw() === null);
+  readonly grupos = computed(() => this.gruposRaw() ?? []);
 
-    // Estado de los diálogos.
-    readonly modo = signal<'ninguno' | 'crear' | 'unirse'>('ninguno');
-    readonly ocupado = signal(false);
-    nombre = '';
-    icono = EMOJIS[0];
-    codigo = '';
+  // Estado de los diálogos.
+  readonly modo = signal<'ninguno' | 'crear' | 'unirse'>('ninguno');
+  readonly ocupado = signal(false);
+  nombre = '';
+  icono = EMOJIS[0];
+  codigo = '';
 
-    esAdminDe(g: Grupo): boolean {
-        return g.adminUid === this.miUid();
+  esAdminDe(g: Grupo): boolean {
+    return g.adminUid === this.miUid();
+  }
+  esFavorito(grupoId: string): boolean {
+    return this.favoritos().has(grupoId);
+  }
+
+  abrirCrear(): void {
+    this.nombre = '';
+    this.icono = EMOJIS[0];
+    this.modo.set('crear');
+  }
+  abrirUnirse(): void {
+    this.codigo = '';
+    this.modo.set('unirse');
+  }
+  cerrar(): void {
+    this.modo.set('ninguno');
+  }
+
+  async crear(): Promise<void> {
+    this.ocupado.set(true);
+    // Guardamos nombre e icono antes de que se resetee el formulario.
+    const nombre = this.nombre.trim();
+    const icono = this.icono;
+    try {
+      const r = await this.gruposSrv.crear(nombre, icono);
+      this.toast.exito(`Grupo creado. Código: ${r.codigo}`);
+      // El grupo recién creado se vuelve el contexto activo.
+      this.contexto.cambiar({ grupoId: r.grupoId, nombre, icono });
+      this.cerrar();
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudo crear el grupo.');
+    } finally {
+      this.ocupado.set(false);
     }
-    esFavorito(grupoId: string): boolean {
-        return this.favoritos().has(grupoId);
-    }
+  }
 
-    abrirCrear(): void {
-        this.nombre = '';
-        this.icono = EMOJIS[0];
-        this.modo.set('crear');
+  async unirse(): Promise<void> {
+    this.ocupado.set(true);
+    try {
+      const r = await this.gruposSrv.unirse(this.codigo.trim().toUpperCase());
+      this.toast.exito(`Te uniste a ${r.nombre}.`);
+      // El grupo al que te unes se vuelve el contexto activo.
+      this.contexto.cambiar({ grupoId: r.grupoId, nombre: r.nombre, icono: r.icono });
+      this.cerrar();
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudo unir al grupo.');
+    } finally {
+      this.ocupado.set(false);
     }
-    abrirUnirse(): void {
-        this.codigo = '';
-        this.modo.set('unirse');
-    }
-    cerrar(): void {
-        this.modo.set('ninguno');
-    }
+  }
 
-    async crear(): Promise<void> {
-        this.ocupado.set(true);
-        try {
-            const r = await this.gruposSrv.crear(this.nombre.trim(), this.icono);
-            this.toast.exito(`Grupo creado. Código: ${r.codigo}`);
-            this.cerrar();
-        } catch (e: unknown) {
-            this.toast.error((e as Error)?.message ?? 'No se pudo crear el grupo.');
-        } finally {
-            this.ocupado.set(false);
-        }
+  async toggleFavorito(g: Grupo, ev: Event): Promise<void> {
+    ev.stopPropagation();
+    const nuevo = !this.esFavorito(g.id);
+    try {
+      await this.gruposSrv.marcarFavorito(g.id, nuevo);
+    } catch {
+      this.toast.error('No se pudo actualizar el favorito.');
     }
+  }
 
-    async unirse(): Promise<void> {
-        this.ocupado.set(true);
-        try {
-            const r = await this.gruposSrv.unirse(this.codigo.trim().toUpperCase());
-            this.toast.exito(`Te uniste a ${r.nombre}.`);
-            this.cerrar();
-        } catch (e: unknown) {
-            this.toast.error((e as Error)?.message ?? 'No se pudo unir al grupo.');
-        } finally {
-            this.ocupado.set(false);
-        }
-    }
-
-    async toggleFavorito(g: Grupo, ev: Event): Promise<void> {
-        ev.stopPropagation();
-        const nuevo = !this.esFavorito(g.id);
-        try {
-            await this.gruposSrv.marcarFavorito(g.id, nuevo);
-        } catch {
-            this.toast.error('No se pudo actualizar el favorito.');
-        }
-    }
-
-    entrar(g: Grupo): void {
-        this.router.navigate(['/grupos', g.id]);
-    }
+  entrar(g: Grupo): void {
+    this.router.navigate(['/grupos', g.id]);
+  }
 }

@@ -45,6 +45,21 @@ import { Grupo, MiembroGrupo, FilaTablaGrupo } from '../../core/models/grupo.mod
           <button class="btn btn--primary ancho" (click)="abrirAgregar()">
             <i class="ti ti-user-plus"></i> Agregar miembro
           </button>
+
+          <div class="crear-grupo">
+            <span class="crear-tit">Crear para este grupo</span>
+            <div class="crear-botones">
+              <button class="btn btn--crear" (click)="crearPartido()">
+                <i class="ti ti-ball-football"></i> Partido
+              </button>
+              <button class="btn btn--crear" (click)="crearTorneo()">
+                <i class="ti ti-tournament"></i> Torneo
+              </button>
+              <button class="btn btn--crear" (click)="crearEliminatoria()">
+                <i class="ti ti-sitemap"></i> Eliminatoria
+              </button>
+            </div>
+          </div>
         }
 
         <!-- Tabla del grupo -->
@@ -170,6 +185,23 @@ import { Grupo, MiembroGrupo, FilaTablaGrupo } from '../../core/models/grupo.mod
       .btn.sm { padding: 6px 12px; font-size: 13px; }
       .btn.ancho { width: 100%; }
       .btn--primary { background: var(--accent-fill); color: #fff; border-color: var(--accent-fill); }
+
+      .crear-grupo {
+        margin-top: 16px; padding: 14px; border: 1px solid var(--border);
+        border-radius: var(--radius); background: var(--surface-1);
+      }
+      .crear-tit {
+        display: block; font-size: 11px; font-weight: 700; color: var(--text-muted);
+        text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;
+      }
+      .crear-botones { display: flex; gap: 8px; }
+      .crear-botones .btn { flex: 1; }
+      .btn--crear {
+        display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 5px; padding: 12px 8px; background: var(--surface-2);
+        color: var(--text-primary); font-size: 12px; font-weight: 600;
+      }
+      .btn--crear i { font-size: 19px; color: var(--accent-text); }
       .btn--peligro { color: var(--danger-text); border-color: var(--danger-text); margin-top: 20px; }
       .btn:disabled { opacity: 0.6; cursor: default; }
 
@@ -272,6 +304,21 @@ export class GrupoDetalleComponent {
 
   soyAdmin(g: Grupo): boolean {
     return g.adminUid === this.miUid();
+  }
+
+  /** Va al formulario de crear torneo con este grupo precargado. */
+  crearTorneo(): void {
+    this.router.navigate(['/admin/torneos/crear'], { queryParams: { grupo: this.id } });
+  }
+
+  /** Va al formulario de crear eliminatoria con este grupo precargado. */
+  crearEliminatoria(): void {
+    this.router.navigate(['/admin/brackets/crear'], { queryParams: { grupo: this.id } });
+  }
+
+  /** Va al formulario de crear partido con este grupo precargado. */
+  crearPartido(): void {
+    this.router.navigate(['/admin/partidos/crear'], { queryParams: { grupo: this.id } });
   }
   inicial(alias: string): string {
     return (alias?.trim()?.[0] ?? '?').toUpperCase();
