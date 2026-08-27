@@ -188,7 +188,7 @@ import { NavComponent } from '../../shared/nav.component';
       .panel-title--boton i { font-size: 17px; color: var(--text-muted); }
       .panel-title--boton:hover { color: var(--accent-text); }
       .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; margin-bottom: 16px; }
+      .grid { display: grid; grid-template-columns: 1fr; gap: 14px 12px; margin-bottom: 16px; }
       .field { display: block; margin-bottom: 14px; }
       .equipo-input { display: flex; align-items: center; gap: 8px; }
       .equipo-input input { flex: 1; }

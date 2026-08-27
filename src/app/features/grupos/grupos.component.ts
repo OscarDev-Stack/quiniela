@@ -83,7 +83,7 @@ const EMOJIS = ['⚽', '🏆', '🔥', '🎯', '🥅', '🏅', '🎮', '👑', '
             <h3>Crear grupo</h3>
             <label class="campo">
               <span>Nombre</span>
-              <input [(ngModel)]="nombre" placeholder="Los Cracks del Barrio" maxlength="30" />
+              <input [(ngModel)]="nombre" placeholder="AutomatePower" maxlength="30" />
             </label>
             <span class="campo-label">Ícono</span>
             <div class="emojis">

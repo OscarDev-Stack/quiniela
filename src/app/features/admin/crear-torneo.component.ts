@@ -27,7 +27,7 @@ import { NavComponent } from '../../shared/nav.component';
       <div class="grid">
         <label class="field">
           <span>Nombre</span>
-          <input type="text" [(ngModel)]="form.nombre" placeholder="Los del jueves, La Oficina…" />
+          <input type="text" [(ngModel)]="form.nombre" placeholder="AutomatePower" />
           <small class="pista">Como le van a decir entre ustedes.</small>
         </label>
         <label class="field">
@@ -220,7 +220,7 @@ import { NavComponent } from '../../shared/nav.component';
       .tag { font-size: 11px; font-weight: 700; text-transform: uppercase;
         padding: 3px 9px; border-radius: 999px; background: var(--surface-1); color: var(--text-secondary); }
 
-      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
       .field { display: block; margin-bottom: 12px; }
       .field span { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
       textarea { width: 100%; font-family: inherit; font-size: 16px; padding: 11px 12px;

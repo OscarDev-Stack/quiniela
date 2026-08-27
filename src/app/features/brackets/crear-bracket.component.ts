@@ -211,7 +211,7 @@ import { NavComponent } from '../../shared/nav.component';
         font-size: 11px; font-weight: 600; padding: 2px 9px;
         border-radius: 999px; background: var(--surface-1); color: var(--text-secondary);
       }
-      .form { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; }
+      .form { margin-top: 14px; display: grid; grid-template-columns: 1fr; gap: 14px 12px; }
       .field { display: block; }
       .field--ancho { grid-column: 1 / -1; }
       .acciones-crear { grid-column: 1 / -1; }

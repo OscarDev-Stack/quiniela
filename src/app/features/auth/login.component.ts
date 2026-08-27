@@ -16,7 +16,21 @@ import { APP_VERSION } from '../../core/version';
         <div class="hero">
           <div class="hero-ico-wrap">
             <div class="hero-ico-glow"></div>
-            <div class="hero-ico">⚽</div>
+            <div class="hero-ico">
+              <svg viewBox="118 110 276 280" xmlns="http://www.w3.org/2000/svg" aria-label="Fut">
+                <g stroke="#4a94e2" stroke-width="8" fill="none" opacity="0.6" stroke-linecap="round">
+                  <rect x="138" y="130" width="236" height="180" rx="8"/>
+                  <line x1="195" y1="130" x2="195" y2="310"/>
+                  <line x1="256" y1="130" x2="256" y2="310"/>
+                  <line x1="317" y1="130" x2="317" y2="310"/>
+                  <line x1="138" y1="191" x2="374" y2="191"/>
+                  <line x1="138" y1="252" x2="374" y2="252"/>
+                </g>
+                <path d="M 195 146 L 350 146 L 334 195 L 236 195 L 228 232 L 310 232 L 294 281 L 212 281 L 191 367 L 138 367 Z" fill="#ffffff"/>
+                <circle cx="334" cy="322" r="16" fill="#8cc0f0"/>
+                <path d="M 334 306 L 342 322 L 334 338 L 326 322 Z" fill="#cde3f7"/>
+              </svg>
+            </div>
           </div>
           <div class="marca">
             <span class="marca-nombre">Fut</span>
@@ -107,10 +121,11 @@ import { APP_VERSION } from '../../core/version';
         background: radial-gradient(circle, rgba(55, 138, 221, 0.45), transparent 70%);
       }
       .hero-ico {
-        position: relative; width: 76px; height: 76px; border-radius: 50%;
-        display: flex; align-items: center; justify-content: center; font-size: 38px;
+        position: relative; width: 76px; height: 76px; border-radius: 20px;
+        display: flex; align-items: center; justify-content: center;
         background: var(--surface-2); border: 1px solid rgba(55, 138, 221, 0.4);
       }
+      .hero-ico svg { width: 52px; height: 52px; }
       .marca { display: flex; flex-direction: column; align-items: center; }
       .marca-nombre { font-size: 34px; font-weight: 800; letter-spacing: -0.5px; line-height: 1; }
       .marca-by { font-size: 12px; font-weight: 500; color: var(--accent-text); margin-top: 3px; }
