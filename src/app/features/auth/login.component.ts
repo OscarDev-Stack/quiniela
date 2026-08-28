@@ -10,53 +10,82 @@ import { APP_VERSION } from '../../core/version';
   imports: [FormsModule, RouterLink],
   template: `
     <div class="auth-wrap">
-      <div class="auth-card">
-        <div class="brand">
-          <span class="brand-mark">Q</span>
-          <span class="brand-name">Quiniela</span>
+      <div class="fondo-glow"></div>
+
+      <div class="auth-content">
+        <div class="hero">
+          <div class="hero-ico-wrap">
+            <div class="hero-ico-glow"></div>
+            <div class="hero-ico">
+              <svg viewBox="118 110 276 280" xmlns="http://www.w3.org/2000/svg" aria-label="Fut">
+                <g stroke="#4a94e2" stroke-width="8" fill="none" opacity="0.6" stroke-linecap="round">
+                  <rect x="138" y="130" width="236" height="180" rx="8"/>
+                  <line x1="195" y1="130" x2="195" y2="310"/>
+                  <line x1="256" y1="130" x2="256" y2="310"/>
+                  <line x1="317" y1="130" x2="317" y2="310"/>
+                  <line x1="138" y1="191" x2="374" y2="191"/>
+                  <line x1="138" y1="252" x2="374" y2="252"/>
+                </g>
+                <path d="M 195 146 L 350 146 L 334 195 L 236 195 L 228 232 L 310 232 L 294 281 L 212 281 L 191 367 L 138 367 Z" fill="#ffffff"/>
+                <circle cx="334" cy="322" r="16" fill="#8cc0f0"/>
+                <path d="M 334 306 L 342 322 L 334 338 L 326 322 Z" fill="#cde3f7"/>
+              </svg>
+            </div>
+          </div>
+          <div class="marca">
+            <span class="marca-nombre">Fut</span>
+            <span class="marca-by">by AutomatePower</span>
+          </div>
+          <p class="hero-sub">Entra para hacer tus pronósticos</p>
         </div>
-        <h1 class="auth-title">Iniciar sesión</h1>
-        <p class="auth-subtitle">Entra para hacer tus pronósticos.</p>
 
-        @if (error()) {
-          <div class="auth-error">{{ error() }}</div>
-        }
+        <div class="auth-card">
+          @if (error()) {
+            <div class="auth-error"><i class="ti ti-alert-circle"></i> {{ error() }}</div>
+          }
 
-        <form (ngSubmit)="onSubmit()">
-          <label class="field">
-            <span class="field-label">Correo</span>
-            <input
-              type="email"
-              name="email"
-              [(ngModel)]="email"
-              required
-              autocomplete="email"
-              placeholder="tu@correo.com"
-            />
-          </label>
+          <form (ngSubmit)="onSubmit()">
+            <label class="field">
+              <span class="field-label">Correo electrónico</span>
+              <span class="input-wrap">
+                <i class="ti ti-mail input-ico"></i>
+                <input
+                  type="email"
+                  name="email"
+                  [(ngModel)]="email"
+                  required
+                  autocomplete="email"
+                  placeholder="tu@correo.com"
+                />
+              </span>
+            </label>
 
-          <label class="field">
-            <span class="field-label">Contraseña</span>
-            <input
-              type="password"
-              name="password"
-              [(ngModel)]="password"
-              required
-              autocomplete="current-password"
-              placeholder="••••••••"
-            />
-          </label>
+            <label class="field">
+              <span class="field-label">Contraseña</span>
+              <span class="input-wrap">
+                <i class="ti ti-lock input-ico"></i>
+                <input
+                  type="password"
+                  name="password"
+                  [(ngModel)]="password"
+                  required
+                  autocomplete="current-password"
+                  placeholder="••••••••"
+                />
+              </span>
+            </label>
 
-          <button type="submit" class="btn-primary" [disabled]="loading()">
-            {{ loading() ? 'Entrando…' : 'Entrar' }}
-          </button>
-        </form>
+            <button type="submit" class="btn-primary" [disabled]="loading()">
+              {{ loading() ? 'Entrando…' : 'Iniciar sesión' }}
+            </button>
+          </form>
 
-        <p class="auth-alt">
-          <a routerLink="/recuperar">¿Olvidaste tu contraseña?</a>
-        </p>
+          <p class="auth-alt">
+            <a routerLink="/recuperar">¿Olvidaste tu contraseña?</a>
+          </p>
+        </div>
 
-        <p class="auth-alt">
+        <p class="auth-alt auth-alt--fuera">
           ¿No tienes cuenta? <a routerLink="/registro">Crear cuenta</a>
         </p>
       </div>
@@ -71,72 +100,75 @@ import { APP_VERSION } from '../../core/version';
         font-size: 10px; color: var(--text-muted); opacity: 0.5; letter-spacing: 0.5px;
       }
       .auth-wrap {
-        position: relative;
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: calc(24px + env(safe-area-inset-top)) 24px
-          calc(24px + env(safe-area-inset-bottom));
+        position: relative; min-height: 100vh; overflow: hidden;
+        display: flex; align-items: center; justify-content: center;
+        padding: calc(24px + env(safe-area-inset-top)) 22px
+          calc(40px + env(safe-area-inset-bottom));
       }
+      .fondo-glow {
+        position: absolute; top: -120px; left: 50%; transform: translateX(-50%);
+        width: 360px; height: 360px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(55, 138, 221, 0.26), transparent 70%);
+        pointer-events: none;
+      }
+      .auth-content { position: relative; z-index: 1; width: 100%; max-width: 380px; }
+
+      /* Hero: ícono con halo + marca */
+      .hero { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 24px; }
+      .hero-ico-wrap { position: relative; margin-bottom: 16px; }
+      .hero-ico-glow {
+        position: absolute; inset: -16px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(55, 138, 221, 0.45), transparent 70%);
+      }
+      .hero-ico {
+        position: relative; width: 76px; height: 76px; border-radius: 20px;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--surface-2); border: 1px solid rgba(55, 138, 221, 0.4);
+      }
+      .hero-ico svg { width: 52px; height: 52px; }
+      .marca { display: flex; flex-direction: column; align-items: center; }
+      .marca-nombre { font-size: 34px; font-weight: 800; letter-spacing: -0.5px; line-height: 1; }
+      .marca-by { font-size: 12px; font-weight: 500; color: var(--accent-text); margin-top: 3px; }
+      .hero-sub { font-size: 14px; color: var(--text-secondary); margin: 12px 0 0; }
+
       .auth-card {
-        width: 100%;
-        max-width: 380px;
-        background: var(--surface-2);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 28px 24px;
+        width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: 18px; padding: 22px 20px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.22);
       }
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        justify-content: center;
-        margin-bottom: 18px;
-      }
-      .brand-mark {
-        width: 34px;
-        height: 34px;
-        border-radius: 50%;
-        background: var(--accent-bg);
-        color: var(--accent-text);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 600;
-      }
-      .brand-name { font-size: 18px; font-weight: 600; }
-      .auth-title { font-size: 20px; font-weight: 600; text-align: center; margin: 0 0 4px; }
-      .auth-subtitle { font-size: 14px; color: var(--text-secondary); text-align: center; margin: 0 0 22px; }
 
       .auth-error {
-        background: var(--danger-bg);
-        color: var(--danger-text);
-        font-size: 13px;
-        padding: 10px 12px;
-        border-radius: var(--radius);
-        margin-bottom: 16px;
+        display: flex; align-items: center; gap: 7px;
+        background: var(--danger-bg); color: var(--danger-text);
+        font-size: 13px; padding: 10px 12px; border-radius: var(--radius); margin-bottom: 16px;
       }
 
-      .field { display: block; margin-bottom: 14px; }
-      .field-label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
+      .field { display: block; margin-bottom: 16px; }
+      .field-label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 7px; }
+
+      /* Input con ícono a la izquierda */
+      .input-wrap { position: relative; display: block; }
+      .input-ico {
+        position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+        font-size: 18px; color: var(--text-muted); pointer-events: none;
+      }
+      .input-wrap input {
+        width: 100%; padding: 12px 14px 12px 42px;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-1); color: var(--text-primary); font-size: 15px;
+      }
+      .input-wrap input:focus { outline: none; border-color: var(--accent-fill); }
 
       .btn-primary {
-        width: 100%;
-        padding: 12px;
-        border: none;
-        border-radius: var(--radius);
-        background: var(--accent-fill);
-        color: #fff;
-        font-size: 15px;
-        font-weight: 600;
-        cursor: pointer;
-        margin-top: 6px;
+        width: 100%; padding: 13px; border: none; border-radius: var(--radius);
+        background: var(--accent-fill); color: #fff; font-size: 15px; font-weight: 600;
+        cursor: pointer; margin-top: 4px;
       }
       .btn-primary:disabled { opacity: 0.6; cursor: default; }
 
-      .auth-alt { text-align: center; font-size: 14px; color: var(--text-secondary); margin: 18px 0 0; }
-      .auth-alt a { color: var(--accent-text); text-decoration: none; font-weight: 500; }
+      .auth-alt { text-align: center; font-size: 14px; color: var(--text-secondary); margin: 16px 0 0; }
+      .auth-alt--fuera { margin-top: 20px; }
+      .auth-alt a { color: var(--accent-text); text-decoration: none; font-weight: 600; }
       .auth-alt a:hover { text-decoration: underline; }
     `,
   ],

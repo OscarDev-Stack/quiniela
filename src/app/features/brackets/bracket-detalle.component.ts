@@ -63,9 +63,9 @@ import { Bracket } from '../../core/models/bracket.model';
           <app-cuadro-bracket [bracket]="b" />
         </section>
 
-        @if (b.estado === 'finalizado') {
+        @if (b.estado === 'en-curso' || b.estado === 'finalizado') {
           <section class="panel">
-            <h2>Resultados</h2>
+            <h2>{{ b.estado === 'finalizado' ? 'Resultados' : 'Pronósticos de todos' }}</h2>
             <app-tabla-bracket [pronosticos]="pronosticos()" [miUid]="miUid()" />
           </section>
         }
@@ -354,8 +354,11 @@ export class BracketDetalleComponent {
   // (así lo exige la regla, para no espiar cuadros ajenos). Antes de eso
   // solo leemos el propio pronóstico.
   readonly pronosticos = toSignal(
-    toObservable(computed(() => this.bracket()?.estado === 'finalizado')).pipe(
-      switchMap((fin) => (fin ? this.service.pronosticos(this.id()) : of([]))),
+    toObservable(computed(() => {
+      const e = this.bracket()?.estado;
+      return e === 'en-curso' || e === 'finalizado';
+    })).pipe(
+      switchMap((cerrado) => (cerrado ? this.service.pronosticos(this.id()) : of([]))),
     ),
     { initialValue: [] },
   );

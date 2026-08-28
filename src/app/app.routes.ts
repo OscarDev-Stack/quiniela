@@ -2,6 +2,8 @@ import { Routes } from '@angular/router';
 import { gestorGuard } from './core/guards/gestor.guard';
 import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
+import { adminOgrupoGuard } from './core/guards/admin-o-grupo.guard';
+import { accesoGuard } from './core/guards/acceso.guard';
 
 /**
  * Rutas con carga diferida (lazy loading): cada pantalla se descarga solo
@@ -10,17 +12,24 @@ import { adminGuard } from './core/guards/admin.guard';
  * los jugadores que nunca entran al panel de admin.
  */
 export const routes: Routes = [
-    { path: '', redirectTo: 'login', pathMatch: 'full' },
+    { path: '', redirectTo: 'acceso', pathMatch: 'full' },
+    {
+        path: 'acceso',
+        loadComponent: () => import('./features/acceso/acceso.component').then((m) => m.AccesoComponent),
+    },
     {
         path: 'login',
+        canActivate: [accesoGuard],
         loadComponent: () => import('./features/auth/login.component').then((m) => m.LoginComponent),
     },
     {
         path: 'registro',
+        canActivate: [accesoGuard],
         loadComponent: () => import('./features/auth/register.component').then((m) => m.RegisterComponent),
     },
     {
         path: 'recuperar',
+        canActivate: [accesoGuard],
         loadComponent: () => import('./features/auth/recuperar.component').then((m) => m.RecuperarComponent),
     },
 
@@ -48,6 +57,18 @@ export const routes: Routes = [
     {
         path: 'ranking',
         loadComponent: () => import('./features/ranking/ranking.component').then((m) => m.RankingComponent),
+        canActivate: [authGuard],
+    },
+
+    {
+        path: 'grupos',
+        loadComponent: () => import('./features/grupos/grupos.component').then((m) => m.GruposComponent),
+        canActivate: [authGuard],
+    },
+    {
+        path: 'grupos/:id',
+        loadComponent: () =>
+            import('./features/grupos/grupo-detalle.component').then((m) => m.GrupoDetalleComponent),
         canActivate: [authGuard],
     },
 
@@ -96,29 +117,49 @@ export const routes: Routes = [
     {
         path: 'admin',
         loadComponent: () => import('./features/admin/admin-layout.component').then((m) => m.AdminLayoutComponent),
-        canActivate: [authGuard, adminGuard],
+        canActivate: [authGuard],
         children: [
             { path: '', redirectTo: 'partidos', pathMatch: 'full' },
             {
                 path: 'partidos',
-                loadComponent: () => import('./features/admin/admin-partidos.component').then((m) => m.AdminPartidosComponent),
+                canActivate: [adminGuard],
+                loadComponent: () => import('./features/admin/gestionar-partidos.component').then((m) => m.GestionarPartidosComponent),
+            },
+            {
+                path: 'partidos/crear',
+                canActivate: [adminOgrupoGuard],
+                loadComponent: () => import('./features/admin/crear-partido.component').then((m) => m.CrearPartidoComponent),
             },
             {
                 path: 'usuarios',
+                canActivate: [adminGuard],
                 loadComponent: () => import('./features/admin/admin-usuarios.component').then((m) => m.AdminUsuariosComponent),
             },
             {
                 path: 'torneos',
-                loadComponent: () => import('./features/admin/admin-torneos.component').then((m) => m.AdminTorneosComponent),
+                canActivate: [adminGuard],
+                loadComponent: () => import('./features/admin/gestionar-torneos.component').then((m) => m.GestionarTorneosComponent),
+            },
+            {
+                path: 'torneos/crear',
+                canActivate: [adminOgrupoGuard],
+                loadComponent: () => import('./features/admin/crear-torneo.component').then((m) => m.CrearTorneoComponent),
             },
             {
                 path: 'competiciones',
+                canActivate: [adminGuard],
                 loadComponent: () =>
                     import('./features/admin/admin-competiciones.component').then((m) => m.AdminCompeticionesComponent),
             },
             {
                 path: 'brackets',
-                loadComponent: () => import('./features/brackets/admin-brackets.component').then((m) => m.AdminBracketsComponent),
+                canActivate: [adminGuard],
+                loadComponent: () => import('./features/brackets/gestionar-brackets.component').then((m) => m.GestionarBracketsComponent),
+            },
+            {
+                path: 'brackets/crear',
+                canActivate: [adminOgrupoGuard],
+                loadComponent: () => import('./features/brackets/crear-bracket.component').then((m) => m.CrearBracketComponent),
             },
         ],
     },

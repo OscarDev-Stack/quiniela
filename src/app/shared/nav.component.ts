@@ -1,5 +1,6 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { CampanitaComponent } from './campanita.component';
+import { SelectorContextoComponent } from './selector-contexto.component';
 import { CommonModule, Location } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -11,7 +12,7 @@ import { TorneosService } from '../core/services/torneos.service';
 @Component({
   selector: 'app-nav',
   standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive, CampanitaComponent],
+  imports: [CommonModule, RouterLink, RouterLinkActive, CampanitaComponent, SelectorContextoComponent],
   template: `
     <!-- Encabezado -->
     <header class="topbar">
@@ -20,46 +21,36 @@ import { TorneosService } from '../core/services/torneos.service';
           <i class="ti ti-arrow-left"></i>
         </button>
         <span class="title">{{ title() }}</span>
-      } @else if (minimal()) {
-        <span class="marca">{{ title() || 'Quiniela' }}</span>
       } @else {
-        <div class="brand">
-          <span class="avatar" routerLink="/perfil">{{ inicial() }}</span>
-          <span class="who" routerLink="/perfil">
-            <span class="alias">
-              {{ alias() }}
-              @if (me()?.validada) {
-                <i class="ti ti-rosette-discount-check-filled check" title="Cuenta validada"></i>
-              }
-            </span>
-            <span class="sub">{{ title() || 'Quiniela' }}</span>
-          </span>
-        </div>
-      }
-
-      @if (!ocultarSaldo()) {
-        <div class="balance" [class.balance--negativo]="(me()?.puntos ?? 0) < 0">
-          <i class="ti ti-coins"></i>
-          <span>{{ me()?.puntos ?? 0 | number }} pts</span>
-        </div>
+        <span class="title title--vista">{{ title() || 'Fut' }}</span>
       }
 
       @if (!back()) {
-        <a class="icono-top" routerLink="/ranking" aria-label="Ranking" title="Ranking">
-          <i class="ti ti-trophy"></i>
-        </a>
+        @if (!ocultarSaldo()) {
+          <app-campanita [puntos]="me()?.puntos ?? 0" />
+        }
 
-        <app-campanita />
+        @if (mostrarContexto()) {
+          <app-selector-contexto />
+        }
 
-        @if (isAdmin()) {
-          <div class="menu-admin">
-            <button class="icono-top" (click)="menuAbierto.set(!menuAbierto())" aria-label="Menú de administración">
-              <i class="ti ti-dots-vertical"></i>
-              @if (pendientes() > 0) { <span class="punto-rojo"></span> }
-            </button>
-            @if (menuAbierto()) {
-              <div class="menu-fondo" (click)="menuAbierto.set(false)"></div>
-              <div class="menu-lista">
+        <div class="menu-admin">
+          <button class="icono-top" (click)="menuAbierto.set(!menuAbierto())" aria-label="Menú">
+            <i class="ti ti-dots-vertical"></i>
+            @if (pendientes() > 0) { <span class="punto-rojo"></span> }
+          </button>
+          @if (menuAbierto()) {
+            <div class="menu-fondo" (click)="menuAbierto.set(false)"></div>
+            <div class="menu-lista">
+              <a routerLink="/ranking" (click)="menuAbierto.set(false)"><i class="ti ti-trophy"></i> Ranking</a>
+              <a routerLink="/grupos" (click)="menuAbierto.set(false)"><i class="ti ti-users-group"></i> Grupos</a>
+
+              @if (esGestor() && !isAdmin()) {
+                <a routerLink="/liga" (click)="menuAbierto.set(false)"><i class="ti ti-ball-football"></i> Mi liga</a>
+              }
+
+              @if (isAdmin()) {
+                <span class="menu-sep"></span>
                 <span class="menu-tit">Administración</span>
                 <a routerLink="/admin/partidos" (click)="menuAbierto.set(false)"><i class="ti ti-ball-football"></i> Partidos</a>
                 <a routerLink="/admin/usuarios" (click)="menuAbierto.set(false)">
@@ -69,14 +60,10 @@ import { TorneosService } from '../core/services/torneos.service';
                 <a routerLink="/admin/torneos" (click)="menuAbierto.set(false)"><i class="ti ti-tournament"></i> Torneos</a>
                 <a routerLink="/admin/competiciones" (click)="menuAbierto.set(false)"><i class="ti ti-trophy"></i> Ligas</a>
                 <a routerLink="/admin/brackets" (click)="menuAbierto.set(false)"><i class="ti ti-sitemap"></i> Eliminatorias</a>
-              </div>
-            }
-          </div>
-        } @else if (esGestor()) {
-          <a class="icono-top" routerLink="/liga" aria-label="Mi liga" title="Mi liga">
-            <i class="ti ti-ball-football"></i>
-          </a>
-        }
+              }
+            </div>
+          }
+        </div>
       }
     </header>
 
@@ -89,17 +76,23 @@ import { TorneosService } from '../core/services/torneos.service';
 
     <!-- Barra inferior -->
     <nav class="tabs">
-      <a routerLink="/inicio" routerLinkActive="on">
-        <i class="ti ti-home"></i><span>Inicio</span>
-      </a>
       <a routerLink="/partidos" routerLinkActive="on">
         <i class="ti ti-ball-football"></i><span>Partidos</span>
       </a>
       <a routerLink="/mis-pronosticos" routerLinkActive="on">
         <i class="ti ti-ticket"></i><span>Míos</span>
       </a>
+
+      <a routerLink="/inicio" routerLinkActive="on" class="tab-central" aria-label="Inicio">
+        <span class="tab-central-btn"><i class="ti ti-home"></i></span>
+      </a>
+
       <a routerLink="/torneos" routerLinkActive="on">
         <i class="ti ti-tournament"></i><span>Torneos</span>
+        @if (pendientesTorneos() > 0) { <span class="tab-badge"></span> }
+      </a>
+      <a routerLink="/perfil" routerLinkActive="on">
+        <i class="ti ti-user"></i><span>Perfil</span>
       </a>
     </nav>
   `,
@@ -108,29 +101,16 @@ import { TorneosService } from '../core/services/torneos.service';
       .topbar {
         position: sticky; top: 0; z-index: 20;
         display: flex; align-items: center; gap: 6px;
+        /* Ancho consistente en todas las vistas, aunque el contenedor
+           (p.ej. admin a 780px) sea más ancho: la barra se mantiene igual. */
+        width: 100%; max-width: 460px; margin: 0 auto 16px;
         /* Deja libre la barra de estado cuando corre como app instalada. */
         padding: calc(12px + env(safe-area-inset-top)) 0 12px;
         background: var(--surface-0);
         border-bottom: 1px solid var(--border);
-        margin-bottom: 16px;
       }
-      .brand { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-      .avatar { cursor: pointer;
-        width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
-        background: var(--accent-bg); color: var(--accent-text);
-        display: flex; align-items: center; justify-content: center;
-        font-size: 15px; font-weight: 700;
-      }
-      .who { cursor: pointer; display: flex; flex-direction: column; min-width: 0; }
-      .alias {
-        display: flex; align-items: center; gap: 4px;
-        font-size: 15px; font-weight: 600; line-height: 1.2;
-        overflow: hidden; white-space: nowrap;
-      }
-      .check { color: var(--accent-fill); font-size: 15px; flex-shrink: 0; }
-      .sub { font-size: 11px; color: var(--text-muted); line-height: 1.3; }
-      .title { flex: 1; font-size: 16px; font-weight: 600; }
-      .marca { flex: 1; font-size: 17px; font-weight: 800; color: var(--text-primary); }
+      .title { flex: 1; font-size: 16px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .title--vista { font-size: 18px; font-weight: 700; color: var(--text-primary); }
 
       .icon-btn {
         width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
@@ -177,6 +157,7 @@ import { TorneosService } from '../core/services/torneos.service';
         font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
         color: var(--text-muted); padding: 6px 10px 4px;
       }
+      .menu-sep { display: block; height: 1px; background: var(--border); margin: 6px 4px; }
       .menu-lista a {
         display: flex; align-items: center; gap: 10px;
         padding: 10px; border-radius: 8px; text-decoration: none;
@@ -204,6 +185,7 @@ import { TorneosService } from '../core/services/torneos.service';
         border-top: 1px solid var(--border);
       }
       .tabs a, .tabs button {
+        position: relative;
         flex: 1; max-width: 72px; min-width: 0;
         display: flex; flex-direction: column; align-items: center; gap: 3px;
         text-decoration: none; cursor: pointer;
@@ -216,6 +198,25 @@ import { TorneosService } from '../core/services/torneos.service';
       }
       .tabs i { font-size: 20px; }
       .tabs a.on { color: var(--accent-text); }
+
+      /* Botón central destacado (Inicio) */
+      .tab-central { position: relative; }
+      .tab-central-btn {
+        display: flex; align-items: center; justify-content: center;
+        width: 56px; height: 56px; margin-top: -26px; border-radius: 50%;
+        background: var(--accent-fill); color: #fff;
+        border: 4px solid var(--surface-2);
+        box-shadow: 0 4px 14px rgba(55, 138, 221, 0.45);
+      }
+      .tab-central-btn i { font-size: 24px; }
+      .tab-central.on .tab-central-btn { background: var(--accent-fill); filter: brightness(1.1); }
+      .tab-central.on { color: #fff; }
+
+      /* Puntito de aviso en un tab (ej. torneos con pendientes) */
+      .tab-badge {
+        position: absolute; top: 2px; right: calc(50% - 16px);
+        width: 8px; height: 8px; border-radius: 50%; background: var(--danger-text);
+      }
       .con-badge { position: relative; }
       .badge {
         position: absolute; top: 0; right: 12px;
@@ -243,6 +244,8 @@ export class NavComponent {
   readonly minimal = input(false);
   /** Si es true, oculta el saldo de la barra (útil cuando ya se muestra en la propia vista). */
   readonly ocultarSaldo = input(false);
+  /** Si es true, muestra el selector de contexto (Global/grupos). Solo en el inicio. */
+  readonly mostrarContexto = input(false);
 
   /** Menú desplegable de administración (tres puntos). */
   readonly menuAbierto = signal(false);

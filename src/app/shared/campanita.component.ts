@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Auth, user } from '@angular/fire/auth';
@@ -22,8 +22,14 @@ import { PerfilService, Movimiento } from '../core/services/perfil.service';
   imports: [CommonModule],
   template: `
     <div class="campanita">
-      <button class="btn-campana" (click)="alternar()" aria-label="Notificaciones">
-        <i class="ti ti-bell"></i>
+      <button
+        class="btn-saldo"
+        [class.btn-saldo--negativo]="(puntos() ?? 0) < 0"
+        (click)="alternar()"
+        aria-label="Mis puntos y movimientos"
+      >
+        <i class="ti ti-coins"></i>
+        <span>{{ puntos() ?? 0 | number }} pts</span>
         @if (hayNuevas()) {
           <span class="punto" aria-hidden="true"></span>
         }
@@ -34,7 +40,7 @@ import { PerfilService, Movimiento } from '../core/services/perfil.service';
 
         <div class="panel">
           <div class="panel-cab">
-            <span class="panel-tit">Notificaciones</span>
+            <span class="panel-tit">Mis movimientos</span>
           </div>
 
           @if (lista().length === 0) {
@@ -73,19 +79,22 @@ import { PerfilService, Movimiento } from '../core/services/perfil.service';
   styles: [
     `
       .campanita { position: relative; }
-      .btn-campana {
-        position: relative; background: transparent; border: none; cursor: pointer;
-        color: var(--text-secondary); font-size: 20px; padding: 4px; line-height: 1;
+      .btn-saldo {
+        position: relative; display: flex; align-items: center; gap: 6px;
+        background: var(--accent-bg); color: var(--accent-text);
+        padding: 7px 13px; border-radius: 999px; font-weight: 600; font-size: 14px;
+        white-space: nowrap; border: none; cursor: pointer;
       }
+      .btn-saldo--negativo { background: var(--danger-bg); color: var(--danger-text); }
       .punto {
-        position: absolute; top: 2px; right: 2px;
-        width: 9px; height: 9px; border-radius: 50%;
+        position: absolute; top: -2px; right: -2px;
+        width: 10px; height: 10px; border-radius: 50%;
         background: var(--danger-text); border: 1.5px solid var(--surface-0, #fff);
       }
 
-      .fondo { position: fixed; inset: 0; z-index: 190; }
+      .fondo { position: fixed; inset: 0; z-index: 2000; }
       .panel {
-        position: absolute; top: calc(100% + 8px); right: 0; z-index: 200;
+        position: fixed; top: calc(env(safe-area-inset-top, 0px) + 60px); right: 12px; z-index: 2001;
         width: min(340px, 90vw); max-height: 70vh; overflow-y: auto;
         background: var(--surface-2); border: 1px solid var(--border);
         border-radius: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
@@ -153,6 +162,8 @@ import { PerfilService, Movimiento } from '../core/services/perfil.service';
   ],
 })
 export class CampanitaComponent {
+  /** Puntos del usuario, mostrados en el chip que abre los movimientos. */
+  readonly puntos = input<number | null>(0);
   private readonly perfil = inject(PerfilService);
   private readonly auth = inject(Auth);
   private readonly router = inject(Router);

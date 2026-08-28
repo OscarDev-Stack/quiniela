@@ -2,16 +2,16 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
 import { BracketsService } from '../../core/services/brackets.service';
 import { ToastService } from '../../shared/toast.service';
-import { nombreOficial } from '../../core/models/equipos-liga-mx';
+import { ContextoService } from '../../shared/contexto.service';
 import { CuadroBracketComponent } from './cuadro-bracket.component';
 import { ArmarBracketComponent } from './armar-bracket.component';
 import { AsignarDuenosComponent } from './asignar-duenos.component';
 import {
   Bracket,
   Llave,
-  EquipoBracket,
   nombreRonda,
   rondasDe,
 } from '../../core/models/bracket.model';
@@ -21,9 +21,9 @@ import {
  * Fase 2 — sin pronósticos todavía; eso llega en la 3.
  */
 @Component({
-  selector: 'app-admin-brackets',
+  selector: 'app-gestionar-brackets',
   standalone: true,
-  imports: [CommonModule, FormsModule, CuadroBracketComponent,
+  imports: [CommonModule, FormsModule, RouterLink, CuadroBracketComponent,
     ArmarBracketComponent,
     AsignarDuenosComponent,
   ],
@@ -31,172 +31,9 @@ import {
     <div class="wrap">
       <h1>Eliminatorias</h1>
 
-      <!-- Crear -->
-      <section class="panel">
-        <button class="cab" (click)="verCrear.set(!verCrear())">
-          <i class="ti" [class.ti-chevron-down]="!verCrear()" [class.ti-chevron-up]="verCrear()"></i>
-          Nueva eliminatoria
-        </button>
-
-        @if (verCrear()) {
-          <div class="form">
-            <label class="field">
-              <span>Nombre</span>
-              <input [(ngModel)]="nuevo.nombre" placeholder="Liguilla Apertura 2026" />
-            </label>
-
-            <label class="field">
-              <span>Modo de juego</span>
-              <select [(ngModel)]="nuevo.modo">
-                <option value="pronostico">Pronóstico (cada quien llena el cuadro)</option>
-                <option value="duenos">Dueños (a cada quien le toca un equipo)</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>Equipos</span>
-              <select [(ngModel)]="nuevo.equipos">
-                <option [ngValue]="4">4 equipos</option>
-                <option [ngValue]="8">8 equipos</option>
-                <option [ngValue]="16">16 equipos</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>Cómo se arma</span>
-              <select [(ngModel)]="nuevo.armado">
-                <option value="siembra">Por posición (1°vs8°)</option>
-                <option value="manual">Cruces a mano</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>Cruces en cada ronda</span>
-              <select [(ngModel)]="nuevo.avance">
-                <option value="reordena">Reordena: mejor vs peor (liguilla)</option>
-                <option value="fijo">Cruces fijos del cuadro (Champions)</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>Rondas</span>
-              <select [(ngModel)]="nuevo.formatoRondas">
-                <option value="ida-vuelta">Ida y vuelta</option>
-                <option value="unico">Partido único</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>Final</span>
-              <select [(ngModel)]="nuevo.formatoFinal">
-                <option value="ida-vuelta">Ida y vuelta</option>
-                <option value="unico">Partido único</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>Desempate en rondas</span>
-              <select [(ngModel)]="nuevo.desempateRondas">
-                <option value="mejor-sembrado">Mejor posicionado avanza</option>
-                <option value="penales">Prórroga y penales</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>Desempate en la final</span>
-              <select [(ngModel)]="nuevo.desempateFinal">
-                <option value="penales">Prórroga y penales</option>
-                <option value="mejor-sembrado">Mejor posicionado avanza</option>
-              </select>
-            </label>
-
-            <label class="field field--ancho">
-              <span>{{ nuevo.modo === 'duenos' ? 'Cierre / inicio del torneo' : 'Cierre de pronósticos' }}</span>
-              <input type="datetime-local" [(ngModel)]="nuevo.cierre" />
-              <small class="pista">
-                @if (nuevo.modo === 'duenos') {
-                  A esa hora arranca el torneo. Ponla antes del primer partido.
-                } @else {
-                  A esa hora se congela el cuadro. Ponla antes del primer partido.
-                }
-              </small>
-            </label>
-
-            <label class="switch">
-              <span class="switch-texto">
-                Eliminatoria pública
-                <small class="pista">
-                  Aparece en el inicio y cualquiera puede unirse sin invitación.
-                  Si la dejas privada, solo entra quien tenga el enlace.
-                </small>
-              </span>
-              <input type="checkbox" class="switch-input" [(ngModel)]="nuevo.publico" />
-              <span class="switch-pista" aria-hidden="true"></span>
-            </label>
-
-            <label class="field">
-              <span>Costo de entrada (puntos)</span>
-              <select [(ngModel)]="nuevo.costoEntrada">
-                <option [ngValue]="0">Gratis</option>
-                <option [ngValue]="50">50 pts</option>
-                <option [ngValue]="100">100 pts</option>
-                <option [ngValue]="200">200 pts</option>
-                <option [ngValue]="500">500 pts</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>% al bote acumulado</span>
-              <select [(ngModel)]="nuevo.porcentajeBote">
-                <option [ngValue]="0">Nada</option>
-                <option [ngValue]="5">5%</option>
-                <option [ngValue]="10">10%</option>
-                <option [ngValue]="15">15%</option>
-                <option [ngValue]="20">20%</option>
-              </select>
-              <small class="pista">Parte de la bolsa que se guarda para un torneo especial.</small>
-            </label>
-
-            @if (nuevo.modo !== 'duenos') {
-            <label class="field">
-              <span>Reparto de la bolsa</span>
-              <select [(ngModel)]="nuevo.reparto">
-                <option value="100">Todo al campeón</option>
-                <option value="80,20">80% / 20% (1° y 2°)</option>
-                <option value="70,20,10">70% / 20% / 10%</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>Escala de puntos</span>
-              <select [(ngModel)]="nuevo.escala">
-                <option value="normal">Normal (10 · 20 · 40, campeón +30)</option>
-                <option value="final">Más peso a la final (10 · 25 · 60, campeón +50)</option>
-                <option value="pareja">Pareja (15 · 20 · 30, campeón +20)</option>
-              </select>
-              <small class="pista">Los puntos suben por ronda; el campeón da el bono mayor.</small>
-            </label>
-            }
-
-
-
-            <label class="field field--ancho">
-              <span>Equipos (uno por línea, del 1° al último por posición)</span>
-              <textarea
-                rows="8"
-                [(ngModel)]="nuevo.listaEquipos"
-                placeholder="América&#10;Tigres&#10;Rayados&#10;Chivas&#10;…"
-              ></textarea>
-            </label>
-
-            <div class="acciones-crear">
-              <button class="btn btn--primary" [disabled]="creando()" (click)="crear()">
-                {{ creando() ? 'Creando…' : 'Crear eliminatoria' }}
-              </button>
-            </div>
-          </div>
-        }
-      </section>
+      <a class="btn btn--primary ancho-crear" routerLink="/admin/brackets/crear">
+        <i class="ti ti-plus"></i> Crear eliminatoria
+      </a>
 
       <!-- Lista y captura -->
       @for (b of brackets(); track b.id) {
@@ -327,6 +164,24 @@ import {
           }
         </section>
       }
+
+      <!-- Modal: elegir ganador de penales en un empate -->
+      @if (penalesPend(); as p) {
+        <div class="pen-fondo" (click)="penalesPend.set(null)"></div>
+        <div class="pen-modal">
+          <h3 class="pen-tit">Empate en penales</h3>
+          <p class="pen-sub">Terminaron {{ p.gl }} – {{ p.gv }}. ¿Quién ganó en la tanda?</p>
+          <div class="pen-botones">
+            <button class="pen-btn" (click)="resolverPenales('local')">
+              {{ localDe(p.l, p.l.partidos[p.indice].tipo) }}
+            </button>
+            <button class="pen-btn" (click)="resolverPenales('visitante')">
+              {{ visitanteDe(p.l, p.l.partidos[p.indice].tipo) }}
+            </button>
+          </div>
+          <button class="pen-cancelar" (click)="penalesPend.set(null)">Cancelar</button>
+        </div>
+      }
     </div>
   `,
   styles: [
@@ -368,6 +223,36 @@ import {
         border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
       }
       .btn--primary { background: var(--accent-fill); color: #fff; border-color: transparent; }
+      .ancho-crear {
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+        width: 100%; text-decoration: none; margin-bottom: 18px;
+      }
+
+      .pen-fondo {
+        position: fixed; inset: 0; z-index: 2000;
+        background: rgba(0, 0, 0, 0.6);
+      }
+      .pen-modal {
+        position: fixed; z-index: 2001; left: 50%; top: 50%;
+        transform: translate(-50%, -50%);
+        width: calc(100vw - 40px); max-width: 360px;
+        background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: 16px; padding: 22px 20px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+      }
+      .pen-tit { font-size: 18px; font-weight: 700; margin: 0 0 6px; }
+      .pen-sub { font-size: 14px; color: var(--text-secondary); margin: 0 0 18px; }
+      .pen-botones { display: flex; flex-direction: column; gap: 10px; }
+      .pen-btn {
+        width: 100%; padding: 14px; border-radius: var(--radius);
+        border: 1px solid var(--accent-fill); background: var(--accent-bg);
+        color: var(--accent-text); font-size: 15px; font-weight: 600; cursor: pointer;
+      }
+      .pen-btn:hover { background: var(--accent-fill); color: #fff; }
+      .pen-cancelar {
+        width: 100%; margin-top: 12px; padding: 10px; border: none; background: none;
+        color: var(--text-muted); font-size: 14px; cursor: pointer;
+      }
       .btn.sm { padding: 7px 12px; font-size: 13px; }
       .btn:disabled { opacity: 0.5; }
       .aviso { font-size: 13px; color: var(--text-secondary); margin: 8px 0 0; }
@@ -456,12 +341,18 @@ import {
     `,
   ],
 })
-export class AdminBracketsComponent {
+export class GestionarBracketsComponent {
   private readonly service = inject(BracketsService);
   private readonly toast = inject(ToastService);
-  readonly brackets = toSignal(this.service.brackets(), { initialValue: [] as Bracket[] });
+  private readonly contexto = inject(ContextoService);
 
-  readonly verCrear = signal(false);
+  private readonly todos = toSignal(this.service.brackets(), { initialValue: [] as Bracket[] });
+
+  /** Eliminatorias del contexto activo (Global o el grupo elegido). */
+  readonly brackets = computed(() => {
+    const ctx = this.contexto.grupoId();
+    return this.todos().filter((b) => (b.grupoId ?? null) === ctx);
+  });
   readonly abierto = signal<string | null>(null);
   readonly copiado = signal<string | null>(null);
   /** Qué paneles de participantes están desplegados (por id de bracket). */
@@ -471,25 +362,6 @@ export class AdminBracketsComponent {
 
   /** Marcadores en captura, indexados por llave-partido-lado. */
   marc: Record<string, number | null> = {};
-
-  nuevo = {
-    nombre: '',
-    modo: 'pronostico' as 'pronostico' | 'duenos',
-    equipos: 8,
-    armado: 'siembra' as 'siembra' | 'manual',
-    avance: 'reordena' as 'reordena' | 'fijo',
-    formatoRondas: 'ida-vuelta' as 'ida-vuelta' | 'unico',
-    formatoFinal: 'unico' as 'ida-vuelta' | 'unico',
-    desempateRondas: 'mejor-sembrado' as 'mejor-sembrado' | 'penales',
-    desempateFinal: 'penales' as 'mejor-sembrado' | 'penales',
-    reparto: '80,20',
-    escala: 'normal' as 'normal' | 'final' | 'pareja',
-    publico: false,
-    costoEntrada: 100,
-    porcentajeBote: 0,
-    cierre: '',
-    listaEquipos: '',
-  };
 
   /** ¿Está desplegado el panel de participantes de este bracket? */
   partsVisibles(id: string): boolean {
@@ -579,68 +451,7 @@ export class AdminBracketsComponent {
       .sort((a, c) => a.ronda - c.ronda || a.posicion - c.posicion);
   }
 
-  async crear(): Promise<void> {
-    const equipos: EquipoBracket[] = this.nuevo.listaEquipos
-      .split('\n')
-      .map((n) => nombreOficial(n))
-      .filter(Boolean)
-      .map((nombre, i) => ({ nombre, siembra: i + 1 }));
-
-    if (this.nuevo.armado === 'siembra' && equipos.length !== this.nuevo.equipos) {
-      this.toast.error(`Con el orden por posición necesitas exactamente ${this.nuevo.equipos} equipos.`);
-      return;
-    }
-
-    this.creando.set(true);
-    try {
-      await this.service.crear({
-        nombre: this.nuevo.nombre.trim(),
-        modo: this.nuevo.modo,
-        config: {
-          equipos: this.nuevo.equipos,
-          armado: this.nuevo.armado,
-          avance: this.nuevo.avance,
-          formatoRondas: this.nuevo.formatoRondas,
-          formatoFinal: this.nuevo.formatoFinal,
-          desempateRondas: this.nuevo.desempateRondas,
-          desempateFinal: this.nuevo.desempateFinal,
-          reparto:
-            this.nuevo.modo === 'duenos' ? [100] : this.nuevo.reparto.split(',').map(Number),
-        },
-        puntaje: this.puntajeDeEscala(),
-        equipos,
-        costoEntrada: Number(this.nuevo.costoEntrada),
-        porcentajeBote: Number(this.nuevo.porcentajeBote),
-        cierraAt: this.nuevo.cierre ? new Date(this.nuevo.cierre) : null,
-        publico: this.nuevo.publico,
-      });
-      this.toast.exito('Eliminatoria creada.');
-      this.nuevo.nombre = '';
-      this.nuevo.listaEquipos = '';
-      this.nuevo.cierre = '';
-    } catch (e: unknown) {
-      this.toast.error((e as Error)?.message ?? 'No se pudo crear.');
-    } finally {
-      this.creando.set(false);
-    }
-  }
-
   /** Traduce la escala elegida a los valores de puntos. */
-  private puntajeDeEscala() {
-    const escalas = {
-      normal: { avanzaPorRonda: [10, 20, 40, 60], campeon: 30, finalista: 15 },
-      final: { avanzaPorRonda: [10, 25, 60, 120], campeon: 50, finalista: 20 },
-      pareja: { avanzaPorRonda: [15, 20, 30, 45], campeon: 20, finalista: 12 },
-    };
-    const e = escalas[this.nuevo.escala];
-    return {
-      ...e,
-      // El pronóstico de marcador está fuera por ahora: sin bonos.
-      marcadorExacto: 0,
-      marcadorResultado: 0,
-    };
-  }
-
   async calificar(b: Bracket): Promise<void> {
     this.calificando.set(true);
     try {
@@ -662,15 +473,45 @@ export class AdminBracketsComponent {
     }
 
     // ¿Empate que necesita penales? Solo si es el último partido de la llave.
-    let penales: 'local' | 'visitante' | null = null;
     const esFinal = l.ronda === rondasDe(b.config.equipos) - 1;
     const desempate = esFinal ? b.config.desempateFinal : b.config.desempateRondas;
     const esUltimo = indice === l.partidos.length - 1;
     if (gl === gv && esUltimo && desempate === 'penales') {
-      const q = prompt('Empataron. ¿Quién ganó en penales? Escribe "local" o "visitante":');
-      if (q === 'local' || q === 'visitante') penales = q;
+      // En vez de un prompt(), abrimos un modal para elegir quién ganó en
+      // penales, mostrando los nombres reales de los equipos.
+      this.penalesPend.set({ b, l, indice, gl, gv });
+      return;
     }
 
+    await this.guardarCaptura(b, l, indice, gl, gv, null);
+  }
+
+  /** Estado del modal de penales (empate en el último partido de una llave). */
+  readonly penalesPend = signal<{
+    b: Bracket;
+    l: Llave;
+    indice: number;
+    gl: number;
+    gv: number;
+  } | null>(null);
+
+  /** El usuario eligió al ganador de penales en el modal. */
+  async resolverPenales(quien: 'local' | 'visitante'): Promise<void> {
+    const p = this.penalesPend();
+    if (!p) return;
+    this.penalesPend.set(null);
+    await this.guardarCaptura(p.b, p.l, p.indice, p.gl, p.gv, quien);
+  }
+
+  /** Guarda la captura del marcador (con o sin ganador de penales). */
+  private async guardarCaptura(
+    b: Bracket,
+    l: Llave,
+    indice: number,
+    gl: number,
+    gv: number,
+    penales: 'local' | 'visitante' | null,
+  ): Promise<void> {
     try {
       await this.service.capturar(b.id, l.id, indice, gl, gv, penales);
     } catch (e: unknown) {

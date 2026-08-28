@@ -23,6 +23,8 @@ export interface Partido {
     awayTeam: string;
     type: TipoPartido;
     status: EstadoPartido;
+    /* Grupo al que pertenece. null/ausente = partido Global. */
+    grupoId?: string | null;
     /* Fecha y hora real de cierre. El servidor cierra el partido solo. */
     closesAt?: Timestamp | { seconds: number } | Date | null;
     /* Etiqueta antigua, se conserva por compatibilidad. */

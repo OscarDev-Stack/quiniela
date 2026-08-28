@@ -79,6 +79,41 @@ export class AdminService {
         return addDoc(collection(this.db, 'partidos'), data);
     }
 
+    /**
+     * Crea un partido de grupo vía Cloud Function (valida que seas admin del
+     * grupo en el servidor). Sirve para manuales y de API.
+     */
+    async crearPartidoGrupo(data: {
+        grupoId: string;
+        competition: string;
+        homeTeam: string;
+        awayTeam: string;
+        type: string;
+        closesAtMs: number;
+        porcentajeBote?: number;
+        apiFixtureId?: number;
+    }): Promise<{ id: string }> {
+        const fn = httpsCallable<typeof data, { ok: boolean; id: string }>(
+            this.fns,
+            'crearPartidoGrupo',
+        );
+        const r = await fn(data);
+        return { id: r.data.id };
+    }
+
+    /** Liquida un partido de grupo (valida admin de grupo en el servidor). */
+    async liquidarPartidoGrupo(
+        partidoId: string,
+        resultadoOficial: string,
+    ): Promise<ResultadoLiquidacion> {
+        const fn = httpsCallable<{ partidoId: string; resultadoOficial: string }, ResultadoLiquidacion>(
+            this.fns,
+            'liquidarPartidoGrupo',
+        );
+        const res = await fn({ partidoId, resultadoOficial });
+        return res.data;
+    }
+
     /** Cancela el partido y devuelve los puntos a cada participante. */
     async cancelarPartido(partidoId: string): Promise<{ devoluciones: number; puntosDevueltos: number }> {
         const fn = httpsCallable<
@@ -163,6 +198,11 @@ export class AdminService {
     async validarUsuario(uid: string): Promise<void> {
         await updateDoc(doc(this.db, 'users', uid), { validada: true });
         await this.recalcularRanking();
+    }
+
+    /** Activa o desactiva el rol de administrador de grupo. */
+    async setAdminGrupo(uid: string, esAdminGrupo: boolean): Promise<void> {
+        await updateDoc(doc(this.db, 'users', uid), { esAdminGrupo });
     }
 
     /** Elimina cuentas sin validar (Authentication + documentos). */

@@ -1,7 +1,7 @@
 {
-  "name": "AutomatePower",
-  "short_name": "AutomatePower",
-  "description": "Pronostica partidos, gana puntos, juega torneos y compite en el ranking.",
+  "name": "Fut by AutomatePower",
+  "short_name": "Fut",
+  "description": "Pronostica partidos, gana puntos y compite en el ranking.",
   "start_url": "/inicio",
   "scope": "/",
   "display": "standalone",

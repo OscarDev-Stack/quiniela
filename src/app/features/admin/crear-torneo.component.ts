@@ -1,55 +1,48 @@
-import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Subscription } from 'rxjs';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TorneosService } from '../../core/services/torneos.service';
-import { Torneo, Participante, ModoTorneo } from '../../core/models/torneo.model';
+import { ModoTorneo } from '../../core/models/torneo.model';
+import { Grupo } from '../../core/models/grupo.model';
 import { Competicion } from '../../core/models/competicion.model';
 import { CompeticionesService } from '../../core/services/competiciones.service';
-import { ConfirmarService } from '../../shared/confirmar.service';
+import { GruposService } from '../../core/services/grupos.service';
 import { ToastService } from '../../shared/toast.service';
+import { NavComponent } from '../../shared/nav.component';
 
+/**
+ * Pantalla dedicada SOLO a crear un torneo (quiniela o supervivencia).
+ * La gestión de torneos ya creados vive en GestionarTorneosComponent.
+ * Si llega con ?grupo=ID, el torneo se crea para ese grupo (selector fijo).
+ */
 @Component({
-  selector: 'app-admin-torneos',
+  selector: 'app-crear-torneo',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, NavComponent],
   template: `
-
-    <div class="stats">
-      <div class="stat">
-        <div class="stat-label">Torneos</div>
-        <div class="stat-val">{{ torneos().length }}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">En curso</div>
-        <div class="stat-val">{{ enCurso() }}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Inscripciones</div>
-        <div class="stat-val">{{ enInscripcion() }}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Jugadores</div>
-        <div class="stat-val">{{ totalJugadores() }}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">En bolsas</div>
-        <div class="stat-val accent">{{ totalBolsas() | number }}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Finalizados</div>
-        <div class="stat-val">{{ finalizados() }}</div>
-      </div>
-    </div>
-
+    <app-nav [back]="true" [minimal]="true" title="Crear torneo" [ocultarSaldo]="true" />
     <section class="panel">
-      <h2>Crear torneo</h2>
       <div class="grid">
         <label class="field">
           <span>Nombre</span>
-          <input type="text" [(ngModel)]="form.nombre" placeholder="Los del jueves, La Oficina…" />
+          <input type="text" [(ngModel)]="form.nombre" placeholder="AutomatePower" />
           <small class="pista">Como le van a decir entre ustedes.</small>
+        </label>
+        <label class="field">
+          <span>¿Para quién?</span>
+          <select [(ngModel)]="form.grupoId" [disabled]="grupoBloqueado()">
+            <option value="">🌎 Global (todos)</option>
+            @for (g of misGrupos(); track g.id) {
+              <option [value]="g.id">{{ g.icono }} {{ g.nombre }}</option>
+            }
+          </select>
+          @if (grupoBloqueado()) {
+            <small class="pista">Este torneo será para el grupo desde el que entraste.</small>
+          } @else {
+            <small class="pista">Global lo ven todos; un grupo, solo sus miembros.</small>
+          }
         </label>
         <label class="field">
           <span>Modo de juego</span>
@@ -163,124 +156,6 @@ import { ToastService } from '../../shared/toast.service';
       </button>
     </section>
 
-    @for (t of torneos(); track t.id) {
-      <section class="panel">
-        <button class="cab cab--boton" (click)="alternar(t.id)">
-          <i class="ti chevron" [class.ti-chevron-down]="!abierto(t.id)"
-            [class.ti-chevron-up]="abierto(t.id)"></i>
-          <div class="cab-datos">
-            <h2>{{ t.nombre }}</h2>
-            <span class="sub">
-              {{ t.modo === 'quiniela' ? 'Quiniela' : 'Supervivencia' }} ·
-              {{ t.competicionNombre }} · jornada {{ t.jornadaActual }}
-              @if (t.costoEntrada > 0) {
-                · entrada {{ t.costoEntrada | number }} pts
-              }
-            </span>
-            @if (t.costoEntrada > 0) {
-              <div class="bolsa">
-                <i class="ti ti-coins"></i>
-                Bolsa: <strong>{{ t.bolsa | number }}</strong> pts
-                @if (t.premioPagado) {
-                  · pagado {{ t.premioPagado | number }}
-                }
-              </div>
-            }
-          </div>
-          <span class="tag">{{ t.estado }}</span>
-        </button>
-
-        @if (abierto(t.id)) {
-
-        <div class="invitacion">
-          <span class="codigo">{{ t.codigo }}</span>
-
-          <div class="invitacion-acciones">
-            <button class="btn sm" (click)="copiar(t)">
-              <i class="ti ti-copy"></i> Copiar enlace
-            </button>
-            @if (t.estado === 'inscripcion') {
-              <button class="btn sm" (click)="iniciar(t)">Iniciar torneo</button>
-            }
-            @if (t.estado === 'en-curso') {
-              <button class="btn sm" (click)="finalizar(t)">Cerrar y repartir</button>
-            }
-          </div>
-        </div>
-
-        <div class="participantes">
-          <button class="part-cab part-cab--boton" (click)="alternarParticipantes(t.id)">
-            <i class="ti chevron"
-              [class.ti-chevron-down]="!participantesVisibles(t.id)"
-              [class.ti-chevron-up]="participantesVisibles(t.id)"></i>
-            <strong>Participantes</strong>
-            <span class="sub">
-              @if (t.modo === 'quiniela') {
-                {{ participantesDe(t.id).length }} jugador(es)
-              } @else {
-                {{ vivosDe(t.id) }} vivo(s) de {{ participantesDe(t.id).length }}
-              }
-            </span>
-          </button>
-
-          @if (participantesVisibles(t.id)) {
-          @if (participantesDe(t.id).length === 0) {
-            <p class="sub">Nadie se ha inscrito todavía.</p>
-          }
-
-          @if (participantesDe(t.id).length > 8) {
-            <div class="buscador">
-              <i class="ti ti-search"></i>
-              <input
-                type="text"
-                [ngModel]="busqueda[t.id]"
-                (ngModelChange)="busqueda[t.id] = $event"
-                placeholder="Buscar participante…"
-              />
-            </div>
-          }
-
-          @for (p of filtrados(t.id); track p.id) {
-            <div class="part" [class.part--fuera]="!p.vivo">
-              <span class="part-alias">
-                {{ p.alias }}
-                @if (esGestor(t, p.id)) {
-                  <i class="ti ti-settings gestor-ico" title="Administrador del torneo"></i>
-                }
-              </span>
-
-              <span class="part-datos">
-                @if (t.modo === 'quiniela') {
-                  <span class="part-estado ok">{{ p.puntosTorneo ?? 0 }} pts</span>
-                  <span class="part-usados">{{ p.exactos ?? 0 }} exactos</span>
-                } @else {
-                  @if (p.vivo) {
-                    <span class="part-vidas">
-                      @if (p.vidasRestantes > 0) {
-                        <i class="ti ti-heart-filled"></i>
-                      } @else {
-                        <span class="sin-vidas">sin vida</span>
-                      }
-                    </span>
-                    <span class="part-estado ok">Vivo</span>
-                  } @else {
-                    <span class="part-estado">Eliminado · J{{ p.eliminadoEn }}</span>
-                  }
-
-                  <span class="part-usados">{{ p.equiposUsados.length }} equipo(s)</span>
-                }
-              </span>
-
-              <button class="btn sm" (click)="alternarGestor(t, p.id)">
-                {{ esGestor(t, p.id) ? 'Quitar admin' : 'Hacer admin' }}
-              </button>
-            </div>
-          }
-          }
-        </div>
-        }
-      </section>
-    }
   `,
   styles: [
     `
@@ -345,7 +220,7 @@ import { ToastService } from '../../shared/toast.service';
       .tag { font-size: 11px; font-weight: 700; text-transform: uppercase;
         padding: 3px 9px; border-radius: 999px; background: var(--surface-1); color: var(--text-secondary); }
 
-      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
       .field { display: block; margin-bottom: 12px; }
       .field span { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
       textarea { width: 100%; font-family: inherit; font-size: 16px; padding: 11px 12px;
@@ -428,13 +303,17 @@ import { ToastService } from '../../shared/toast.service';
     `,
   ],
 })
-export class AdminTorneosComponent {
+export class CrearTorneoComponent {
   private readonly service = inject(TorneosService);
+  private readonly gruposSrv = inject(GruposService);
   private readonly competicionesSrv = inject(CompeticionesService);
-  private readonly confirmar = inject(ConfirmarService);
   private readonly toast = inject(ToastService);
+  private readonly router = inject(Router);
 
-  readonly torneos = toSignal(this.service.torneos(), { initialValue: [] as Torneo[] });
+  /** Grupos donde soy admin (puedo crearles torneos). */
+  readonly misGrupos = toSignal(this.gruposSrv.misGrupos(), { initialValue: [] as Grupo[] });
+  /** Si venimos desde un grupo, el selector queda fijo en ese grupo. */
+  readonly grupoBloqueado = signal(false);
   readonly guardando = signal(false);
 
   readonly competiciones = toSignal(this.competicionesSrv.competiciones(), {
@@ -453,109 +332,16 @@ export class AdminTorneosComponent {
     costoEntrada: 0,
     porcentajeBote: 0,
     cierreInscripcion: '',
+    grupoId: '' as string,
   };
 
-  /** Participantes por torneo. Suscripciones creadas una sola vez. */
-  private readonly participantesPorTorneo = signal<Record<string, Participante[]>>({});
-  private readonly suscripciones = new Map<string, Subscription>();
+  private readonly grupoUrl = inject(ActivatedRoute).snapshot.queryParamMap.get('grupo');
 
   constructor() {
-    // Cada torneo nuevo estrena su propia escucha de participantes.
-    effect(() => {
-      const lista = this.torneos();
-      untracked(() => {
-        for (const t of lista) {
-          if (this.suscripciones.has(t.id)) continue;
-          const sub = this.service.participantes(t.id).subscribe((ps) => {
-            this.participantesPorTorneo.update((mapa) => ({ ...mapa, [t.id]: ps }));
-          });
-          this.suscripciones.set(t.id, sub);
-        }
-      });
-    });
-
-    inject(DestroyRef).onDestroy(() => {
-      this.suscripciones.forEach((s) => s.unsubscribe());
-      this.suscripciones.clear();
-    });
-  }
-
-  /** Participantes de un torneo, vivos primero. */
-  participantesDe(torneoId: string): Participante[] {
-    const lista = this.participantesPorTorneo()[torneoId] ?? [];
-    return [...lista].sort((a, b) => {
-      if (a.vivo !== b.vivo) return a.vivo ? -1 : 1;
-      return a.alias.localeCompare(b.alias, 'es');
-    });
-  }
-
-  readonly enCurso = computed(
-    () => this.torneos().filter((t) => t.estado === 'en-curso').length,
-  );
-  readonly enInscripcion = computed(
-    () => this.torneos().filter((t) => t.estado === 'inscripcion').length,
-  );
-  readonly finalizados = computed(
-    () => this.torneos().filter((t) => t.estado === 'finalizado').length,
-  );
-
-  /** Puntos acumulados en las bolsas de los torneos vigentes. */
-  readonly totalBolsas = computed(() =>
-    this.torneos()
-      .filter((t) => t.estado !== 'finalizado')
-      .reduce((suma, t) => suma + Number(t.bolsa ?? 0), 0),
-  );
-
-  /** Inscripciones sumadas de todos los torneos. */
-  readonly totalJugadores = computed(() =>
-    Object.values(this.participantesPorTorneo()).reduce((suma, lista) => suma + lista.length, 0),
-  );
-
-  /** Todo arranca colapsado: con muchos torneos, el resumen es lo útil. */
-  private readonly desplegados = signal<string[]>([]);
-
-  abierto(torneoId: string): boolean {
-    return this.desplegados().includes(torneoId);
-  }
-
-  alternar(torneoId: string): void {
-    const abiertos = this.desplegados();
-    this.desplegados.set(
-      abiertos.includes(torneoId)
-        ? abiertos.filter((x) => x !== torneoId)
-        : [...abiertos, torneoId],
-    );
-  }
-
-  /** Listas de participantes desplegadas. */
-  private readonly participantesAbiertos = signal<string[]>([]);
-
-  participantesVisibles(torneoId: string): boolean {
-    return this.participantesAbiertos().includes(torneoId);
-  }
-
-  alternarParticipantes(torneoId: string): void {
-    const abiertos = this.participantesAbiertos();
-    this.participantesAbiertos.set(
-      abiertos.includes(torneoId)
-        ? abiertos.filter((x) => x !== torneoId)
-        : [...abiertos, torneoId],
-    );
-  }
-
-  /** Texto de búsqueda por torneo. */
-  busqueda: Record<string, string> = {};
-
-  /** Participantes que coinciden con la búsqueda. */
-  filtrados(torneoId: string): Participante[] {
-    const lista = this.participantesDe(torneoId);
-    const texto = (this.busqueda[torneoId] ?? '').trim().toLowerCase();
-    if (!texto) return lista;
-    return lista.filter((p) => p.alias.toLowerCase().includes(texto));
-  }
-
-  vivosDe(torneoId: string): number {
-    return this.participantesDe(torneoId).filter((p) => p.vivo).length;
+    if (this.grupoUrl) {
+      this.form.grupoId = this.grupoUrl;
+      this.grupoBloqueado.set(true);
+    }
   }
 
   /** Resumen de las reglas de supervivencia según lo elegido. */
@@ -570,25 +356,6 @@ export class AdminTorneosComponent {
     }
     return `${cuantas} por jugador. El empate gasta una vida; la derrota siempre elimina.`;
   }
-
-  esGestor(t: Torneo, uid: string): boolean {
-    return (t.gestores ?? []).includes(uid);
-  }
-
-  async alternarGestor(t: Torneo, uid: string): Promise<void> {
-    const agregar = !this.esGestor(t, uid);
-    if (agregar) {
-      const ok = await this.confirmar.pedir({
-        titulo: 'Hacer administrador',
-        mensaje: 'Esta persona podrá iniciar y cerrar el torneo.',
-        aceptar: 'Sí, darle permiso',
-      });
-      if (!ok) return;
-    }
-    await this.service.cambiarGestor(t.id, uid, agregar);
-    this.toast.exito(agregar ? 'Ahora administra el torneo.' : 'Permiso retirado.');
-  }
-
 
   async crear(): Promise<void> {
     if (!this.form.nombre.trim()) {
@@ -624,69 +391,19 @@ export class AdminTorneosComponent {
         vidas: this.form.modo === 'supervivencia' ? Number(this.form.vidas) : 0,
         vidaCubre: this.form.vidaCubre,
         permiteRevivir: this.form.modo === 'supervivencia' && this.form.permiteRevivir,
+        grupoId: this.form.grupoId || null,
       });
-      this.form = {
-        nombre: '',
-        modo: 'supervivencia',
-        jornadas: 5,
-        vidas: 1,
-        vidaCubre: 'empate',
-        permiteRevivir: false,
-        competicionId: '',
-        jornadaInicial: 1,
-        costoEntrada: 0,
-        porcentajeBote: 0,
-        cierreInscripcion: '',
-      };
       this.toast.exito('Torneo creado. Comparte el enlace de invitación.');
+      // Volver: al grupo si vino de un grupo, o a la gestión de torneos.
+      if (this.grupoUrl) {
+        this.router.navigate(['/grupos', this.grupoUrl]);
+      } else {
+        this.router.navigate(['/admin/torneos']);
+      }
     } catch (e: unknown) {
       this.toast.error((e as Error)?.message ?? 'No se pudo crear.');
     } finally {
       this.guardando.set(false);
     }
   }
-
-  copiar(t: Torneo): void {
-    const url = `${location.origin}/unirse/${t.codigo}`;
-    navigator.clipboard?.writeText(url);
-    this.toast.exito(`Enlace copiado: ${url}`);
-  }
-
-  async iniciar(t: Torneo): Promise<void> {
-    const ok = await this.confirmar.pedir({
-      titulo: 'Iniciar el torneo',
-      mensaje: 'Se cierran las inscripciones y ya nadie más podrá entrar.',
-      aceptar: 'Iniciar',
-    });
-    if (!ok) return;
-    await this.service.cambiarEstado(t.id, 'en-curso');
-    this.toast.exito('Torneo iniciado.');
-  }
-
-  /** Cierra el torneo cuando ya no habrá más jornadas. */
-  async finalizar(t: Torneo): Promise<void> {
-    const vivos = this.vivosDe(t.id);
-    const ok = await this.confirmar.pedir({
-      titulo: 'Cerrar el torneo',
-      mensaje: `${vivos} sobreviviente(s) se repartirán la bolsa en partes iguales.`,
-      aceptar: 'Cerrar y repartir',
-      peligro: true,
-    });
-    if (!ok) return;
-    try {
-      const r = await this.service.finalizar(t.id);
-      this.toast.exito(
-        `Torneo cerrado: ${r.ganadores} ganador(es)` +
-        (r.premioPorCabeza > 0 ? ` · ${r.premioPorCabeza} pts cada uno.` : '.'),
-      );
-    } catch (e: unknown) {
-      this.toast.error((e as Error)?.message ?? 'No se pudo cerrar.');
-    }
-  }
-
-
-
-
-
-
 }

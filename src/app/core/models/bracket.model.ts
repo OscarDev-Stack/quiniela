@@ -188,6 +188,8 @@ export interface Bracket {
 
     estado: EstadoBracket;
     codigo: string;
+    /* Grupo al que pertenece. null/ausente = eliminatoria Global. */
+    grupoId?: string | null;
 
     /* El cuadro completo: todas las llaves de todas las rondas. */
     llaves: Llave[];

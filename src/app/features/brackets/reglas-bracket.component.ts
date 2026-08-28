@@ -183,7 +183,7 @@ import { EjemploBracketComponent } from './ejemplo-bracket.component';
       </ul>
 
       @if (verEjemplo()) {
-        <app-ejemplo-bracket [puntaje]="b().puntaje" (cerrar)="verEjemplo.set(false)" />
+        <app-ejemplo-bracket [puntaje]="b().puntaje" [equipos]="b().config.equipos" (cerrar)="verEjemplo.set(false)" />
       }
       }
     </div>

@@ -1,12 +1,16 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
 import { CargandoComponent } from '../../shared/cargando.component';
 import { apagarCargando } from '../../shared/cargando.util';
 import { EscudoComponent } from '../../shared/escudo.component';
+import { ContextoService } from '../../shared/contexto.service';
+import { GruposService } from '../../core/services/grupos.service';
+import { Grupo } from '../../core/models/grupo.model';
 import { PartidosService } from '../../core/services/partidos.service';
 import { TorneosService } from '../../core/services/torneos.service';
 import { BracketsService } from '../../core/services/brackets.service';
@@ -29,7 +33,7 @@ import { Bracket } from '../../core/models/bracket.model';
   imports: [CommonModule, NavComponent, CargandoComponent, EscudoComponent],
   template: `
     <div class="screen">
-      <app-nav [minimal]="true" title="Inicio" [ocultarSaldo]="true" />
+      <app-nav [minimal]="true" title="Inicio" [ocultarSaldo]="true" [mostrarContexto]="true" />
 
       @if (cargando()) {
         <app-cargando texto="Cargando tu inicio" />
@@ -266,6 +270,27 @@ export class InicioComponent {
   private readonly bracketsSrv = inject(BracketsService);
   private readonly usersSrv = inject(UserService);
   private readonly router = inject(Router);
+  private readonly contexto = inject(ContextoService);
+  private readonly gruposSrv = inject(GruposService);
+
+  // undefined = todavía no cargó de Firestore; [] = cargó y no tiene grupos.
+  // Distinguirlos evita resolver el contexto con la lista vacía inicial (que
+  // forzaría Global antes de que los grupos lleguen).
+  private readonly misGruposRaw = toSignal(
+    this.gruposSrv.misGrupos() as Observable<Grupo[] | undefined>,
+  );
+  private readonly misGrupos = computed(() => this.misGruposRaw() ?? []);
+
+  constructor() {
+    // Al conocer los grupos del usuario, decide el contexto inicial:
+    // si pertenece a un grupo, entra a un grupo (no a Global por defecto).
+    // Solo resolvemos cuando los grupos YA cargaron (no en el estado inicial).
+    effect(() => {
+      const grupos = this.misGruposRaw();
+      if (grupos === undefined) return; // aún no carga: esperamos
+      this.contexto.resolverInicial(grupos);
+    });
+  }
 
   readonly cargando = signal(true);
   private readonly inicioCarga = Date.now();
@@ -285,29 +310,48 @@ export class InicioComponent {
   private readonly misBrackets = toSignal(this.bracketsSrv.misBrackets(), { initialValue: [] as Bracket[] });
   private readonly bracketsPublicos = toSignal(this.bracketsSrv.bracketsPublicos(), { initialValue: [] as Bracket[] });
 
-  readonly partidosAbiertos = computed(() =>
-    this.partidos()
-      .filter((m) => m.status === 'abierto' || m.status === 'cierra-pronto')
+  readonly partidosAbiertos = computed(() => {
+    const ctx = this.contexto.grupoId();
+    return this.partidos()
+      .filter(
+        (m) =>
+          (m.grupoId ?? null) === ctx &&
+          (m.status === 'abierto' || m.status === 'cierra-pronto'),
+      )
       .sort((a, b) => {
         // El más próximo a cerrar primero. Sin fecha, al final.
         const fa = fechaCierre(a)?.getTime() ?? Infinity;
         const fb = fechaCierre(b)?.getTime() ?? Infinity;
         return fa - fb;
-      }),
-  );
-  readonly survivors = computed(() =>
-    this.torneos().filter((t) => (t.modo ?? 'supervivencia') === 'supervivencia' && t.estado !== 'finalizado'),
-  );
-  readonly quinielas = computed(() =>
-    this.torneos().filter((t) => t.modo === 'quiniela' && t.estado !== 'finalizado'),
-  );
+      });
+  });
+  readonly survivors = computed(() => {
+    const ctx = this.contexto.grupoId();
+    return this.torneos().filter(
+      (t) =>
+        (t.grupoId ?? null) === ctx &&
+        (t.modo ?? 'supervivencia') === 'supervivencia' &&
+        t.estado !== 'finalizado',
+    );
+  });
+  readonly quinielas = computed(() => {
+    const ctx = this.contexto.grupoId();
+    return this.torneos().filter(
+      (t) => (t.grupoId ?? null) === ctx && t.modo === 'quiniela' && t.estado !== 'finalizado',
+    );
+  });
 
   private readonly idsMios = computed(() => new Set(this.misBrackets().map((b) => b.id)));
 
   /** Eliminatorias mías (activas) + públicas abiertas donde aún no estoy, sin duplicar. */
   readonly eliminatorias = computed(() => {
-    const mias = this.misBrackets().filter((b) => b.estado !== 'finalizado');
-    const publicasNuevas = this.bracketsPublicos().filter((b) => !this.idsMios().has(b.id));
+    const ctx = this.contexto.grupoId();
+    const mias = this.misBrackets().filter(
+      (b) => (b.grupoId ?? null) === ctx && b.estado !== 'finalizado',
+    );
+    const publicasNuevas = this.bracketsPublicos().filter(
+      (b) => (b.grupoId ?? null) === ctx && !this.idsMios().has(b.id),
+    );
     return [...mias, ...publicasNuevas];
   });
 

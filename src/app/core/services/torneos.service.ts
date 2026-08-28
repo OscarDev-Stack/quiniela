@@ -6,11 +6,9 @@ import {
   collectionData,
   doc,
   docData,
-  addDoc,
   updateDoc,
   query,
   where,
-  serverTimestamp,
   arrayUnion,
   arrayRemove,
 } from '@angular/fire/firestore';
@@ -187,7 +185,7 @@ export class TorneosService {
 
   // ---------- Administración (escritura directa, protegida por reglas) ----------
 
-  crearTorneo(datos: {
+  async crearTorneo(datos: {
     nombre: string;
     competicionId: string;
     competicionNombre: string;
@@ -200,17 +198,21 @@ export class TorneosService {
     jornadas: number;
     vidaCubre: 'empate' | 'tropiezo';
     permiteRevivir: boolean;
-  }): Promise<unknown> {
-    const codigo = this.generarCodigo();
-    return addDoc(collection(this.db, 'torneos'), {
+    grupoId?: string | null;
+  }): Promise<{ id: string; codigo: string }> {
+    // El payload sustituye la fecha por su versión ISO (Omit reemplaza el campo,
+    // en vez de intersecar Date & string, que sería un tipo imposible).
+    type Payload = Omit<typeof datos, 'cierreInscripcion'> & { cierreInscripcion: string };
+    const fn = httpsCallable<Payload, { ok: boolean; id: string; codigo: string }>(
+      this.fns,
+      'crearTorneo',
+    );
+    const r = await fn({
       ...datos,
-      codigo,
-      estado: 'inscripcion',
-      jornadaActual: datos.jornadaInicial,
-      bolsa: 0,
-      gestores: [],
-      createdAt: serverTimestamp(),
+      grupoId: datos.grupoId ?? null,
+      cierreInscripcion: datos.cierreInscripcion.toISOString(),
     });
+    return { id: r.data.id, codigo: r.data.codigo };
   }
 
   /** Da o quita permisos de gestión sobre un torneo. */
@@ -298,13 +300,6 @@ export class TorneosService {
     >(this.fns, 'finalizarTorneo');
     const res = await fn({ torneoId });
     return res.data;
-  }
-
-  private generarCodigo(): string {
-    const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    return Array.from({ length: 6 }, () =>
-      letras.charAt(Math.floor(Math.random() * letras.length)),
-    ).join('');
   }
 
   /** Revive en un torneo de supervivencia que lo permita. */

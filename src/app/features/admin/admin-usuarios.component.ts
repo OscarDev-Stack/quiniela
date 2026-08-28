@@ -78,12 +78,28 @@ import { ToastService } from '../../shared/toast.service';
                   <i class="ti ti-trash"></i>
                 </button>
               } @else {
-                <button class="btn" (click)="reiniciar(u)">Reiniciar</button>
+                <button class="btn btn--icono-solo" (click)="reiniciar(u)" title="Reiniciar puntos" aria-label="Reiniciar puntos">
+                  <i class="ti ti-refresh"></i>
+                </button>
+                <button
+                  class="btn btn--icono-solo"
+                  [class.btn--grupo-on]="u.esAdminGrupo"
+                  (click)="toggleAdminGrupo(u)"
+                  [title]="u.esAdminGrupo ? 'Quitar admin de grupo' : 'Hacer admin de grupo'"
+                  [attr.aria-label]="u.esAdminGrupo ? 'Quitar admin de grupo' : 'Hacer admin de grupo'"
+                >
+                  <i class="ti ti-shield-star"></i>
+                </button>
               }
             </div>
           </li>
         }
       </ul>
+
+      <div class="leyenda">
+        <span><i class="ti ti-refresh"></i> Reiniciar puntos</span>
+        <span><i class="ti ti-shield-star"></i> Admin de grupo</span>
+      </div>
     </section>
   `,
   styles: [
@@ -168,6 +184,19 @@ import { ToastService } from '../../shared/toast.service';
         background: var(--accent-fill); color: #fff; border-color: transparent; font-weight: 600;
       }
       .btn--icon { color: var(--danger-text); border-color: var(--danger-text); padding: 7px 11px; }
+      .btn--grupo-on { background: var(--tipo-elim-fill); color: #fff; border-color: var(--tipo-elim-fill); }
+      .btn--icono-solo {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 38px; height: 38px; padding: 0; flex-shrink: 0;
+      }
+      .btn--icono-solo i { font-size: 18px; }
+      .leyenda {
+        display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px;
+        padding-top: 14px; border-top: 1px solid var(--border);
+        font-size: 12px; color: var(--text-muted);
+      }
+      .leyenda span { display: inline-flex; align-items: center; gap: 5px; }
+      .leyenda i { font-size: 15px; }
 
       @media (min-width: 620px) {
         .cabecera { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -219,6 +248,17 @@ export class AdminUsuariosComponent {
   async validar(u: AppUser): Promise<void> {
     await this.admin.validarUsuario(u.id);
     this.toast.exito(`${this.nombre(u)} ya puede participar.`);
+  }
+
+  /** Activa o quita el rol de administrador de grupo (crear/gestionar grupos). */
+  async toggleAdminGrupo(u: AppUser): Promise<void> {
+    const nuevo = !u.esAdminGrupo;
+    await this.admin.setAdminGrupo(u.id, nuevo);
+    this.toast.exito(
+      nuevo
+        ? `${this.nombre(u)} ahora puede crear y administrar grupos.`
+        : `${this.nombre(u)} ya no es administrador de grupo.`,
+    );
   }
 
   async reiniciar(u: AppUser): Promise<void> {

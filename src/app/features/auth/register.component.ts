@@ -10,67 +10,129 @@ import { AuthService } from '../../core/services/auth.service';
   imports: [FormsModule, RouterLink],
   template: `
     <div class="auth-wrap">
-      <div class="auth-card">
-        <div class="brand">
-          <span class="brand-mark">Q</span>
-          <span class="brand-name">Quiniela</span>
+      <div class="fondo-glow"></div>
+
+      <div class="auth-content">
+        <div class="hero">
+          <div class="hero-ico-wrap">
+            <div class="hero-ico-glow"></div>
+            <div class="hero-ico"><i class="ti ti-user"></i></div>
+          </div>
+          <h1 class="hero-titulo">Crear cuenta</h1>
+          <p class="hero-sub">Regístrate para empezar a competir</p>
         </div>
-        <h1 class="auth-title">Crear cuenta</h1>
-        <p class="auth-subtitle">Regístrate para empezar a competir.</p>
 
-        @if (error()) {
-          <div class="auth-error">{{ error() }}</div>
-        }
+        <div class="auth-card">
+          @if (error()) {
+            <div class="auth-error"><i class="ti ti-alert-circle"></i> {{ error() }}</div>
+          }
 
-        <form (ngSubmit)="onSubmit()">
-          <label class="field">
-            <span class="field-label">Alias</span>
-            <input type="text" name="alias" [(ngModel)]="alias" required maxlength="20" placeholder="Cómo te verán en el ranking" />
-          </label>
+          <form (ngSubmit)="onSubmit()">
+            <label class="field">
+              <span class="field-label">Alias</span>
+              <span class="input-wrap">
+                <i class="ti ti-user input-ico"></i>
+                <input type="text" name="alias" [(ngModel)]="alias" required maxlength="20" placeholder="Cómo te verán en el ranking" />
+              </span>
+            </label>
 
-          <label class="field">
-            <span class="field-label">Correo</span>
-            <input type="email" name="email" [(ngModel)]="email" required autocomplete="email" placeholder="tu@correo.com" />
-          </label>
+            <label class="field">
+              <span class="field-label">Correo electrónico</span>
+              <span class="input-wrap">
+                <i class="ti ti-mail input-ico"></i>
+                <input type="email" name="email" [(ngModel)]="email" required autocomplete="email" placeholder="tu@correo.com" />
+              </span>
+            </label>
 
-          <label class="field">
-            <span class="field-label">Contraseña</span>
-            <input type="password" name="password" [(ngModel)]="password" required autocomplete="new-password" placeholder="Mínimo 6 caracteres" />
-          </label>
+            <label class="field">
+              <span class="field-label">Contraseña</span>
+              <span class="input-wrap">
+                <i class="ti ti-lock input-ico"></i>
+                <input type="password" name="password" [(ngModel)]="password" required autocomplete="new-password" placeholder="Mínimo 6 caracteres" />
+              </span>
+            </label>
 
-          <label class="field">
-            <span class="field-label">Confirmar contraseña</span>
-            <input type="password" name="confirm" [(ngModel)]="confirm" required autocomplete="new-password" placeholder="Repite tu contraseña" />
-          </label>
+            <label class="field">
+              <span class="field-label">Confirmar contraseña</span>
+              <span class="input-wrap">
+                <i class="ti ti-lock input-ico"></i>
+                <input type="password" name="confirm" [(ngModel)]="confirm" required autocomplete="new-password" placeholder="Repite tu contraseña" />
+              </span>
+            </label>
 
-          <button type="submit" class="btn-primary" [disabled]="loading()">
-            {{ loading() ? 'Creando…' : 'Crear cuenta' }}
-          </button>
-        </form>
+            <button type="submit" class="btn-primary" [disabled]="loading()">
+              {{ loading() ? 'Creando…' : 'Crear cuenta' }}
+            </button>
+          </form>
 
-        <p class="auth-alt">¿Ya tienes cuenta? <a routerLink="/login">Iniciar sesión</a></p>
+          <p class="auth-alt">¿Ya tienes cuenta? <a routerLink="/login">Iniciar sesión</a></p>
+        </div>
       </div>
     </div>
   `,
   styles: [
     `
       .auth-wrap {
-        min-height: 100vh; display: flex; align-items: center; justify-content: center;
-        padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
+        position: relative; min-height: 100vh; overflow: hidden;
+        display: flex; align-items: center; justify-content: center;
+        padding: calc(24px + env(safe-area-inset-top)) 22px calc(40px + env(safe-area-inset-bottom));
       }
-      .auth-card { width: 100%; max-width: 380px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px; }
-      .brand { display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 18px; }
-      .brand-mark { width: 34px; height: 34px; border-radius: 50%; background: var(--accent-bg); color: var(--accent-text); display: flex; align-items: center; justify-content: center; font-weight: 600; }
-      .brand-name { font-size: 18px; font-weight: 600; }
-      .auth-title { font-size: 20px; font-weight: 600; text-align: center; margin: 0 0 4px; }
-      .auth-subtitle { font-size: 14px; color: var(--text-secondary); text-align: center; margin: 0 0 22px; }
-      .auth-error { background: var(--danger-bg); color: var(--danger-text); font-size: 13px; padding: 10px 12px; border-radius: var(--radius); margin-bottom: 16px; }
-      .field { display: block; margin-bottom: 14px; }
-      .field-label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
-      .btn-primary { width: 100%; padding: 12px; border: none; border-radius: var(--radius); background: var(--accent-fill); color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+      .fondo-glow {
+        position: absolute; top: -120px; left: 50%; transform: translateX(-50%);
+        width: 360px; height: 360px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(55, 138, 221, 0.26), transparent 70%);
+        pointer-events: none;
+      }
+      .auth-content { position: relative; z-index: 1; width: 100%; max-width: 380px; }
+
+      .hero { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 24px; }
+      .hero-ico-wrap { position: relative; margin-bottom: 16px; }
+      .hero-ico-glow {
+        position: absolute; inset: -16px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(55, 138, 221, 0.45), transparent 70%);
+      }
+      .hero-ico {
+        position: relative; width: 76px; height: 76px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center; font-size: 34px;
+        color: var(--accent-text);
+        background: var(--surface-2); border: 1px solid rgba(55, 138, 221, 0.4);
+      }
+      .hero-titulo { font-size: 22px; font-weight: 700; margin: 0 0 8px; }
+      .hero-sub { font-size: 14px; color: var(--text-secondary); margin: 0; }
+
+      .auth-card {
+        width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: 18px; padding: 22px 20px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.22);
+      }
+      .auth-error {
+        display: flex; align-items: center; gap: 7px;
+        background: var(--danger-bg); color: var(--danger-text);
+        font-size: 13px; padding: 10px 12px; border-radius: var(--radius); margin-bottom: 16px;
+      }
+      .field { display: block; margin-bottom: 16px; }
+      .field-label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 7px; }
+
+      .input-wrap { position: relative; display: block; }
+      .input-ico {
+        position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+        font-size: 18px; color: var(--text-muted); pointer-events: none;
+      }
+      .input-wrap input {
+        width: 100%; padding: 12px 14px 12px 42px;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-1); color: var(--text-primary); font-size: 15px;
+      }
+      .input-wrap input:focus { outline: none; border-color: var(--accent-fill); }
+
+      .btn-primary {
+        width: 100%; padding: 13px; border: none; border-radius: var(--radius);
+        background: var(--accent-fill); color: #fff; font-size: 15px; font-weight: 600;
+        cursor: pointer; margin-top: 4px;
+      }
       .btn-primary:disabled { opacity: 0.6; cursor: default; }
-      .auth-alt { text-align: center; font-size: 14px; color: var(--text-secondary); margin: 18px 0 0; }
-      .auth-alt a { color: var(--accent-text); text-decoration: none; font-weight: 500; }
+      .auth-alt { text-align: center; font-size: 14px; color: var(--text-secondary); margin: 16px 0 0; }
+      .auth-alt a { color: var(--accent-text); text-decoration: none; font-weight: 600; }
       .auth-alt a:hover { text-decoration: underline; }
     `,
   ],

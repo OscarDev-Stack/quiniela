@@ -1,7 +1,7 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { tap } from 'rxjs/operators';
 import { Auth, user } from '@angular/fire/auth';
 import { NavComponent } from '../../shared/nav.component';
@@ -14,6 +14,11 @@ import {
   TOP_LIMITE,
 } from '../../core/services/ranking.service';
 import { UserService } from '../../core/services/user.service';
+import { ContextoService } from '../../shared/contexto.service';
+import { GruposService } from '../../core/services/grupos.service';
+import { FilaTablaGrupo } from '../../core/models/grupo.model';
+import { switchMap } from 'rxjs/operators';
+import { of } from 'rxjs';
 
 type Vista = 'puntos' | 'porcentaje';
 
@@ -26,8 +31,14 @@ type Vista = 'puntos' | 'porcentaje';
       <app-nav title="Clasificación" />
 
       <div class="head">
-        <span class="head-title">Clasificación</span>
-        @if (isAdmin()) {
+        <span class="head-title">
+          @if (enGrupo()) {
+            <i class="ti ti-users-group"></i> {{ nombreContexto() }}
+          } @else {
+            Clasificación global
+          }
+        </span>
+        @if (isAdmin() && !enGrupo()) {
           <div class="toggle">
             <button [class.on]="vista() === 'porcentaje'" (click)="vista.set('porcentaje')">% acierto</button>
             <button [class.on]="vista() === 'puntos'" (click)="vista.set('puntos')">
@@ -36,6 +47,10 @@ type Vista = 'puntos' | 'porcentaje';
           </div>
         }
       </div>
+
+      @if (enGrupo() && tabla().length === 0 && !cargando()) {
+        <p class="empty">Este grupo aún no tiene tabla. Jueguen partidos del grupo para verla.</p>
+      }
 
       @if (cargando()) {
         <app-cargando texto="Cargando la tabla" />
@@ -234,6 +249,20 @@ export class RankingComponent {
   private readonly router = inject(Router);
   private readonly users = inject(UserService);
   private readonly auth = inject(Auth);
+  private readonly contexto = inject(ContextoService);
+  private readonly gruposSrv = inject(GruposService);
+
+  /** ¿Estamos viendo un grupo? (si no, es Global) */
+  readonly enGrupo = computed(() => this.contexto.grupoId() !== null);
+  readonly nombreContexto = computed(() => this.contexto.actual().nombre);
+
+  /** Tabla del grupo activo (vacía si estamos en Global). */
+  private readonly tablaGrupo = toSignal(
+    toObservable(this.contexto.grupoId).pipe(
+      switchMap((gid) => (gid ? this.gruposSrv.tabla(gid) : of([] as FilaTablaGrupo[]))),
+    ),
+    { initialValue: [] as FilaTablaGrupo[] },
+  );
 
   readonly limite = TOP_LIMITE;
   readonly isAdmin = toSignal(this.users.isAdmin$, { initialValue: false });
@@ -289,6 +318,23 @@ export class RankingComponent {
 
   /** Tabla ordenada con desempates; los empates reales comparten lugar. */
   readonly tabla = computed<FilaRanking[]>(() => {
+    // Si estamos en un grupo, la tabla viene de ese grupo (solo por %).
+    if (this.enGrupo()) {
+      const filas = [...this.tablaGrupo()]
+        .sort((a, b) => b.porcentaje - a.porcentaje || b.aciertos - a.aciertos)
+        .map((f, i) => ({
+          id: f.uid,
+          alias: f.alias,
+          puntos: 0,
+          aciertos: f.aciertos,
+          resueltos: f.resueltos,
+          porcentaje: f.porcentaje,
+          calificado: true,
+          posicion: i + 1,
+        }) as FilaRanking);
+      return filas;
+    }
+
     const esPuntos = this.vista() === 'puntos' && this.isAdmin();
     const base = [...(esPuntos ? this.topPuntos() : this.topPorcentaje())];
 
