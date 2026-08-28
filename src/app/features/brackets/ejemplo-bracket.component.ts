@@ -29,7 +29,8 @@ import { PuntajeBracket } from '../../core/models/bracket.model';
           lo que habrías ganado, ronda por ronda.
         </p>
 
-        <!-- Cuartos -->
+        <!-- Cuartos (solo si el cuadro tiene 8+ equipos) -->
+        @if (equipos() >= 8) {
         <div class="ronda">
           <span class="ronda-tit">Cuartos de final</span>
           <div class="llave"><app-escudo [equipo]="'Pumas'" [size]="18" /><span>Pumas</span><b>6</b><span class="vs">–</span><b>6</b><span>América</span><app-escudo [equipo]="'América'" [size]="18" /></div>
@@ -41,6 +42,7 @@ import { PuntajeBracket } from '../../core/models/bracket.model';
           <div class="llave"><app-escudo [equipo]="'Pachuca'" [size]="18" /><span>Pachuca</span><b>3</b><span class="vs">–</span><b>0</b><span>Toluca</span><app-escudo [equipo]="'Toluca'" [size]="18" /></div>
           <div class="nota">Pachuca avanza</div>
         </div>
+        }
 
         <!-- Semifinal -->
         <div class="ronda">
@@ -60,7 +62,9 @@ import { PuntajeBracket } from '../../core/models/bracket.model';
 
         <!-- Total -->
         <div class="total">
-          <div class="total-fila"><span>Cruz Azul pasa cuartos</span><b>+{{ ptCuartos() }}</b></div>
+          @if (equipos() >= 8) {
+            <div class="total-fila"><span>Cruz Azul pasa cuartos</span><b>+{{ ptCuartos() }}</b></div>
+          }
           <div class="total-fila"><span>Cruz Azul a la final (avance +{{ ptSemi() }}, finalista +{{ ptFinalista() }})</span><b>+{{ totalSemi() }}</b></div>
           <div class="total-fila"><span>Cruz Azul campeón (final +{{ ptFinal() }}, campeón +{{ ptCampeon() }})</span><b>+{{ totalFinal() }}</b></div>
           <div class="total-fila total-fila--gordo"><span>Total ganado</span><b>+{{ totalTodo() }}</b></div>
@@ -112,7 +116,10 @@ import { PuntajeBracket } from '../../core/models/bracket.model';
         display: flex; align-items: center; gap: 8px;
         padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
         font-size: 13px; color: var(--text-secondary);
+        min-width: 0; overflow: hidden;
       }
+      .llave span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .llave b { flex-shrink: 0; }
       .llave span:first-child { flex: 1; text-align: right; }
       .llave span:last-child { flex: 1; }
       .llave b { font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
@@ -147,26 +154,41 @@ export class EjemploBracketComponent {
 
   /** El puntaje real del bracket, para que el ejemplo use sus números. */
   readonly puntaje = input.required<PuntajeBracket>();
+  /** Número de equipos del bracket, para mapear los puntos a sus rondas reales. */
+  readonly equipos = input<number>(8);
 
   /*
-   * El ejemplo muestra 3 rondas (cuartos → semi → final). Tomamos las
-   * ÚLTIMAS tres del puntaje real, que siempre terminan en la final, para
-   * que los números coincidan aunque el bracket tenga 4, 8 o 16 equipos.
+   * El motor aplica avanzaPorRonda[0] a la PRIMERA ronda del bracket,
+   * [1] a la segunda, etc. El ejemplo etiqueta las rondas desde la final
+   * hacia atrás (final, semi, cuartos), así que mapeamos cada etiqueta al
+   * índice correcto según cuántas rondas tiene el bracket real.
    */
-  private readonly tresRondas = computed(() => {
-    const arr = this.puntaje().avanzaPorRonda ?? [10, 20, 40];
-    return arr.slice(-3);
-  });
+  private readonly numRondas = computed(() => Math.log2(this.equipos()));
 
-  /** Puntos por avanzar en cada ronda del ejemplo. */
-  readonly ptCuartos = computed(() => this.tresRondas()[0] ?? 10);
-  readonly ptSemi = computed(() => this.tresRondas()[1] ?? 20);
-  readonly ptFinal = computed(() => this.tresRondas()[2] ?? 40);
+  /** Puntos de la ronda "final" = última ronda del avanzaPorRonda real. */
+  readonly ptFinal = computed(() => {
+    const arr = this.puntaje().avanzaPorRonda ?? [];
+    return arr[this.numRondas() - 1] ?? 40;
+  });
+  /** Puntos de la "semifinal" = penúltima ronda. */
+  readonly ptSemi = computed(() => {
+    const arr = this.puntaje().avanzaPorRonda ?? [];
+    return arr[this.numRondas() - 2] ?? 20;
+  });
+  /** Puntos de "cuartos" = antepenúltima ronda (solo con 8+ equipos). */
+  readonly ptCuartos = computed(() => {
+    const arr = this.puntaje().avanzaPorRonda ?? [];
+    return arr[this.numRondas() - 3] ?? 10;
+  });
   readonly ptCampeon = computed(() => this.puntaje().campeon ?? 0);
   readonly ptFinalista = computed(() => this.puntaje().finalista ?? 0);
 
   /** Totales que se muestran al final. */
   readonly totalSemi = computed(() => this.ptSemi() + this.ptFinalista());
   readonly totalFinal = computed(() => this.ptFinal() + this.ptCampeon());
-  readonly totalTodo = computed(() => this.ptCuartos() + this.totalSemi() + this.totalFinal());
+  readonly totalTodo = computed(() => {
+    // Con 4 equipos no hay cuartos: solo cuentan semi y final.
+    const cuartos = this.equipos() >= 8 ? this.ptCuartos() : 0;
+    return cuartos + this.totalSemi() + this.totalFinal();
+  });
 }

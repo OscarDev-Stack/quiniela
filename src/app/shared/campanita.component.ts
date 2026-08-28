@@ -92,9 +92,9 @@ import { PerfilService, Movimiento } from '../core/services/perfil.service';
         background: var(--danger-text); border: 1.5px solid var(--surface-0, #fff);
       }
 
-      .fondo { position: fixed; inset: 0; z-index: 190; }
+      .fondo { position: fixed; inset: 0; z-index: 2000; }
       .panel {
-        position: absolute; top: calc(100% + 8px); right: 0; z-index: 200;
+        position: fixed; top: calc(env(safe-area-inset-top, 0px) + 60px); right: 12px; z-index: 2001;
         width: min(340px, 90vw); max-height: 70vh; overflow-y: auto;
         background: var(--surface-2); border: 1px solid var(--border);
         border-radius: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);

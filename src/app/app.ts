@@ -1,7 +1,8 @@
 import { Component, DestroyRef, inject, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
-import { filter } from 'rxjs/operators';
+import { filter, take } from 'rxjs/operators';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ConfirmarDialogComponent } from './shared/confirmar-dialog.component';
 import { NovedadesComponent } from './shared/novedades.component';
 import { ToastsComponent } from './shared/toasts.component';
@@ -18,13 +19,23 @@ export class App {
 
   private readonly updates = inject(SwUpdate);
   private readonly novedades = inject(NovedadesService);
+  private readonly router = inject(Router);
 
   /** Hay una versión nueva descargada y lista para usarse. */
   readonly hayActualizacion = signal(false);
 
   constructor() {
-    // Si la versión cambió desde la última visita, se muestran las novedades.
-    this.novedades.revisarAlEntrar();
+    // Las novedades NO deben aparecer sobre el portón de acceso (Turnstile).
+    // Esperamos a la primera navegación que salga de /acceso (login o dentro)
+    // y ahí sí revisamos si hay novedades que mostrar.
+    this.router.events
+      .pipe(
+        filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+        filter((e) => !e.urlAfterRedirects.startsWith('/acceso')),
+        take(1),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => this.novedades.revisarAlEntrar());
 
     if (!this.updates.isEnabled) return;
 

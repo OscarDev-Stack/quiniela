@@ -27,6 +27,45 @@ export interface Novedad {
 
 export const NOVEDADES: Novedad[] = [
     {
+        version: '2.2.0',
+        fecha: 'Septiembre 2026',
+        resumen: 'Grupos privados, eliminatorias y tu saldo con su historial a un toque.',
+        puntos: [
+            {
+                icono: 'ti-users-group',
+                titulo: 'Grupos privados',
+                detalle:
+                    'Crea tu propio grupo, invita a tus amigos con un código y compitan en una ' +
+                    'tabla aparte, solo entre ustedes. Los puntos son los mismos de siempre, pero ' +
+                    'ahora tienes tu liga privada para picarte con quien tú quieras.',
+            },
+            {
+                icono: 'ti-sitemap',
+                titulo: 'Eliminatorias',
+                detalle:
+                    'Un formato nuevo tipo llave: pronostica quién avanza ronda por ronda hasta la ' +
+                    'final y quién se corona campeón. Cuando cierra, puedes ver los cuadros de todos ' +
+                    'y comparar tu camino con el de los demás.',
+            },
+            {
+                icono: 'ti-ticket',
+                titulo: 'Eliminatorias por dueños',
+                detalle:
+                    'Otra forma de jugar las llaves: en vez de pronosticar, te toca un equipo del ' +
+                    'cuadro como si fuera una rifa. Aceptas tu equipo y, si llega a campeón, te ' +
+                    'llevas la bolsa completa. Pura suerte y aguante.',
+            },
+            {
+                icono: 'ti-coins',
+                titulo: 'Tu saldo, con su historia',
+                detalle:
+                    'Toca tus puntos en la barra de arriba y verás de dónde salió cada uno: qué ' +
+                    'ganaste, qué gastaste y en qué. Todo tu movimiento de puntos en un solo lugar, ' +
+                    'a un toque.',
+            },
+        ],
+    },
+    {
         version: '2.1.0',
         fecha: 'Agosto 2026',
         resumen: 'Escudos de los equipos, avisos al teléfono y la app instalable.',
@@ -49,16 +88,17 @@ export const NOVEDADES: Novedad[] = [
             },
             {
                 icono: 'ti-download',
-                titulo: 'Instala la app en tu teléfono',
+                titulo: 'Agrégala a tu pantalla de inicio',
                 detalle:
-                    'Desde tu perfil puedes instalar la app en tu pantalla de inicio y abrirla como ' +
-                    'cualquier otra, sin buscar el enlace cada vez. Funciona en Android y iPhone.',
+                    'Desde tu perfil puedes agregar la app a la pantalla de inicio de tu teléfono y ' +
+                    'abrirla como cualquier otra, sin buscar el enlace cada vez. Funciona en Android ' +
+                    'y iPhone.',
             },
             {
                 icono: 'ti-bell-ringing',
-                titulo: 'Campanita de novedades',
+                titulo: 'Tus movimientos a la mano',
                 detalle:
-                    'Toca la campanita en la parte de arriba para ver de un vistazo tus últimos ' +
+                    'Un acceso rápido en la parte de arriba para ver de un vistazo tus últimos ' +
                     'movimientos de puntos, sin salir de donde estás. Para el detalle completo, ' +
                     'de ahí saltas a tu historial.',
             },

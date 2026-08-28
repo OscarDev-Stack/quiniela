@@ -10,10 +10,10 @@ import { CuadroBracketComponent } from './cuadro-bracket.component';
 import { ArmarBracketComponent } from './armar-bracket.component';
 import { AsignarDuenosComponent } from './asignar-duenos.component';
 import {
-    Bracket,
-    Llave,
-    nombreRonda,
-    rondasDe,
+  Bracket,
+  Llave,
+  nombreRonda,
+  rondasDe,
 } from '../../core/models/bracket.model';
 
 /**
@@ -21,13 +21,13 @@ import {
  * Fase 2 — sin pronósticos todavía; eso llega en la 3.
  */
 @Component({
-    selector: 'app-gestionar-brackets',
-    standalone: true,
-    imports: [CommonModule, FormsModule, RouterLink, CuadroBracketComponent,
-        ArmarBracketComponent,
-        AsignarDuenosComponent,
-    ],
-    template: `
+  selector: 'app-gestionar-brackets',
+  standalone: true,
+  imports: [CommonModule, FormsModule, RouterLink, CuadroBracketComponent,
+    ArmarBracketComponent,
+    AsignarDuenosComponent,
+  ],
+  template: `
     <div class="wrap">
       <h1>Eliminatorias</h1>
 
@@ -164,10 +164,28 @@ import {
           }
         </section>
       }
+
+      <!-- Modal: elegir ganador de penales en un empate -->
+      @if (penalesPend(); as p) {
+        <div class="pen-fondo" (click)="penalesPend.set(null)"></div>
+        <div class="pen-modal">
+          <h3 class="pen-tit">Empate en penales</h3>
+          <p class="pen-sub">Terminaron {{ p.gl }} – {{ p.gv }}. ¿Quién ganó en la tanda?</p>
+          <div class="pen-botones">
+            <button class="pen-btn" (click)="resolverPenales('local')">
+              {{ localDe(p.l, p.l.partidos[p.indice].tipo) }}
+            </button>
+            <button class="pen-btn" (click)="resolverPenales('visitante')">
+              {{ visitanteDe(p.l, p.l.partidos[p.indice].tipo) }}
+            </button>
+          </div>
+          <button class="pen-cancelar" (click)="penalesPend.set(null)">Cancelar</button>
+        </div>
+      }
     </div>
   `,
-    styles: [
-        `
+  styles: [
+    `
       .wrap { padding: 18px 16px 40px; }
       h1 { font-size: 20px; font-weight: 700; margin: 0 0 16px; }
       .panel {
@@ -208,6 +226,32 @@ import {
       .ancho-crear {
         display: flex; align-items: center; justify-content: center; gap: 6px;
         width: 100%; text-decoration: none; margin-bottom: 18px;
+      }
+
+      .pen-fondo {
+        position: fixed; inset: 0; z-index: 2000;
+        background: rgba(0, 0, 0, 0.6);
+      }
+      .pen-modal {
+        position: fixed; z-index: 2001; left: 50%; top: 50%;
+        transform: translate(-50%, -50%);
+        width: calc(100vw - 40px); max-width: 360px;
+        background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: 16px; padding: 22px 20px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+      }
+      .pen-tit { font-size: 18px; font-weight: 700; margin: 0 0 6px; }
+      .pen-sub { font-size: 14px; color: var(--text-secondary); margin: 0 0 18px; }
+      .pen-botones { display: flex; flex-direction: column; gap: 10px; }
+      .pen-btn {
+        width: 100%; padding: 14px; border-radius: var(--radius);
+        border: 1px solid var(--accent-fill); background: var(--accent-bg);
+        color: var(--accent-text); font-size: 15px; font-weight: 600; cursor: pointer;
+      }
+      .pen-btn:hover { background: var(--accent-fill); color: #fff; }
+      .pen-cancelar {
+        width: 100%; margin-top: 12px; padding: 10px; border: none; background: none;
+        color: var(--text-muted); font-size: 14px; cursor: pointer;
       }
       .btn.sm { padding: 7px 12px; font-size: 13px; }
       .btn:disabled { opacity: 0.5; }
@@ -295,153 +339,183 @@ import {
       .switch-input:checked + .switch-pista::after { transform: translateX(20px); background: #fff; }
       @media (prefers-reduced-motion: reduce) { .switch-pista, .switch-pista::after { transition: none; } }
     `,
-    ],
+  ],
 })
 export class GestionarBracketsComponent {
-    private readonly service = inject(BracketsService);
-    private readonly toast = inject(ToastService);
-    private readonly contexto = inject(ContextoService);
+  private readonly service = inject(BracketsService);
+  private readonly toast = inject(ToastService);
+  private readonly contexto = inject(ContextoService);
 
-    private readonly todos = toSignal(this.service.brackets(), { initialValue: [] as Bracket[] });
+  private readonly todos = toSignal(this.service.brackets(), { initialValue: [] as Bracket[] });
 
-    /** Eliminatorias del contexto activo (Global o el grupo elegido). */
-    readonly brackets = computed(() => {
-        const ctx = this.contexto.grupoId();
-        return this.todos().filter((b) => (b.grupoId ?? null) === ctx);
+  /** Eliminatorias del contexto activo (Global o el grupo elegido). */
+  readonly brackets = computed(() => {
+    const ctx = this.contexto.grupoId();
+    return this.todos().filter((b) => (b.grupoId ?? null) === ctx);
+  });
+  readonly abierto = signal<string | null>(null);
+  readonly copiado = signal<string | null>(null);
+  /** Qué paneles de participantes están desplegados (por id de bracket). */
+  private readonly partsAbiertos = signal<Set<string>>(new Set());
+  readonly creando = signal(false);
+  readonly calificando = signal(false);
+
+  /** Marcadores en captura, indexados por llave-partido-lado. */
+  marc: Record<string, number | null> = {};
+
+  /** ¿Está desplegado el panel de participantes de este bracket? */
+  partsVisibles(id: string): boolean {
+    return this.partsAbiertos().has(id);
+  }
+
+  alternarParts(id: string): void {
+    this.partsAbiertos.update((set) => {
+      const nuevo = new Set(set);
+      nuevo.has(id) ? nuevo.delete(id) : nuevo.add(id);
+      return nuevo;
     });
-    readonly abierto = signal<string | null>(null);
-    readonly copiado = signal<string | null>(null);
-    /** Qué paneles de participantes están desplegados (por id de bracket). */
-    private readonly partsAbiertos = signal<Set<string>>(new Set());
-    readonly creando = signal(false);
-    readonly calificando = signal(false);
+  }
 
-    /** Marcadores en captura, indexados por llave-partido-lado. */
-    marc: Record<string, number | null> = {};
+  /** Cuántos dueños ya aceptaron (modo dueños). */
+  aceptadosDe(b: Bracket): number {
+    return (b.duenos ?? []).filter((d) => d.estado === 'aceptado').length;
+  }
 
-    /** ¿Está desplegado el panel de participantes de este bracket? */
-    partsVisibles(id: string): boolean {
-        return this.partsAbiertos().has(id);
+  abrir(id: string): void {
+    const nuevo = this.abierto() === id ? null : id;
+    this.abierto.set(nuevo);
+    // Precargar las casillas con lo ya capturado, para no verlas vacías.
+    if (nuevo) {
+      const b = this.brackets().find((x) => x.id === id);
+      b?.llaves.forEach((l) =>
+        l.partidos.forEach((p, i) => {
+          if (typeof p.golesLocal === 'number') this.marc[`${l.id}-${i}-L`] = p.golesLocal;
+          if (typeof p.golesVisitante === 'number') this.marc[`${l.id}-${i}-V`] = p.golesVisitante;
+        }),
+      );
+    }
+  }
+
+  /** Copia el enlace para que el jugador entre directo a pronosticar. */
+  copiar(b: Bracket): void {
+    const url = `${location.origin}/eliminatorias/${b.id}`;
+    navigator.clipboard?.writeText(url);
+    this.copiado.set(b.id);
+    setTimeout(() => this.copiado.set(null), 1500);
+  }
+
+  etiqueta(estado: string): string {
+    const m: Record<string, string> = {
+      armando: 'Armando',
+      inscripcion: 'Inscripción',
+      'en-curso': 'En curso',
+      finalizado: 'Finalizado',
+    };
+    return m[estado] ?? estado;
+  }
+
+  /** Fecha de cierre/inicio del bracket, formateada. Null si no tiene. */
+  fechaCierre(b: Bracket): string | null {
+    const v = b.cierraAt as { seconds?: number } | Date | null | undefined;
+    if (!v) return null;
+    const d = v instanceof Date ? v : new Date((v.seconds ?? 0) * 1000);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
+  etiquetaPartido(tipo: string): string {
+    return tipo === 'ida' ? 'Ida' : tipo === 'vuelta' ? 'Vuelta' : 'Único';
+  }
+
+  /** Quién juega de local en este partido (en la vuelta se invierte). */
+  localDe(l: Llave, tipo: string): string {
+    return tipo === 'vuelta' ? (l.visitante?.nombre ?? '') : (l.local?.nombre ?? '');
+  }
+  visitanteDe(l: Llave, tipo: string): string {
+    return tipo === 'vuelta' ? (l.local?.nombre ?? '') : (l.visitante?.nombre ?? '');
+  }
+
+  /** ¿Ya se capturó este partido? */
+  estaCapturado(p: { golesLocal?: number | null; golesVisitante?: number | null }): boolean {
+    return typeof p.golesLocal === 'number' && typeof p.golesVisitante === 'number';
+  }
+
+  nombre(l: Llave, b: Bracket): string {
+    return nombreRonda(l.ronda, rondasDe(b.config.equipos));
+  }
+
+  /** Llaves con ambos equipos y aún sin ganador: las que se pueden capturar. */
+  jugables(b: Bracket): Llave[] {
+    return b.llaves
+      .filter((l) => l.local && l.visitante && !l.ganador)
+      .sort((a, c) => a.ronda - c.ronda || a.posicion - c.posicion);
+  }
+
+  /** Traduce la escala elegida a los valores de puntos. */
+  async calificar(b: Bracket): Promise<void> {
+    this.calificando.set(true);
+    try {
+      const r = await this.service.calificar(b.id);
+      this.toast.exito(`Calificados ${r.calificados} pronósticos. Bolsa repartida.`);
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudo calificar.');
+    } finally {
+      this.calificando.set(false);
+    }
+  }
+
+  async guardar(b: Bracket, l: Llave, indice: number): Promise<void> {
+    const gl = Number(this.marc[`${l.id}-${indice}-L`] ?? NaN);
+    const gv = Number(this.marc[`${l.id}-${indice}-V`] ?? NaN);
+    if (!Number.isInteger(gl) || !Number.isInteger(gv)) {
+      this.toast.error('Pon ambos marcadores antes de guardar.');
+      return;
     }
 
-    alternarParts(id: string): void {
-        this.partsAbiertos.update((set) => {
-            const nuevo = new Set(set);
-            nuevo.has(id) ? nuevo.delete(id) : nuevo.add(id);
-            return nuevo;
-        });
+    // ¿Empate que necesita penales? Solo si es el último partido de la llave.
+    const esFinal = l.ronda === rondasDe(b.config.equipos) - 1;
+    const desempate = esFinal ? b.config.desempateFinal : b.config.desempateRondas;
+    const esUltimo = indice === l.partidos.length - 1;
+    if (gl === gv && esUltimo && desempate === 'penales') {
+      // En vez de un prompt(), abrimos un modal para elegir quién ganó en
+      // penales, mostrando los nombres reales de los equipos.
+      this.penalesPend.set({ b, l, indice, gl, gv });
+      return;
     }
 
-    /** Cuántos dueños ya aceptaron (modo dueños). */
-    aceptadosDe(b: Bracket): number {
-        return (b.duenos ?? []).filter((d) => d.estado === 'aceptado').length;
-    }
+    await this.guardarCaptura(b, l, indice, gl, gv, null);
+  }
 
-    abrir(id: string): void {
-        const nuevo = this.abierto() === id ? null : id;
-        this.abierto.set(nuevo);
-        // Precargar las casillas con lo ya capturado, para no verlas vacías.
-        if (nuevo) {
-            const b = this.brackets().find((x) => x.id === id);
-            b?.llaves.forEach((l) =>
-                l.partidos.forEach((p, i) => {
-                    if (typeof p.golesLocal === 'number') this.marc[`${l.id}-${i}-L`] = p.golesLocal;
-                    if (typeof p.golesVisitante === 'number') this.marc[`${l.id}-${i}-V`] = p.golesVisitante;
-                }),
-            );
-        }
-    }
+  /** Estado del modal de penales (empate en el último partido de una llave). */
+  readonly penalesPend = signal<{
+    b: Bracket;
+    l: Llave;
+    indice: number;
+    gl: number;
+    gv: number;
+  } | null>(null);
 
-    /** Copia el enlace para que el jugador entre directo a pronosticar. */
-    copiar(b: Bracket): void {
-        const url = `${location.origin}/eliminatorias/${b.id}`;
-        navigator.clipboard?.writeText(url);
-        this.copiado.set(b.id);
-        setTimeout(() => this.copiado.set(null), 1500);
-    }
+  /** El usuario eligió al ganador de penales en el modal. */
+  async resolverPenales(quien: 'local' | 'visitante'): Promise<void> {
+    const p = this.penalesPend();
+    if (!p) return;
+    this.penalesPend.set(null);
+    await this.guardarCaptura(p.b, p.l, p.indice, p.gl, p.gv, quien);
+  }
 
-    etiqueta(estado: string): string {
-        const m: Record<string, string> = {
-            armando: 'Armando',
-            inscripcion: 'Inscripción',
-            'en-curso': 'En curso',
-            finalizado: 'Finalizado',
-        };
-        return m[estado] ?? estado;
+  /** Guarda la captura del marcador (con o sin ganador de penales). */
+  private async guardarCaptura(
+    b: Bracket,
+    l: Llave,
+    indice: number,
+    gl: number,
+    gv: number,
+    penales: 'local' | 'visitante' | null,
+  ): Promise<void> {
+    try {
+      await this.service.capturar(b.id, l.id, indice, gl, gv, penales);
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudo guardar.');
     }
-
-    /** Fecha de cierre/inicio del bracket, formateada. Null si no tiene. */
-    fechaCierre(b: Bracket): string | null {
-        const v = b.cierraAt as { seconds?: number } | Date | null | undefined;
-        if (!v) return null;
-        const d = v instanceof Date ? v : new Date((v.seconds ?? 0) * 1000);
-        if (isNaN(d.getTime())) return null;
-        return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-    }
-
-    etiquetaPartido(tipo: string): string {
-        return tipo === 'ida' ? 'Ida' : tipo === 'vuelta' ? 'Vuelta' : 'Único';
-    }
-
-    /** Quién juega de local en este partido (en la vuelta se invierte). */
-    localDe(l: Llave, tipo: string): string {
-        return tipo === 'vuelta' ? (l.visitante?.nombre ?? '') : (l.local?.nombre ?? '');
-    }
-    visitanteDe(l: Llave, tipo: string): string {
-        return tipo === 'vuelta' ? (l.local?.nombre ?? '') : (l.visitante?.nombre ?? '');
-    }
-
-    /** ¿Ya se capturó este partido? */
-    estaCapturado(p: { golesLocal?: number | null; golesVisitante?: number | null }): boolean {
-        return typeof p.golesLocal === 'number' && typeof p.golesVisitante === 'number';
-    }
-
-    nombre(l: Llave, b: Bracket): string {
-        return nombreRonda(l.ronda, rondasDe(b.config.equipos));
-    }
-
-    /** Llaves con ambos equipos y aún sin ganador: las que se pueden capturar. */
-    jugables(b: Bracket): Llave[] {
-        return b.llaves
-            .filter((l) => l.local && l.visitante && !l.ganador)
-            .sort((a, c) => a.ronda - c.ronda || a.posicion - c.posicion);
-    }
-
-    /** Traduce la escala elegida a los valores de puntos. */
-    async calificar(b: Bracket): Promise<void> {
-        this.calificando.set(true);
-        try {
-            const r = await this.service.calificar(b.id);
-            this.toast.exito(`Calificados ${r.calificados} pronósticos. Bolsa repartida.`);
-        } catch (e: unknown) {
-            this.toast.error((e as Error)?.message ?? 'No se pudo calificar.');
-        } finally {
-            this.calificando.set(false);
-        }
-    }
-
-    async guardar(b: Bracket, l: Llave, indice: number): Promise<void> {
-        const gl = Number(this.marc[`${l.id}-${indice}-L`] ?? NaN);
-        const gv = Number(this.marc[`${l.id}-${indice}-V`] ?? NaN);
-        if (!Number.isInteger(gl) || !Number.isInteger(gv)) {
-            this.toast.error('Pon ambos marcadores antes de guardar.');
-            return;
-        }
-
-        // ¿Empate que necesita penales? Solo si es el último partido de la llave.
-        let penales: 'local' | 'visitante' | null = null;
-        const esFinal = l.ronda === rondasDe(b.config.equipos) - 1;
-        const desempate = esFinal ? b.config.desempateFinal : b.config.desempateRondas;
-        const esUltimo = indice === l.partidos.length - 1;
-        if (gl === gv && esUltimo && desempate === 'penales') {
-            const q = prompt('Empataron. ¿Quién ganó en penales? Escribe "local" o "visitante":');
-            if (q === 'local' || q === 'visitante') penales = q;
-        }
-
-        try {
-            await this.service.capturar(b.id, l.id, indice, gl, gv, penales);
-        } catch (e: unknown) {
-            this.toast.error((e as Error)?.message ?? 'No se pudo guardar.');
-        }
-    }
+  }
 }
