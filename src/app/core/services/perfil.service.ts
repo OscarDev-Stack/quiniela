@@ -109,4 +109,14 @@ export class PerfilService {
         );
         await fn({} as Record<string, never>);
     }
+
+    /** Cambia mi alias (nombre público). Lo valida y guarda el servidor. */
+    async cambiarAlias(alias: string): Promise<string> {
+        const fn = httpsCallable<{ alias: string }, { ok: boolean; alias: string }>(
+            this.fns,
+            'cambiarAlias',
+        );
+        const res = await fn({ alias: alias.trim() });
+        return res.data.alias;
+    }
 }

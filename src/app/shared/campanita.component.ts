@@ -93,8 +93,12 @@ import { PerfilService, Movimiento } from '../core/services/perfil.service';
       }
 
       .fondo { position: fixed; inset: 0; z-index: 2000; }
+      /* En escritorio el panel cuelga del propio botón (contenedor .campanita,
+         que es position: relative) y se alinea a su orilla derecha. Antes usaba
+         position: fixed; right: 12px, lo que lo pegaba a la orilla de la ventana
+         completa, muy lejos de la app centrada (max-width 460px). */
       .panel {
-        position: fixed; top: calc(env(safe-area-inset-top, 0px) + 60px); right: 12px; z-index: 2001;
+        position: absolute; top: calc(100% + 10px); right: 0; z-index: 2001;
         width: min(340px, 90vw); max-height: 70vh; overflow-y: auto;
         background: var(--surface-2); border: 1px solid var(--border);
         border-radius: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);

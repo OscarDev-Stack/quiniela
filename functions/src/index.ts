@@ -2510,6 +2510,35 @@ export const consultarTorneo = onCall(opcionesCall, async (req) => {
 });
 
 /* ============================================================
+   Cambiar mi alias (nombre público)
+   El usuario no puede escribir su propio documento (las reglas solo
+   dejan al admin), así que el cambio pasa por aquí. Se propaga al
+   ranking para que el nombre nuevo se vea de inmediato.
+   ============================================================ */
+export const cambiarAlias = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const alias = String(req.data?.alias ?? '').trim();
+    if (alias.length < 3) {
+        throw new HttpsError('invalid-argument', 'El alias debe tener al menos 3 caracteres.');
+    }
+    if (alias.length > 20) {
+        throw new HttpsError('invalid-argument', 'El alias no puede pasar de 20 caracteres.');
+    }
+
+    const userRef = db.doc(`users/${uid}`);
+    const snap = await userRef.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'No encontramos tu perfil.');
+
+    await userRef.update({ alias });
+    // Refresca la fila del ranking para que el alias nuevo aparezca ya.
+    await actualizarRanking([uid]);
+
+    return { ok: true, alias };
+});
+
+/* ============================================================
    NOTIFICACIONES POR TELEGRAM
    Cada quien guarda su chat y decide si quiere recibirlas.
    ============================================================ */
