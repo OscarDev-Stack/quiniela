@@ -97,26 +97,25 @@ interface Diapositiva {
     `
       .fondo {
         position: fixed; inset: 0; z-index: 190;
-        display: flex; align-items: flex-end; justify-content: center;
-        background: rgba(0, 0, 0, 0.65);
-        backdrop-filter: blur(3px);
+        display: flex; align-items: center; justify-content: center;
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
         animation: aparecer 0.15s ease-out;
-      }
-      @media (min-width: 620px) {
-        .fondo { align-items: center; padding: 24px; }
-        .hoja { border-radius: 20px; }
       }
 
       .hoja {
-        position: relative; width: 100%; max-width: 420px;
+        position: relative; width: 100%; max-width: 400px;
         min-height: 440px;
         display: flex; flex-direction: column;
         background: var(--surface-0);
         border: 1px solid var(--border);
-        border-radius: 22px 22px 0 0;
+        border-radius: 24px;
         padding: 20px;
         overflow: hidden;
-        animation: subir 0.24s ease-out;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        animation: aparecer-modal 0.24s ease-out;
       }
       .hoja::before {
         content: ''; position: absolute; top: -60px; left: 50%;
@@ -188,7 +187,7 @@ interface Diapositiva {
       .btn--sec { border: 1px solid var(--border); background: var(--surface-2); color: var(--text-primary); }
 
       @keyframes aparecer { from { opacity: 0; } }
-      @keyframes subir { from { transform: translateY(24px); opacity: 0; } }
+      @keyframes aparecer-modal { from { transform: scale(0.94); opacity: 0; } }
       @media (prefers-reduced-motion: reduce) {
         .fondo, .hoja { animation: none; }
       }

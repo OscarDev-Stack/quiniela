@@ -35,33 +35,29 @@ export const NOVEDADES: Novedad[] = [
                 icono: 'ti-users-group',
                 titulo: 'Grupos privados',
                 detalle:
-                    'Crea tu propio grupo, invita a tus amigos con un código y compitan en una ' +
-                    'tabla aparte, solo entre ustedes. Los puntos son los mismos de siempre, pero ' +
-                    'ahora tienes tu liga privada para picarte con quien tú quieras.',
+                    'Crea tu propio grupo, comparte el código con quienes quieras y compitan en una ' +
+                    'tabla exclusiva para ustedes. Tu competencia privada, aparte del ranking general.',
             },
             {
                 icono: 'ti-sitemap',
                 titulo: 'Eliminatorias',
                 detalle:
-                    'Un formato nuevo tipo llave: pronostica quién avanza ronda por ronda hasta la ' +
-                    'final y quién se corona campeón. Cuando cierra, puedes ver los cuadros de todos ' +
-                    'y comparar tu camino con el de los demás.',
+                    'Pronostica quién avanza en cada ronda hasta la final y quién se lleva el título. ' +
+                    'Cuando cierra, puedes ver los cuadros de todos y comparar tus aciertos.',
             },
             {
                 icono: 'ti-ticket',
                 titulo: 'Eliminatorias por dueños',
                 detalle:
-                    'Otra forma de jugar las llaves: en vez de pronosticar, te toca un equipo del ' +
-                    'cuadro como si fuera una rifa. Aceptas tu equipo y, si llega a campeón, te ' +
-                    'llevas la bolsa completa. Pura suerte y aguante.',
+                    'Una variante distinta: en lugar de pronosticar, se te asigna un equipo del ' +
+                    'cuadro. Si tu equipo llega a campeón, te llevas la bolsa completa.',
             },
             {
                 icono: 'ti-coins',
-                titulo: 'Tu saldo, con su historia',
+                titulo: 'Tus puntos y movimientos',
                 detalle:
-                    'Toca tus puntos en la barra de arriba y verás de dónde salió cada uno: qué ' +
-                    'ganaste, qué gastaste y en qué. Todo tu movimiento de puntos en un solo lugar, ' +
-                    'a un toque.',
+                    'Toca tus puntos en la barra superior para ver de dónde viene cada uno: lo que ' +
+                    'ganaste, lo que gastaste y en qué. Todo tu historial en un solo lugar.',
             },
         ],
     },
