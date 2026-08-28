@@ -116,6 +116,24 @@ export class CompeticionesService {
     }
 
     /**
+     * Calcula la previa de puntos de las quinielas con los resultados
+     * capturados hasta ahora (aunque falten partidos). Escribe en campos
+     * separados (puntosPrevia), sin tocar el puntaje oficial ni resolver la
+     * jornada. Alimenta la vista en vivo de los jugadores.
+     */
+    async previsualizarQuiniela(
+        competicionId: string,
+        jornadaId: string,
+    ): Promise<{ cartones: number }> {
+        const fn = httpsCallable<
+            { competicionId: string; jornadaId: string },
+            { ok: boolean; cartones: number }
+        >(this.fns, 'previsualizarQuiniela');
+        const res = await fn({ competicionId, jornadaId });
+        return res.data;
+    }
+
+    /**
      * Publica el resultado oficial y lo aplica a todos los torneos
      * que estén jugando esa jornada.
      */

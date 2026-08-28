@@ -19,8 +19,13 @@ import { Participante } from '../../core/models/torneo.model';
           <span class="puesto" [class.puesto--lider]="i === 0">{{ i + 1 }}</span>
           <span class="avatar">{{ inicial(p.alias) }}</span>
           <span class="alias">{{ p.alias }}</span>
-          <span class="exactos">{{ p.exactos ?? 0 }} exactos</span>
-          <span class="puntos">{{ p.puntosTorneo ?? 0 }}</span>
+          <span class="exactos">
+            {{ exactosDe(p) }} exactos
+            @if ((p.puntosPrevia ?? 0) > 0 || (p.exactosPrevia ?? 0) > 0) {
+              <span class="en-vivo" title="Incluye la jornada en curso">en vivo</span>
+            }
+          </span>
+          <span class="puntos">{{ puntosDe(p) }}</span>
         </div>
       } @empty {
         <p class="vacio">Todavía no hay jugadores.</p>
@@ -56,7 +61,11 @@ import { Participante } from '../../core/models/torneo.model';
         font-size: 12px; font-weight: 600;
       }
       .alias { flex: 1; font-size: 14px; font-weight: 600; min-width: 0; }
-      .exactos { font-size: 11px; color: var(--text-muted); }
+      .exactos { font-size: 11px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; }
+      .en-vivo {
+        font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
+        background: var(--warning-bg); color: var(--warning-text); text-transform: uppercase;
+      }
       .puntos {
         font-size: 16px; font-weight: 700; color: var(--accent-text);
         min-width: 34px; text-align: right;
@@ -68,14 +77,27 @@ export class TablaPosicionesComponent {
   readonly participantes = input.required<Participante[]>();
   readonly miUid = input<string | null>(null);
 
+  /**
+   * Puntos totales visibles: acumulado oficial (jornadas ya resueltas) más
+   * la previa de la jornada en curso. La previa se limpia al resolver, así
+   * que nunca se cuenta doble.
+   */
+  puntosDe(p: Participante): number {
+    return (p.puntosTorneo ?? 0) + (p.puntosPrevia ?? 0);
+  }
+
+  exactosDe(p: Participante): number {
+    return (p.exactos ?? 0) + (p.exactosPrevia ?? 0);
+  }
+
   readonly tabla = computed(() =>
     [...this.participantes()].sort((a, b) => {
-      const pa = a.puntosTorneo ?? 0;
-      const pb = b.puntosTorneo ?? 0;
+      const pa = this.puntosDe(a);
+      const pb = this.puntosDe(b);
       if (pa !== pb) return pb - pa;
 
-      const ea = a.exactos ?? 0;
-      const eb = b.exactos ?? 0;
+      const ea = this.exactosDe(a);
+      const eb = this.exactosDe(b);
       if (ea !== eb) return eb - ea;
 
       return a.alias.localeCompare(b.alias, 'es');

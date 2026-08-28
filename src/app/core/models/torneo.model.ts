@@ -71,6 +71,10 @@ export interface Participante {
     puntosTorneo?: number;
     /* Marcadores exactos acertados, para desempatar. */
     exactos?: number;
+    /* Previa de la jornada en curso (resultados parciales). Se limpia al
+       resolver la jornada, cuando puntosTorneo ya incluye estos puntos. */
+    puntosPrevia?: number;
+    exactosPrevia?: number;
     equiposUsados: string[];
     eliminadoEn?: number;
     /* Jornada en la que revivió, si lo hizo. */
@@ -88,6 +92,9 @@ export interface Quiniela {
     /* Puntos obtenidos una vez resuelta la jornada. */
     puntos?: number;
     exactos?: number;
+    /* Previa con resultados parciales, mientras la jornada no se resuelve. */
+    puntosPrevia?: number;
+    exactosPrevia?: number;
     estado: 'pendiente' | 'calificada';
 }
 

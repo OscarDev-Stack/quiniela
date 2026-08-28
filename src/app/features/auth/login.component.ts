@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { Firestore, doc, getDoc, setDoc, serverTimestamp } from '@angular/fire/firestore';
 import { AuthService } from '../../core/services/auth.service';
 import { APP_VERSION } from '../../core/version';
 
@@ -79,6 +80,18 @@ import { APP_VERSION } from '../../core/version';
               {{ loading() ? 'Entrando…' : 'Iniciar sesión' }}
             </button>
           </form>
+
+          <div class="separador"><span>o</span></div>
+
+          <button type="button" class="btn-google" [disabled]="loading()" (click)="onGoogle()">
+            <svg class="google-ico" viewBox="0 0 48 48" aria-hidden="true">
+              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+            </svg>
+            {{ loading() ? 'Conectando…' : 'Continuar con Google' }}
+          </button>
 
           <p class="auth-alt">
             <a routerLink="/recuperar">¿Olvidaste tu contraseña?</a>
@@ -166,6 +179,25 @@ import { APP_VERSION } from '../../core/version';
       }
       .btn-primary:disabled { opacity: 0.6; cursor: default; }
 
+      /* Separador "o" entre login por correo y proveedores externos */
+      .separador {
+        display: flex; align-items: center; gap: 12px;
+        margin: 18px 0; color: var(--text-muted); font-size: 13px;
+      }
+      .separador::before, .separador::after {
+        content: ''; flex: 1; height: 1px; background: var(--border);
+      }
+
+      /* Botón de Google: fondo claro y logo oficial */
+      .btn-google {
+        width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+        padding: 12px; border: 1px solid var(--border); border-radius: var(--radius);
+        background: #fff; color: #3c4043; font-size: 15px; font-weight: 600; cursor: pointer;
+      }
+      .btn-google:hover { background: #f7f8f8; }
+      .btn-google:disabled { opacity: 0.6; cursor: default; }
+      .google-ico { width: 20px; height: 20px; flex-shrink: 0; }
+
       .auth-alt { text-align: center; font-size: 14px; color: var(--text-secondary); margin: 16px 0 0; }
       .auth-alt--fuera { margin-top: 20px; }
       .auth-alt a { color: var(--accent-text); text-decoration: none; font-weight: 600; }
@@ -176,6 +208,7 @@ import { APP_VERSION } from '../../core/version';
 export class LoginComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly db = inject(Firestore);
   readonly version = APP_VERSION;
 
   email = '';
@@ -189,10 +222,7 @@ export class LoginComponent {
     try {
       const cred = await this.auth.login(this.email, this.password);
       if (cred?.user) {
-        const invitacion = localStorage.getItem('invitacion');
-        // Se consume una sola vez: si no, cada login reenvía a unirse.
-        localStorage.removeItem('invitacion');
-        await this.router.navigate(invitacion ? ['/unirse', invitacion] : ['/inicio']);
+        await this.entrar();
       } else {
         this.error.set('No se pudo iniciar la sesión. Intenta de nuevo.');
       }
@@ -201,6 +231,55 @@ export class LoginComponent {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /**
+   * Entra con Google. Si es la primera vez que este usuario accede (no tiene
+   * documento en `users`), se crea en estado pendiente de validación, igual
+   * que el registro normal: saldo en cero y validada en false. El alias
+   * arranca con el nombre de la cuenta de Google; el usuario puede cambiarlo
+   * después en su perfil.
+   */
+  async onGoogle(): Promise<void> {
+    this.error.set('');
+    this.loading.set(true);
+    try {
+      const cred = await this.auth.loginConGoogle();
+      const u = cred.user;
+
+      // ¿Ya existe su documento? Solo lo creamos la primera vez.
+      const ref = doc(this.db, 'users', u.uid);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) {
+        await setDoc(ref, {
+          email: u.email ?? '',
+          // Nombre de Google como alias inicial; si no viene, usamos la
+          // parte local del correo como respaldo.
+          alias: u.displayName ?? u.email?.split('@')[0] ?? 'Jugador',
+          rol: 'user',
+          validada: false,
+          bloqueado: false,
+          puntos: 0,
+          createdAt: serverTimestamp(),
+        });
+        // Avisa a los administradores que hay una cuenta por validar.
+        await this.auth.avisarRegistro();
+      }
+
+      await this.entrar();
+    } catch (e: unknown) {
+      this.error.set(this.mapErrorGoogle((e as { code?: string })?.code));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  /** Consume la invitación pendiente (si la hay) y navega a destino. */
+  private async entrar(): Promise<void> {
+    const invitacion = localStorage.getItem('invitacion');
+    // Se consume una sola vez: si no, cada login reenvía a unirse.
+    localStorage.removeItem('invitacion');
+    await this.router.navigate(invitacion ? ['/unirse', invitacion] : ['/inicio']);
   }
 
   private mapError(code?: string): string {
@@ -215,6 +294,24 @@ export class LoginComponent {
         return 'Demasiados intentos. Intenta más tarde.';
       default:
         return 'No se pudo iniciar sesión. Intenta de nuevo.';
+    }
+  }
+
+  private mapErrorGoogle(code?: string): string {
+    switch (code) {
+      // El usuario cerró el popup o lo canceló: no es un error real.
+      case 'auth/popup-closed-by-user':
+      case 'auth/cancelled-popup-request':
+      case 'auth/user-cancelled':
+        return '';
+      case 'auth/popup-blocked':
+        return 'El navegador bloqueó la ventana de Google. Habilita los popups e intenta de nuevo.';
+      case 'auth/account-exists-with-different-credential':
+        return 'Ya existe una cuenta con ese correo usando otro método de acceso.';
+      case 'auth/network-request-failed':
+        return 'Problema de conexión. Revisa tu internet e intenta de nuevo.';
+      default:
+        return 'No se pudo entrar con Google. Intenta de nuevo.';
     }
   }
 }
