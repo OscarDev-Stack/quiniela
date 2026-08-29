@@ -35,7 +35,7 @@ import { ConfirmarService } from './confirmar.service';
           <app-selector-contexto />
         }
 
-        <div class="menu-admin">
+        <div class="menu-admin" [class.menu-admin--abierto]="menuAbierto()">
           <button class="icono-top" (click)="menuAbierto.set(!menuAbierto())" aria-label="Menú">
             <i class="ti ti-dots-vertical"></i>
             @if (pendientes() > 0) { <span class="punto-rojo"></span> }
@@ -153,16 +153,15 @@ import { ConfirmarService } from './confirmar.service';
       }
 
       /* Menú desplegable de administración. */
+      /* Al abrir, el contenedor sube su z-index para que el menú quede encima
+         del contenido de la página, sin salirse de la app (queda pegado al
+         botón de tres puntos, no a la orilla de la ventana). */
       .menu-admin { position: relative; flex-shrink: 0; }
-      /* Fondo y menú en position: fixed para escapar del stacking context de
-         la topbar (que tiene z-index bajo) y quedar SIEMPRE encima del
-         contenido de la página, no detrás de él. */
+      .menu-admin--abierto { z-index: 2000; }
       .menu-fondo { position: fixed; inset: 0; z-index: 1990; }
       .menu-lista {
-        position: fixed;
-        top: calc(env(safe-area-inset-top, 0px) + 58px);
-        right: 12px; z-index: 2000;
-        min-width: 200px; max-width: calc(100vw - 24px);
+        position: absolute; top: calc(100% + 6px); right: 0; z-index: 2001;
+        min-width: 200px; max-width: min(260px, calc(100vw - 24px));
         display: flex; flex-direction: column;
         background: var(--surface-2); border: 1px solid var(--border);
         border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
