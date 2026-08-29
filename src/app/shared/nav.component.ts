@@ -154,10 +154,16 @@ import { ConfirmarService } from './confirmar.service';
 
       /* Menú desplegable de administración. */
       .menu-admin { position: relative; flex-shrink: 0; }
-      .menu-fondo { position: fixed; inset: 0; z-index: 190; }
+      /* Fondo y menú en position: fixed para escapar del stacking context de
+         la topbar (que tiene z-index bajo) y quedar SIEMPRE encima del
+         contenido de la página, no detrás de él. */
+      .menu-fondo { position: fixed; inset: 0; z-index: 1990; }
       .menu-lista {
-        position: absolute; top: calc(100% + 6px); right: 0; z-index: 200;
-        min-width: 190px; display: flex; flex-direction: column;
+        position: fixed;
+        top: calc(env(safe-area-inset-top, 0px) + 58px);
+        right: 12px; z-index: 2000;
+        min-width: 200px; max-width: calc(100vw - 24px);
+        display: flex; flex-direction: column;
         background: var(--surface-2); border: 1px solid var(--border);
         border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
         padding: 6px; animation: menuAparece 0.15s ease;

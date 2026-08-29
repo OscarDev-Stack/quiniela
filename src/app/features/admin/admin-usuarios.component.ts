@@ -125,10 +125,11 @@ import { ToastService } from '../../shared/toast.service';
       .acciones-top { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
       .chip {
         display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
-        font-size: 13px; padding: 8px 14px; border-radius: 999px;
+        font-size: 13px; padding: 8px 12px; border-radius: 999px; white-space: nowrap;
         border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
       }
       .chip:hover { background: var(--surface-1); }
+      .chip:disabled { opacity: 0.6; cursor: default; }
       .chip--danger { color: var(--danger-text); border-color: var(--danger-text); }
 
       .vacio { color: var(--text-muted); font-size: 14px; }
@@ -198,9 +199,11 @@ import { ToastService } from '../../shared/toast.service';
       .leyenda span { display: inline-flex; align-items: center; gap: 5px; }
       .leyenda i { font-size: 15px; }
 
+      @media (min-width: 480px) {
+        .cabecera { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+        .acciones-top { margin-top: 0; flex-shrink: 0; }
+      }
       @media (min-width: 620px) {
-        .cabecera { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-        .acciones-top { margin-top: 0; }
         .item {
           grid-template-columns: 38px 1fr auto auto;
           grid-template-areas: 'avatar datos puntos acciones';
