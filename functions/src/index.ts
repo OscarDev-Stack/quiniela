@@ -2535,6 +2535,25 @@ export const cambiarAlias = onCall(opcionesCall, async (req) => {
     // Refresca la fila del ranking para que el alias nuevo aparezca ya.
     await actualizarRanking([uid]);
 
+    // Propaga el alias a los grupos del usuario. El alias se copia en cada
+    // grupo (miembros y tabla) al inscribirse, así que hay que actualizarlo
+    // ahí también; si no, seguiría apareciendo el nombre viejo en los grupos.
+    const grupos = (snap.data()?.['grupos'] as string[] | undefined) ?? [];
+    for (const grupoId of grupos) {
+        // Miembro: siempre existe si el usuario pertenece al grupo. merge para
+        // no pisar el resto de sus campos (rol, entradaAt).
+        await db
+            .doc(`grupos/${grupoId}/miembros/${uid}`)
+            .set({ alias }, { merge: true })
+            .catch(() => undefined);
+        // Tabla: puede no existir aún (si no ha jugado en el grupo). Usamos
+        // update para NO crearla vacía; si no existe, el catch lo ignora.
+        await db
+            .doc(`grupos/${grupoId}/tabla/${uid}`)
+            .update({ alias })
+            .catch(() => undefined);
+    }
+
     return { ok: true, alias };
 });
 

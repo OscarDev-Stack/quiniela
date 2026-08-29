@@ -25,10 +25,19 @@ Nueva funcion `cambiarAlias`:
   - Metodos `editarAlias()`, `cancelarAlias()`, `guardarAlias()`
   - Valida minimo 3 caracteres antes de llamar; si no cambio, cierra sin llamar
 
+### Propagacion a grupos (agregado despues)
+`cambiarAlias` ahora tambien actualiza el alias en cada grupo del usuario:
+- `grupos/{id}/miembros/{uid}.alias` (set con merge; el miembro siempre existe)
+- `grupos/{id}/tabla/{uid}.alias` (update; NO crea la fila si el usuario aun no ha
+  jugado en ese grupo)
+
+Antes, al cambiar el alias, en los grupos seguia apareciendo el nombre viejo porque el
+alias se copia a esas subcolecciones al inscribirse.
+
 ### Nota
-El alias en las subcolecciones de participantes de torneos (`torneos/{id}/participantes`)
-se fija al inscribirse y NO se actualiza retroactivamente con este cambio. Si se quiere
-que el alias nuevo se refleje ahi tambien, seria una mejora aparte.
+El alias en subcolecciones de eventos puntuales (participantes de torneos, picks,
+quinielas, trofeos, ganadorAlias) son snapshots historicos del momento y NO se
+reescriben. Solo se propagan las vistas "vivas": ranking global y grupos.
 
 ## 2. Cerrar sesion en el menu de tres puntos
 
