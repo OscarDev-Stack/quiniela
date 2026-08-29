@@ -4559,22 +4559,28 @@ export const buscarUsuariosPorAlias = onCall(opcionesCall, async (req) => {
         throw new HttpsError('permission-denied', 'No tienes permiso para buscar usuarios.');
     }
 
-    // Búsqueda por prefijo de alias (rango de Firestore). Case-sensitive:
-    // devolvemos coincidencias que empiezan con el texto tal cual.
-    // Nota: filtramos por rango de alias solamente (no combinamos con otro
-    // campo) para no requerir un índice compuesto.
-    const fin = texto + '\uf8ff';
+    // Búsqueda case-insensitive por "contiene". Firestore no soporta
+    // búsquedas insensibles a mayúsculas de forma nativa, así que traemos los
+    // usuarios validados y filtramos en memoria con el texto en minúsculas.
+    // El volumen es bajo (solo lo usa un admin de grupo para agregar gente),
+    // así que un límite generoso es suficiente y evita migrar datos.
+    const buscado = texto.toLowerCase();
     const snap = await db
         .collection('users')
-        .where('alias', '>=', texto)
-        .where('alias', '<=', fin)
-        .limit(15)
+        .where('validada', '==', true)
+        .limit(500)
         .get();
 
     const resultados = snap.docs
-        .map((d) => ({ uid: d.id, alias: String(d.data()['alias'] ?? ''), validada: d.data()['validada'] === true }))
-        .filter((r) => r.uid !== uid && r.validada) // no me incluyo; solo validados
-        .map((r) => ({ uid: r.uid, alias: r.alias }))
+        .map((d) => ({ uid: d.id, alias: String(d.data()['alias'] ?? '') }))
+        .filter((r) => r.uid !== uid && r.alias.toLowerCase().includes(buscado))
+        // Primero los que empiezan con el texto, luego el resto; ambos por alias.
+        .sort((a, b) => {
+            const aEmpieza = a.alias.toLowerCase().startsWith(buscado) ? 0 : 1;
+            const bEmpieza = b.alias.toLowerCase().startsWith(buscado) ? 0 : 1;
+            if (aEmpieza !== bEmpieza) return aEmpieza - bEmpieza;
+            return a.alias.localeCompare(b.alias, 'es');
+        })
         .slice(0, 10);
 
     return { usuarios: resultados };
