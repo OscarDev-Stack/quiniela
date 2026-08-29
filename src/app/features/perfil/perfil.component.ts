@@ -34,12 +34,41 @@ import { APP_VERSION } from '../../core/version';
 
       <header class="cabecera">
         <div class="avatar">{{ inicial() }}</div>
-        <h1>
-          {{ alias() }}
-          @if (esMio() && me()?.validada) {
-            <i class="ti ti-rosette-discount-check-filled check"></i>
-          }
-        </h1>
+
+        @if (editandoAlias()) {
+          <form class="edit-alias" (ngSubmit)="guardarAlias()">
+            <input
+              type="text"
+              name="alias"
+              [(ngModel)]="aliasBorrador"
+              maxlength="20"
+              placeholder="Tu nombre"
+              autocomplete="off"
+              [disabled]="guardandoAlias()"
+            />
+            <div class="edit-alias-acciones">
+              <button type="submit" class="btn-alias btn-alias--ok" [disabled]="guardandoAlias()">
+                {{ guardandoAlias() ? 'Guardando…' : 'Guardar' }}
+              </button>
+              <button type="button" class="btn-alias" [disabled]="guardandoAlias()" (click)="cancelarAlias()">
+                Cancelar
+              </button>
+            </div>
+          </form>
+        } @else {
+          <h1>
+            {{ alias() }}
+            @if (esMio() && me()?.validada) {
+              <i class="ti ti-rosette-discount-check-filled check"></i>
+            }
+            @if (esMio()) {
+              <button class="editar-alias" (click)="editarAlias()" aria-label="Editar nombre" title="Editar nombre">
+                <i class="ti ti-pencil"></i>
+              </button>
+            }
+          </h1>
+        }
+
         @if (posicion(); as p) {
           <p class="posicion">Lugar #{{ p }} del ranking</p>
         }
@@ -243,6 +272,31 @@ import { APP_VERSION } from '../../core/version';
       .check { color: var(--accent-fill); font-size: 18px; }
       .posicion { font-size: 13px; color: var(--text-muted); margin: 4px 0 0; }
 
+      /* Botón lápiz junto al nombre */
+      .editar-alias {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+        border: 1px solid var(--border); background: var(--surface-1);
+        color: var(--text-secondary); font-size: 14px;
+      }
+      .editar-alias:hover { color: var(--accent-text); border-color: var(--accent-fill); }
+
+      /* Formulario de edición del alias */
+      .edit-alias { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+      .edit-alias input {
+        width: min(260px, 80vw); text-align: center;
+        padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-1); color: var(--text-primary); font-size: 18px; font-weight: 600;
+      }
+      .edit-alias input:focus { outline: none; border-color: var(--accent-fill); }
+      .edit-alias-acciones { display: flex; gap: 8px; }
+      .btn-alias {
+        padding: 8px 16px; border-radius: var(--radius); cursor: pointer; font-size: 13px; font-weight: 600;
+        border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
+      }
+      .btn-alias:disabled { opacity: 0.6; cursor: default; }
+      .btn-alias--ok { background: var(--accent-fill); color: #fff; border-color: transparent; }
+
       .tarjetas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
       .tarjeta { background: var(--surface-2); border: 1px solid var(--border);
         border-radius: var(--radius); padding: 12px 14px; }
@@ -408,6 +462,43 @@ export class PerfilComponent {
     () => this.fila()?.alias ?? this.me()?.alias ?? this.me()?.email?.split('@')[0] ?? 'jugador',
   );
   readonly inicial = computed(() => (this.alias()[0] ?? '?').toUpperCase());
+
+  /* --- Edición del alias --- */
+  readonly editandoAlias = signal(false);
+  readonly guardandoAlias = signal(false);
+  aliasBorrador = '';
+
+  editarAlias(): void {
+    this.aliasBorrador = this.alias();
+    this.editandoAlias.set(true);
+  }
+
+  cancelarAlias(): void {
+    this.editandoAlias.set(false);
+  }
+
+  async guardarAlias(): Promise<void> {
+    const nuevo = this.aliasBorrador.trim();
+    if (nuevo.length < 3) {
+      this.toast.error('El alias debe tener al menos 3 caracteres.');
+      return;
+    }
+    if (nuevo === this.alias()) {
+      this.editandoAlias.set(false);
+      return;
+    }
+
+    this.guardandoAlias.set(true);
+    try {
+      await this.perfil.cambiarAlias(nuevo);
+      this.toast.exito('Nombre actualizado.');
+      this.editandoAlias.set(false);
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudo cambiar el nombre.');
+    } finally {
+      this.guardandoAlias.set(false);
+    }
+  }
 
   readonly porcentaje = computed(() => this.fila()?.porcentaje ?? 0);
   readonly aciertos = computed(() => this.fila()?.aciertos ?? this.me()?.aciertos ?? 0);

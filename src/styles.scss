@@ -172,3 +172,44 @@ button {
         user-select: text;
     }
 }
+
+/* ============================================================
+   Scrollbar discreto y estético
+   Reemplaza la barra gruesa por defecto del navegador por una
+   delgada, redondeada y translúcida, acorde al tema. Aplica a
+   toda la app (modales, listas con overflow, tableros, etc.).
+   ============================================================ */
+
+/* Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+}
+
+/* Chrome, Edge, Safari */
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 999px;
+    /* Un borde transparente adelgaza visualmente el thumb y lo separa del borde. */
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+    background-clip: padding-box;
+}
+
+/* La esquina donde se cruzan las dos barras, sin fondo gris feo. */
+*::-webkit-scrollbar-corner {
+    background: transparent;
+}

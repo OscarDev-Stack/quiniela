@@ -1,11 +1,13 @@
 import { Injectable, inject } from '@angular/core';
-import { Auth, user } from '@angular/fire/auth';
+import { Auth } from '@angular/fire/auth';
 import {
     Firestore,
     collection,
     collectionData,
     doc,
     docData,
+    query,
+    orderBy,
 } from '@angular/fire/firestore';
 import { Functions, httpsCallable } from '@angular/fire/functions';
 import { Observable, of, combineLatest } from 'rxjs';
@@ -36,6 +38,17 @@ export class GruposService {
                 );
             }),
         );
+    }
+
+    /**
+     * Todos los grupos existentes ordenados por nombre. Solo el super admin
+     * puede leerlo: la regla de Firestore ahora permite `isAdmin()` en grupos.
+     * Usado en el panel de administración para que el super admin vea y
+     * gestione cualquier grupo sin necesidad de ser miembro.
+     */
+    todosLosGrupos(): Observable<Grupo[]> {
+        const q = query(collection(this.db, 'grupos'), orderBy('nombre'));
+        return collectionData(q, { idField: 'id' }) as Observable<Grupo[]>;
     }
 
     /** Un grupo por id (en vivo). */

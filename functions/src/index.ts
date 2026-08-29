@@ -314,11 +314,11 @@ export const crearPronostico = onCall(opcionesCall, async (req) => {
                 {
                     partidoId,
                     total: FieldValue.increment(-apuestaPrevia),
-                    [`porResultado.${resultadoPrevio}`]: FieldValue.increment(-apuestaPrevia),
-                    [`conteos.${resultadoPrevio}`]: FieldValue.increment(-1),
+                    porResultado: { [resultadoPrevio]: FieldValue.increment(-apuestaPrevia) },
+                    conteos: { [resultadoPrevio]: FieldValue.increment(-1) },
                     actualizado: FieldValue.serverTimestamp(),
                 },
-                { merge: true },
+                { mergeFields: ['partidoId', 'total', `porResultado.${resultadoPrevio}`, `conteos.${resultadoPrevio}`, 'actualizado'] },
             );
         }
 
@@ -329,11 +329,11 @@ export const crearPronostico = onCall(opcionesCall, async (req) => {
             {
                 partidoId,
                 total: FieldValue.increment(apuesta),
-                [`porResultado.${resultado}`]: FieldValue.increment(apuesta),
-                [`conteos.${resultado}`]: FieldValue.increment(1),
+                porResultado: { [resultado]: FieldValue.increment(apuesta) },
+                conteos: { [resultado]: FieldValue.increment(1) },
                 actualizado: FieldValue.serverTimestamp(),
             },
-            { merge: true },
+            { mergeFields: ['partidoId', 'total', `porResultado.${resultado}`, `conteos.${resultado}`, 'actualizado'] },
         );
 
         tx.set(ledgerRef, {
@@ -669,6 +669,7 @@ export const cerrarPartidos = onSchedule(cada(5), async () => {
             const bolsaSnap = await db.doc(`bolsas/${d.id}`).get();
             const total = Number(bolsaSnap.data()?.['total'] ?? 0);
             const porResultado = (bolsaSnap.data()?.['porResultado'] ?? {}) as Record<string, number>;
+            const conteos = (bolsaSnap.data()?.['conteos'] ?? {}) as Record<string, number>;
 
             // Cuánto pagaría cada 100 puntos apostados a ese resultado.
             const premioPor100: Record<string, number> = {};
@@ -681,6 +682,9 @@ export const cerrarPartidos = onSchedule(cada(5), async () => {
                 poolTotal: total,
                 porResultado,
                 premioPor100,
+                // Número de pronósticos por resultado: permite mostrar
+                // cuántas apuestas hay en cada opción en la vista pública.
+                conteos,
             });
             aJuego++;
         } else if (status === 'abierto') {
@@ -2104,6 +2108,49 @@ export const sincronizarHistoricos = onCall(opcionesCall, async (req) => {
 const PUNTOS_EXACTO = 5;
 const PUNTOS_RESULTADO = 3;
 
+/**
+ * Calcula los puntos de un cartón (marcadores del jugador) contra los
+ * resultados de una jornada. Los partidos sin resultado o aplazados no
+ * suman. La usan tanto la calificación oficial como la previa.
+ */
+function puntosDeCarton(
+    marcadores: Array<{ local: number; visitante: number }>,
+    partidos: Array<{
+        resultado?: string | null;
+        golesLocal?: number | null;
+        golesVisitante?: number | null;
+    }>,
+): { puntos: number; exactos: number } {
+    let puntos = 0;
+    let exactos = 0;
+
+    partidos.forEach((p, i) => {
+        // Un partido sin resultado o aplazado no suma ni resta.
+        if (!p.resultado || p.resultado === 'pospuesto') return;
+
+        const mio = marcadores[i];
+        if (!mio) return;
+
+        const acertoMarcador =
+            typeof p.golesLocal === 'number' &&
+            typeof p.golesVisitante === 'number' &&
+            mio.local === p.golesLocal &&
+            mio.visitante === p.golesVisitante;
+
+        if (acertoMarcador) {
+            puntos += PUNTOS_EXACTO;
+            exactos++;
+            return;
+        }
+
+        const miResultado =
+            mio.local > mio.visitante ? 'local' : mio.local < mio.visitante ? 'visitante' : 'empate';
+        if (miResultado === p.resultado) puntos += PUNTOS_RESULTADO;
+    });
+
+    return { puntos, exactos };
+}
+
 /** Guardar los pronósticos de la jornada en curso. */
 export const guardarQuiniela = onCall(opcionesCall, async (req) => {
     const uid = req.auth?.uid;
@@ -2194,44 +2241,31 @@ async function calificarQuinielas(
         const datos = doc.data() as Record<string, unknown>;
         const marcadores = (datos['marcadores'] as Array<{ local: number; visitante: number }>) ?? [];
 
-        let puntos = 0;
-        let exactos = 0;
-
-        jornada.partidos.forEach((partido, i) => {
-            const p = partido as {
+        const { puntos, exactos } = puntosDeCarton(
+            marcadores,
+            jornada.partidos as Array<{
                 resultado?: string | null;
                 golesLocal?: number | null;
                 golesVisitante?: number | null;
-            };
-            // Un partido aplazado no suma ni resta.
-            if (!p.resultado || p.resultado === 'pospuesto') return;
+            }>,
+        );
 
-            const mio = marcadores[i];
-            if (!mio) return;
-
-            const acertoMarcador =
-                typeof p.golesLocal === 'number' &&
-                typeof p.golesVisitante === 'number' &&
-                mio.local === p.golesLocal &&
-                mio.visitante === p.golesVisitante;
-
-            if (acertoMarcador) {
-                puntos += PUNTOS_EXACTO;
-                exactos++;
-                return;
-            }
-
-            const miResultado =
-                mio.local > mio.visitante ? 'local' : mio.local < mio.visitante ? 'visitante' : 'empate';
-            if (miResultado === p.resultado) puntos += PUNTOS_RESULTADO;
+        // Al calificar en firme, se limpia la previa del cartón: ya no aplica.
+        batch.update(doc.ref, {
+            puntos,
+            exactos,
+            estado: 'calificada',
+            puntosPrevia: FieldValue.delete(),
+            exactosPrevia: FieldValue.delete(),
         });
-
-        batch.update(doc.ref, { puntos, exactos, estado: 'calificada' });
         batch.set(
             torneoRef.collection('participantes').doc(String(datos['uid'])),
             {
                 puntosTorneo: FieldValue.increment(puntos),
                 exactos: FieldValue.increment(exactos),
+                // La previa de la jornada ya se materializó en puntosTorneo.
+                puntosPrevia: FieldValue.delete(),
+                exactosPrevia: FieldValue.delete(),
             },
             { merge: true },
         );
@@ -2240,6 +2274,104 @@ async function calificarQuinielas(
     await batch.commit();
     return { calificadas: pronosticos.size };
 }
+
+/* ============================================================
+   Previa de la quiniela (puntos parciales)
+   Calcula los puntos de la jornada EN CURSO con los resultados
+   capturados hasta ahora (aunque falten partidos) y los escribe en
+   campos SEPARADOS (puntosPrevia). No toca los puntos oficiales ni
+   el flujo de resolución/premios; solo alimenta la vista en vivo.
+   ============================================================ */
+export const previsualizarQuiniela = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const competicionId = String(req.data?.competicionId ?? '');
+    const jornadaId = String(req.data?.jornadaId ?? '');
+    if (!competicionId || !jornadaId) throw new HttpsError('invalid-argument', 'Faltan datos.');
+
+    // Permiso: admin global o gestor de la competición (igual que resolver).
+    const compRef = db.doc(`competiciones/${competicionId}`);
+    const jornadaRef = compRef.collection('jornadas').doc(jornadaId);
+    const [adminSnap, compSnap, jornadaSnap] = await Promise.all([
+        db.doc(`admins/${uid}`).get(),
+        compRef.get(),
+        jornadaRef.get(),
+    ]);
+    if (!compSnap.exists || !jornadaSnap.exists) {
+        throw new HttpsError('not-found', 'Competición o jornada inexistente.');
+    }
+    const gestores = (compSnap.data()?.['gestores'] as string[]) ?? [];
+    if (!adminSnap.exists && !gestores.includes(uid)) {
+        throw new HttpsError('permission-denied', 'No gestionas esta competición.');
+    }
+
+    const j = jornadaSnap.data() as JornadaDoc;
+
+    // Torneos quiniela de esta competición, parados en esta jornada.
+    const torneos = await db
+        .collection('torneos')
+        .where('competicionId', '==', competicionId)
+        .where('estado', '==', 'en-curso')
+        .get();
+
+    const afectados = torneos.docs.filter(
+        (d) =>
+            d.data()['modo'] === 'quiniela' &&
+            Number(d.data()['jornadaActual'] ?? 0) === j.numero,
+    );
+
+    let cartones = 0;
+    const partidos = j.partidos as Array<{
+        resultado?: string | null;
+        golesLocal?: number | null;
+        golesVisitante?: number | null;
+    }>;
+
+    for (const torneoDoc of afectados) {
+        const torneoRef = torneoDoc.ref;
+        // Solo los cartones aún pendientes: los calificados ya tienen su
+        // puntaje oficial y no deben tocarse.
+        const quinielas = await torneoRef
+            .collection('quinielas')
+            .where('jornada', '==', j.numero)
+            .where('estado', '==', 'pendiente')
+            .get();
+        if (quinielas.empty) continue;
+
+        const batch = db.batch();
+        // Acumula la previa por participante para esta jornada.
+        const previaPorUid = new Map<string, { puntos: number; exactos: number }>();
+
+        for (const doc of quinielas.docs) {
+            const datos = doc.data() as Record<string, unknown>;
+            const marcadores =
+                (datos['marcadores'] as Array<{ local: number; visitante: number }>) ?? [];
+
+            const { puntos, exactos } = puntosDeCarton(marcadores, partidos);
+
+            // Puntos de previa en el propio cartón (no cambia su estado).
+            batch.update(doc.ref, { puntosPrevia: puntos, exactosPrevia: exactos });
+            previaPorUid.set(String(datos['uid']), { puntos, exactos });
+            cartones++;
+        }
+
+        // Escribe la previa por participante con SET absoluto (no increment):
+        // así, aunque se llame varias veces al capturar más resultados, el
+        // valor siempre refleja el estado actual sin acumular de más.
+        previaPorUid.forEach((v, participanteUid) => {
+            batch.set(
+                torneoRef.collection('participantes').doc(participanteUid),
+                { puntosPrevia: v.puntos, exactosPrevia: v.exactos },
+                { merge: true },
+            );
+        });
+
+        await batch.commit();
+    }
+
+    return { ok: true, cartones };
+});
 
 /**
  * Cierra un torneo de quiniela y reparte la bolsa entre quienes
@@ -2375,6 +2507,54 @@ export const consultarTorneo = onCall(opcionesCall, async (req) => {
         estado: String(t['estado'] ?? 'inscripcion'),
         inscritos: participantes.data().count,
     };
+});
+
+/* ============================================================
+   Cambiar mi alias (nombre público)
+   El usuario no puede escribir su propio documento (las reglas solo
+   dejan al admin), así que el cambio pasa por aquí. Se propaga al
+   ranking para que el nombre nuevo se vea de inmediato.
+   ============================================================ */
+export const cambiarAlias = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const alias = String(req.data?.alias ?? '').trim();
+    if (alias.length < 3) {
+        throw new HttpsError('invalid-argument', 'El alias debe tener al menos 3 caracteres.');
+    }
+    if (alias.length > 20) {
+        throw new HttpsError('invalid-argument', 'El alias no puede pasar de 20 caracteres.');
+    }
+
+    const userRef = db.doc(`users/${uid}`);
+    const snap = await userRef.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'No encontramos tu perfil.');
+
+    await userRef.update({ alias });
+    // Refresca la fila del ranking para que el alias nuevo aparezca ya.
+    await actualizarRanking([uid]);
+
+    // Propaga el alias a los grupos del usuario. El alias se copia en cada
+    // grupo (miembros y tabla) al inscribirse, así que hay que actualizarlo
+    // ahí también; si no, seguiría apareciendo el nombre viejo en los grupos.
+    const grupos = (snap.data()?.['grupos'] as string[] | undefined) ?? [];
+    for (const grupoId of grupos) {
+        // Miembro: siempre existe si el usuario pertenece al grupo. merge para
+        // no pisar el resto de sus campos (rol, entradaAt).
+        await db
+            .doc(`grupos/${grupoId}/miembros/${uid}`)
+            .set({ alias }, { merge: true })
+            .catch(() => undefined);
+        // Tabla: puede no existir aún (si no ha jugado en el grupo). Usamos
+        // update para NO crearla vacía; si no existe, el catch lo ignora.
+        await db
+            .doc(`grupos/${grupoId}/tabla/${uid}`)
+            .update({ alias })
+            .catch(() => undefined);
+    }
+
+    return { ok: true, alias };
 });
 
 /* ============================================================
@@ -3168,9 +3348,13 @@ export const crearBracket = onCall(opcionesCall, async (req) => {
 
     const grupoBk = typeof req.data?.grupoId === 'string' && req.data.grupoId ? req.data.grupoId : null;
     if (grupoBk) {
-        const grupo = (await db.doc(`grupos/${grupoBk}`).get()).data();
-        if (!grupo) throw new HttpsError('not-found', 'El grupo no existe.');
-        if (grupo['adminUid'] !== uid) {
+        const [grupoSnap, adminSnap] = await Promise.all([
+            db.doc(`grupos/${grupoBk}`).get(),
+            db.doc(`admins/${uid}`).get(),
+        ]);
+        if (!grupoSnap.exists) throw new HttpsError('not-found', 'El grupo no existe.');
+        const esAdminGrupo = grupoSnap.data()?.['adminUid'] === uid;
+        if (!esAdminGrupo && !adminSnap.exists) {
             throw new HttpsError('permission-denied', 'Solo el administrador del grupo puede crear eliminatorias para él.');
         }
     } else {
@@ -3293,6 +3477,20 @@ export const asignarDuenoBracket = onCall({ ...opcionesCall, secrets: [telegramT
 
         let nuevo: DuenoBk;
         if (duenoUid) {
+            // Si el bracket es de un grupo, solo se puede asignar a miembros de
+            // ese grupo. Si no, el asignado no podría siquiera ver el bracket.
+            const grupoId = b['grupoId'];
+            if (typeof grupoId === 'string' && grupoId) {
+                const esMiembro = (
+                    await tx.get(db.doc(`grupos/${grupoId}/miembros/${duenoUid}`))
+                ).exists;
+                if (!esMiembro) {
+                    throw new HttpsError(
+                        'failed-precondition',
+                        'Solo puedes asignar equipos a miembros de este grupo.',
+                    );
+                }
+            }
             // Participante registrado: buscamos su alias y lo dejamos invitado.
             const userSnap = await tx.get(db.doc(`users/${duenoUid}`));
             const alias = userSnap.exists
@@ -3460,10 +3658,17 @@ export const capturarPartidoBracket = onCall(opcionesCall, async (req) => {
 
     const ref = db.doc(`brackets/${bracketId}`);
 
+    // Fuera de la transacción: si una llave se resolvió, refrescamos los
+    // puntos parciales de cada pronóstico para que la tabla "Pronósticos de
+    // todos" se actualice ronda a ronda, no solo al finalizar.
+    let llaveResuelta = false;
+    let modoDuenos = false;
+
     await db.runTransaction(async (tx) => {
         const snap = await tx.get(ref);
         if (!snap.exists) throw new HttpsError('not-found', 'El bracket no existe.');
         const b = snap.data() as Record<string, unknown>;
+        modoDuenos = b['modo'] === 'duenos';
 
         const esAdmin = (await db.doc(`admins/${uid}`).get()).exists;
         const esGestor = (b['gestores'] as string[] | undefined)?.includes(uid);
@@ -3492,6 +3697,7 @@ export const capturarPartidoBracket = onCall(opcionesCall, async (req) => {
             llave.resueltoPor = res.por;
             avanzarGanadorBk(llaves, llave, res.ganador, String(config['avance'] ?? 'fijo'));
             if (esFinal) ganadorAlias = res.ganador.nombre;
+            llaveResuelta = true;
         }
 
         const patch: Record<string, unknown> = { llaves };
@@ -3506,8 +3712,54 @@ export const capturarPartidoBracket = onCall(opcionesCall, async (req) => {
         tx.update(ref, patch);
     });
 
+    // Recalcular puntos parciales tras resolver una llave. En modo dueños no
+    // hay pronósticos que calificar (gana el dueño del campeón), así que se
+    // omite. El reparto de bolsa/posición/premio sigue en calificarBracket.
+    if (llaveResuelta && !modoDuenos) {
+        await recalcularPuntosBracket(ref);
+    }
+
     return { ok: true };
 });
+
+/**
+ * Recalcula los puntos parciales de cada pronóstico de un bracket según las
+ * llaves ya resueltas hasta el momento, y los escribe en la subcolección
+ * `pronosticos`. Esto mantiene actualizada la tabla "Pronósticos de todos"
+ * conforme cierran las rondas, sin esperar a la calificación final (que es
+ * la que reparte la bolsa y fija posiciones/premios).
+ */
+async function recalcularPuntosBracket(
+    ref: FirebaseFirestore.DocumentReference,
+): Promise<void> {
+    const snap = await ref.get();
+    if (!snap.exists) return;
+    const b = snap.data() as Record<string, unknown>;
+
+    const llaves = b['llaves'] as LlaveBk[];
+    const puntaje = b['puntaje'] as PuntajeBk;
+    if (!llaves || !puntaje) return;
+
+    const pronosticos = await ref.collection('pronosticos').get();
+    if (pronosticos.empty) return;
+
+    const batch = db.batch();
+    pronosticos.docs.forEach((doc) => {
+        const p = doc.data() as Record<string, unknown>;
+        // No pisar a quien ya quedó calificado (reparto final ya hecho).
+        if (p['estado'] === 'calificado') return;
+
+        const d = calificarBk(
+            llaves,
+            (p['avances'] ?? {}) as Record<string, string>,
+            p['marcadores'] as Record<string, { local: number; visitante: number }> | undefined,
+            puntaje,
+        );
+        batch.update(doc.ref, { puntos: d.total });
+    });
+
+    await batch.commit();
+}
 
 /* ============================================================
    BRACKETS — Fase 3: pronóstico del jugador
@@ -4321,22 +4573,28 @@ export const buscarUsuariosPorAlias = onCall(opcionesCall, async (req) => {
         throw new HttpsError('permission-denied', 'No tienes permiso para buscar usuarios.');
     }
 
-    // Búsqueda por prefijo de alias (rango de Firestore). Case-sensitive:
-    // devolvemos coincidencias que empiezan con el texto tal cual.
-    // Nota: filtramos por rango de alias solamente (no combinamos con otro
-    // campo) para no requerir un índice compuesto.
-    const fin = texto + '\uf8ff';
+    // Búsqueda case-insensitive por "contiene". Firestore no soporta
+    // búsquedas insensibles a mayúsculas de forma nativa, así que traemos los
+    // usuarios validados y filtramos en memoria con el texto en minúsculas.
+    // El volumen es bajo (solo lo usa un admin de grupo para agregar gente),
+    // así que un límite generoso es suficiente y evita migrar datos.
+    const buscado = texto.toLowerCase();
     const snap = await db
         .collection('users')
-        .where('alias', '>=', texto)
-        .where('alias', '<=', fin)
-        .limit(15)
+        .where('validada', '==', true)
+        .limit(500)
         .get();
 
     const resultados = snap.docs
-        .map((d) => ({ uid: d.id, alias: String(d.data()['alias'] ?? ''), validada: d.data()['validada'] === true }))
-        .filter((r) => r.uid !== uid && r.validada) // no me incluyo; solo validados
-        .map((r) => ({ uid: r.uid, alias: r.alias }))
+        .map((d) => ({ uid: d.id, alias: String(d.data()['alias'] ?? '') }))
+        .filter((r) => r.uid !== uid && r.alias.toLowerCase().includes(buscado))
+        // Primero los que empiezan con el texto, luego el resto; ambos por alias.
+        .sort((a, b) => {
+            const aEmpieza = a.alias.toLowerCase().startsWith(buscado) ? 0 : 1;
+            const bEmpieza = b.alias.toLowerCase().startsWith(buscado) ? 0 : 1;
+            if (aEmpieza !== bEmpieza) return aEmpieza - bEmpieza;
+            return a.alias.localeCompare(b.alias, 'es');
+        })
         .slice(0, 10);
 
     return { usuarios: resultados };
@@ -4362,9 +4620,13 @@ export const crearTorneo = onCall(opcionesCall, async (req) => {
 
     // Validación de permiso según destino.
     if (grupoId) {
-        const grupo = (await db.doc(`grupos/${grupoId}`).get()).data();
-        if (!grupo) throw new HttpsError('not-found', 'El grupo no existe.');
-        if (grupo['adminUid'] !== uid) {
+        const [grupoSnap, adminSnap] = await Promise.all([
+            db.doc(`grupos/${grupoId}`).get(),
+            db.doc(`admins/${uid}`).get(),
+        ]);
+        if (!grupoSnap.exists) throw new HttpsError('not-found', 'El grupo no existe.');
+        const esAdminGrupo = grupoSnap.data()?.['adminUid'] === uid;
+        if (!esAdminGrupo && !adminSnap.exists) {
             throw new HttpsError('permission-denied', 'Solo el administrador del grupo puede crear torneos para él.');
         }
     } else {

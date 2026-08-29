@@ -5,8 +5,11 @@ import {
     user,
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
+    signInWithPopup,
+    GoogleAuthProvider,
     signOut,
     sendPasswordResetEmail,
+    UserCredential,
 } from '@angular/fire/auth';
 
 @Injectable({ providedIn: 'root' })
@@ -23,6 +26,19 @@ export class AuthService {
 
     register(email: string, password: string) {
         return createUserWithEmailAndPassword(this.auth, email, password);
+    }
+
+    /**
+     * Inicia sesión (o registra) con la cuenta de Google mediante un popup.
+     * Devuelve la credencial completa: el llamador decide si es la primera
+     * vez del usuario para crear su documento en Firestore.
+     */
+    loginConGoogle(): Promise<UserCredential> {
+        const provider = new GoogleAuthProvider();
+        // Fuerza a elegir cuenta cada vez, en lugar de reusar la sesión activa
+        // del navegador sin preguntar.
+        provider.setCustomParameters({ prompt: 'select_account' });
+        return signInWithPopup(this.auth, provider);
     }
 
     logout() {

@@ -1,4 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
@@ -11,10 +12,15 @@ import { NavComponent } from '../../shared/nav.component';
 @Component({
   selector: 'app-admin-layout',
   standalone: true,
-  imports: [RouterOutlet, NavComponent],
+  imports: [RouterOutlet, NavComponent, CommonModule],
   template: `
     <div class="admin screen">
-      <app-nav [minimal]="true" [title]="titulo()" />
+      <!-- Las pantallas de "crear" traen su propio encabezado con flecha de
+           regreso y título específico, así que aquí no mostramos el nav para
+           no duplicar la barra. -->
+      @if (!esCrear()) {
+        <app-nav [minimal]="true" [title]="titulo()" />
+      }
       <router-outlet />
     </div>
   `,
@@ -27,6 +33,8 @@ import { NavComponent } from '../../shared/nav.component';
 export class AdminLayoutComponent {
   private readonly router = inject(Router);
   readonly titulo = signal('Administración');
+  /** True en las rutas de crear: ahí el hijo ya trae su propio encabezado. */
+  readonly esCrear = signal(false);
 
   private readonly nombres: Record<string, string> = {
     partidos: 'Partidos',
@@ -35,6 +43,7 @@ export class AdminLayoutComponent {
     crear: 'Crear',
     competiciones: 'Ligas',
     brackets: 'Eliminatorias',
+    grupos: 'Grupos',
   };
 
   constructor() {
@@ -47,6 +56,7 @@ export class AdminLayoutComponent {
 
   private actualizarTitulo(url: string): void {
     const seg = url.split('?')[0].split('/').filter(Boolean).pop() ?? '';
+    this.esCrear.set(seg === 'crear');
     this.titulo.set(this.nombres[seg] ?? 'Administración');
   }
 }

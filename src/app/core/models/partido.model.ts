@@ -32,6 +32,8 @@ export interface Partido {
     poolTotal?: number;
     /* Se publican al iniciar el partido. */
     porResultado?: Record<string, number>;
+    /** Número de pronósticos por resultado (se publica al iniciar). */
+    conteos?: Record<string, number>;
     premioPor100?: Record<string, number>;
     prizes?: PremioResultado[];
     resultadoOficial?: string;

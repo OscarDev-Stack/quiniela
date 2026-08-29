@@ -68,6 +68,37 @@ export class AdminService {
         shareReplay({ bufferSize: 1, refCount: false }),
     );
 
+    /**
+     * Solo los usuarios sin validar. Sirve para el badge de "Usuarios", que
+     * antes reutilizaba pendientes$ (API + usuarios) y podía mostrar un número
+     * que no correspondía a ningún usuario por validar.
+     */
+    readonly usuariosPendientes$: Observable<number> = this.userSvc.isAdmin$.pipe(
+        switchMap((esAdmin) =>
+            esAdmin
+                ? this.getUsers().pipe(map((usuarios) => usuarios.filter((u) => !u.validada).length))
+                : of(0),
+        ),
+        shareReplay({ bufferSize: 1, refCount: false }),
+    );
+
+    /** Solo los partidos con resultado por confirmar o alertas de la API. */
+    readonly partidosPendientes$: Observable<number> = this.userSvc.isAdmin$.pipe(
+        switchMap((esAdmin) =>
+            esAdmin
+                ? this.getPartidos().pipe(
+                      map(
+                          (partidos) =>
+                              partidos.filter(
+                                  (p) => !p.liquidado && (!!p.resultadoPropuesto || !!p.alertaApi),
+                              ).length,
+                      ),
+                  )
+                : of(0),
+        ),
+        shareReplay({ bufferSize: 1, refCount: false }),
+    );
+
     /** Totales apostados por partido (colección privada). */
     getBolsas(): Observable<Bolsa[]> {
         return collectionData(collection(this.db, 'bolsas'), {

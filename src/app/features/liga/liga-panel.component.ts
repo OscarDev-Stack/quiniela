@@ -245,6 +245,14 @@ export class LigaPanelComponent {
   async guardar(competicionId: string, j: Jornada): Promise<void> {
     try {
       await this.service.guardarResultados(competicionId, j.id, this.limpiar(j.partidos));
+      // Recalcula la previa de las quinielas con lo capturado hasta ahora,
+      // para que los jugadores vean sus puntos parciales sin esperar a que
+      // se publique toda la jornada. Si falla, no bloquea el guardado.
+      try {
+        await this.service.previsualizarQuiniela(competicionId, j.id);
+      } catch {
+        // La previa es un extra; si falla, los resultados ya quedaron guardados.
+      }
       this.toast.exito('Resultados guardados.');
     } catch {
       this.toast.error('No se pudieron guardar los resultados.');

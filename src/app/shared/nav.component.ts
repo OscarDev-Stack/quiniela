@@ -8,6 +8,7 @@ import { AuthService } from '../core/services/auth.service';
 import { UserService } from '../core/services/user.service';
 import { AdminService } from '../core/services/admin.service';
 import { TorneosService } from '../core/services/torneos.service';
+import { ConfirmarService } from './confirmar.service';
 
 @Component({
   selector: 'app-nav',
@@ -34,7 +35,7 @@ import { TorneosService } from '../core/services/torneos.service';
           <app-selector-contexto />
         }
 
-        <div class="menu-admin">
+        <div class="menu-admin" [class.menu-admin--abierto]="menuAbierto()">
           <button class="icono-top" (click)="menuAbierto.set(!menuAbierto())" aria-label="Menú">
             <i class="ti ti-dots-vertical"></i>
             @if (pendientes() > 0) { <span class="punto-rojo"></span> }
@@ -52,15 +53,24 @@ import { TorneosService } from '../core/services/torneos.service';
               @if (isAdmin()) {
                 <span class="menu-sep"></span>
                 <span class="menu-tit">Administración</span>
-                <a routerLink="/admin/partidos" (click)="menuAbierto.set(false)"><i class="ti ti-ball-football"></i> Partidos</a>
+                <a routerLink="/admin/partidos" (click)="menuAbierto.set(false)">
+                  <i class="ti ti-ball-football"></i> Partidos
+                  @if (partidosPendientes() > 0) { <span class="menu-badge">{{ partidosPendientes() }}</span> }
+                </a>
                 <a routerLink="/admin/usuarios" (click)="menuAbierto.set(false)">
                   <i class="ti ti-users"></i> Usuarios
-                  @if (pendientes() > 0) { <span class="menu-badge">{{ pendientes() }}</span> }
+                  @if (usuariosPendientes() > 0) { <span class="menu-badge">{{ usuariosPendientes() }}</span> }
                 </a>
                 <a routerLink="/admin/torneos" (click)="menuAbierto.set(false)"><i class="ti ti-tournament"></i> Torneos</a>
                 <a routerLink="/admin/competiciones" (click)="menuAbierto.set(false)"><i class="ti ti-trophy"></i> Ligas</a>
+                <a routerLink="/admin/grupos" (click)="menuAbierto.set(false)"><i class="ti ti-users-group"></i> Grupos</a>
                 <a routerLink="/admin/brackets" (click)="menuAbierto.set(false)"><i class="ti ti-sitemap"></i> Eliminatorias</a>
               }
+
+              <span class="menu-sep"></span>
+              <button type="button" class="menu-salir" (click)="cerrarSesion()">
+                <i class="ti ti-logout"></i> Cerrar sesión
+              </button>
             </div>
           }
         </div>
@@ -143,11 +153,16 @@ import { TorneosService } from '../core/services/torneos.service';
       }
 
       /* Menú desplegable de administración. */
+      /* Al abrir, el contenedor sube su z-index para que el menú quede encima
+         del contenido de la página, sin salirse de la app (queda pegado al
+         botón de tres puntos, no a la orilla de la ventana). */
       .menu-admin { position: relative; flex-shrink: 0; }
-      .menu-fondo { position: fixed; inset: 0; z-index: 190; }
+      .menu-admin--abierto { z-index: 2000; }
+      .menu-fondo { position: fixed; inset: 0; z-index: 1990; }
       .menu-lista {
-        position: absolute; top: calc(100% + 6px); right: 0; z-index: 200;
-        min-width: 190px; display: flex; flex-direction: column;
+        position: absolute; top: calc(100% + 6px); right: 0; z-index: 2001;
+        min-width: 200px; max-width: min(260px, calc(100vw - 24px));
+        display: flex; flex-direction: column;
         background: var(--surface-2); border: 1px solid var(--border);
         border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
         padding: 6px; animation: menuAparece 0.15s ease;
@@ -165,6 +180,15 @@ import { TorneosService } from '../core/services/torneos.service';
       }
       .menu-lista a:hover { background: var(--surface-1); }
       .menu-lista a i { font-size: 18px; color: var(--text-secondary); }
+      /* Cerrar sesión: mismo aspecto que las filas del menú, en tono peligro. */
+      .menu-salir {
+        display: flex; align-items: center; gap: 10px; width: 100%;
+        padding: 10px; border-radius: 8px; cursor: pointer; text-align: left;
+        border: none; background: transparent; color: var(--danger-text);
+        font-size: 14px; font-family: inherit;
+      }
+      .menu-salir:hover { background: var(--surface-1); }
+      .menu-salir i { font-size: 18px; }
       .menu-badge {
         margin-left: auto; font-size: 11px; font-weight: 700; min-width: 18px; height: 18px;
         display: flex; align-items: center; justify-content: center; padding: 0 5px;
@@ -235,6 +259,7 @@ export class NavComponent {
   private readonly torneos = inject(TorneosService);
   private readonly router = inject(Router);
   private readonly location = inject(Location);
+  private readonly confirmar = inject(ConfirmarService);
 
   /** Muestra flecha de regreso en vez del logo. */
   readonly back = input(false);
@@ -253,8 +278,12 @@ export class NavComponent {
   readonly me = toSignal(this.users.me$, { initialValue: null });
   readonly isAdmin = toSignal(this.users.isAdmin$, { initialValue: false });
   readonly esGestor = toSignal(this.users.esGestor$, { initialValue: false });
-  /** Resultados de la API por confirmar y alertas de partidos. */
+  /** Total combinado (API + usuarios): enciende el punto rojo del menú. */
   readonly pendientes = toSignal(this.admin.pendientes$, { initialValue: 0 });
+  /** Solo usuarios sin validar: badge de la opción "Usuarios". */
+  readonly usuariosPendientes = toSignal(this.admin.usuariosPendientes$, { initialValue: 0 });
+  /** Solo partidos con resultado por confirmar: badge de "Partidos". */
+  readonly partidosPendientes = toSignal(this.admin.partidosPendientes$, { initialValue: 0 });
   /** Torneos donde falta elegir equipo. */
   readonly pendientesTorneos = toSignal(this.torneos.pendientes$, { initialValue: 0 });
   /** La pestaña de torneos solo aparece si participo en alguno. */
@@ -283,5 +312,18 @@ export class NavComponent {
     }
   }
 
+  /** Cierra sesión desde el menú de tres puntos, con confirmación. */
+  async cerrarSesion(): Promise<void> {
+    this.menuAbierto.set(false);
+    const ok = await this.confirmar.pedir({
+      titulo: 'Cerrar sesión',
+      mensaje: 'Tendrás que volver a entrar para seguir jugando.',
+      aceptar: 'Cerrar sesión',
+      peligro: true,
+    });
+    if (!ok) return;
 
+    await this.auth.logout();
+    this.router.navigate(['/login']);
+  }
 }

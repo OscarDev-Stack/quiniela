@@ -61,7 +61,7 @@ const PUNTOS_RESULTADO = 3;
                     }
                   </td>
                 }
-                <td class="col-total">{{ c.puntos ?? 0 }}</td>
+                <td class="col-total">{{ puntosCarton(c) }}</td>
               </tr>
             } @empty {
               <tr>
@@ -130,10 +130,18 @@ export class CartonesJornadaComponent {
     readonly quinielas = input.required<Quiniela[]>();
     readonly miUid = input<string | null>(null);
 
+    /**
+     * Puntos a mostrar de un cartón: el oficial si la jornada ya se resolvió,
+     * o la previa (resultados parciales) mientras sigue en curso.
+     */
+    puntosCarton(c: Quiniela): number {
+        return c.puntos ?? c.puntosPrevia ?? 0;
+    }
+
     readonly cartones = computed(() =>
         [...this.quinielas()].sort((a, b) => {
-            const pa = a.puntos ?? 0;
-            const pb = b.puntos ?? 0;
+            const pa = this.puntosCarton(a);
+            const pb = this.puntosCarton(b);
             if (pa !== pb) return pb - pa;
             return a.alias.localeCompare(b.alias, 'es');
         }),

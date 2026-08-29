@@ -118,9 +118,9 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
                 @for (o of resultadosDe(m); track o) {
                   <div class="premio-cell">
                     <div class="premio-label">{{ nombreResultado(m, o) }}</div>
-                    @if (netoPor100(m, o); as n) {
-                      <div class="premio-val">+{{ n | number }}</div>
-                      <div class="premio-sub">por cada 100</div>
+                    @if (hayApuestas(m, o)) {
+                      <div class="premio-val">+{{ netoPor100(m, o) | number }}</div>
+                      <div class="premio-sub">{{ m.conteos?.[o] ?? 0 }} apuesta(s)</div>
                     } @else {
                       <div class="premio-val soft">—</div>
                       <div class="premio-sub">sin apuestas</div>
@@ -378,6 +378,21 @@ export class PartidosListComponent {
   netoPor100(m: Partido, r: string): number {
     const bruto = m.premioPor100?.[r] ?? 0;
     return bruto > 0 ? bruto - 100 : 0;
+  }
+
+  /**
+   * Indica si hay al menos una apuesta registrada en este resultado.
+   *
+   * El bug anterior usaba `netoPor100` directamente en un `@if(... ; as n)`,
+   * lo cual trataba el valor 0 como falsy y mostraba "sin apuestas" incluso
+   * cuando SÍ había apuestas pero el premio neto era 0 (ej: todos apostaron
+   * al mismo resultado → premioPor100 = 100 → neto = 0).
+   *
+   * Ahora verificamos si `porResultado[r]` tiene un monto > 0, lo que indica
+   * que al menos alguien apostó a esa opción, independientemente del premio.
+   */
+  hayApuestas(m: Partido, r: string): boolean {
+    return (m.porResultado?.[r] ?? 0) > 0;
   }
 
   nombreResultado(m: Partido, r: string): string {
