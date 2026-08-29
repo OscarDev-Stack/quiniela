@@ -3329,9 +3329,13 @@ export const crearBracket = onCall(opcionesCall, async (req) => {
 
     const grupoBk = typeof req.data?.grupoId === 'string' && req.data.grupoId ? req.data.grupoId : null;
     if (grupoBk) {
-        const grupo = (await db.doc(`grupos/${grupoBk}`).get()).data();
-        if (!grupo) throw new HttpsError('not-found', 'El grupo no existe.');
-        if (grupo['adminUid'] !== uid) {
+        const [grupoSnap, adminSnap] = await Promise.all([
+            db.doc(`grupos/${grupoBk}`).get(),
+            db.doc(`admins/${uid}`).get(),
+        ]);
+        if (!grupoSnap.exists) throw new HttpsError('not-found', 'El grupo no existe.');
+        const esAdminGrupo = grupoSnap.data()?.['adminUid'] === uid;
+        if (!esAdminGrupo && !adminSnap.exists) {
             throw new HttpsError('permission-denied', 'Solo el administrador del grupo puede crear eliminatorias para él.');
         }
     } else {
@@ -4577,9 +4581,13 @@ export const crearTorneo = onCall(opcionesCall, async (req) => {
 
     // Validación de permiso según destino.
     if (grupoId) {
-        const grupo = (await db.doc(`grupos/${grupoId}`).get()).data();
-        if (!grupo) throw new HttpsError('not-found', 'El grupo no existe.');
-        if (grupo['adminUid'] !== uid) {
+        const [grupoSnap, adminSnap] = await Promise.all([
+            db.doc(`grupos/${grupoId}`).get(),
+            db.doc(`admins/${uid}`).get(),
+        ]);
+        if (!grupoSnap.exists) throw new HttpsError('not-found', 'El grupo no existe.');
+        const esAdminGrupo = grupoSnap.data()?.['adminUid'] === uid;
+        if (!esAdminGrupo && !adminSnap.exists) {
             throw new HttpsError('permission-denied', 'Solo el administrador del grupo puede crear torneos para él.');
         }
     } else {
