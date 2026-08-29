@@ -2,6 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { Firestore, doc, getDoc, setDoc, serverTimestamp } from '@angular/fire/firestore';
+import { AuthCredential } from '@angular/fire/auth';
 import { AuthService } from '../../core/services/auth.service';
 import { APP_VERSION } from '../../core/version';
 
@@ -103,6 +104,50 @@ import { APP_VERSION } from '../../core/version';
         </p>
       </div>
       <p class="version">v{{ version }}</p>
+
+      <!-- Vinculación: el correo ya existe con contraseña y el usuario quiere
+           entrar con Google. Le pedimos su contraseña para unir ambos métodos. -->
+      @if (mostrarVinculo()) {
+        <div class="vinc-fondo" (click)="cancelarVinculo()"></div>
+        <div class="vinc-modal">
+          <div class="vinc-ico"><i class="ti ti-link"></i></div>
+          <h2 class="vinc-tit">Conecta tu cuenta de Google</h2>
+          <p class="vinc-txt">
+            Ya tienes una cuenta con <strong>{{ correoVincular() }}</strong> creada con
+            contraseña. Escríbela una vez para unir tu acceso con Google; luego podrás
+            entrar con cualquiera de los dos.
+          </p>
+
+          @if (error()) {
+            <div class="auth-error"><i class="ti ti-alert-circle"></i> {{ error() }}</div>
+          }
+
+          <form (ngSubmit)="confirmarVinculo()">
+            <label class="field">
+              <span class="field-label">Tu contraseña</span>
+              <span class="input-wrap">
+                <i class="ti ti-lock input-ico"></i>
+                <input
+                  type="password"
+                  name="passwordVincular"
+                  [(ngModel)]="passwordVincular"
+                  required
+                  autocomplete="current-password"
+                  placeholder="••••••••"
+                />
+              </span>
+            </label>
+
+            <button type="submit" class="btn-primary" [disabled]="loading() || !passwordVincular">
+              {{ loading() ? 'Conectando…' : 'Conectar cuentas' }}
+            </button>
+          </form>
+
+          <button type="button" class="vinc-cancelar" [disabled]="loading()" (click)="cancelarVinculo()">
+            Cancelar
+          </button>
+        </div>
+      }
     </div>
   `,
   styles: [
@@ -202,6 +247,35 @@ import { APP_VERSION } from '../../core/version';
       .auth-alt--fuera { margin-top: 20px; }
       .auth-alt a { color: var(--accent-text); text-decoration: none; font-weight: 600; }
       .auth-alt a:hover { text-decoration: underline; }
+
+      /* Modal de vinculación de Google con la cuenta de correo existente */
+      .vinc-fondo {
+        position: fixed; inset: 0; z-index: 2000;
+        background: rgba(0, 0, 0, 0.55);
+      }
+      .vinc-modal {
+        position: fixed; z-index: 2001;
+        top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: min(400px, calc(100vw - 32px));
+        background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: 18px; padding: 24px 22px;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+      }
+      .vinc-ico {
+        width: 52px; height: 52px; border-radius: 14px; margin: 0 auto 14px;
+        display: flex; align-items: center; justify-content: center; font-size: 26px;
+        background: var(--accent-bg); color: var(--accent-text);
+      }
+      .vinc-tit { font-size: 18px; font-weight: 700; text-align: center; margin: 0 0 8px; }
+      .vinc-txt { font-size: 13px; color: var(--text-secondary); text-align: center; margin: 0 0 18px; line-height: 1.55; }
+      .vinc-txt strong { color: var(--text-primary); }
+      .vinc-cancelar {
+        width: 100%; margin-top: 10px; padding: 11px; cursor: pointer;
+        border: none; background: transparent; color: var(--text-secondary);
+        font-size: 14px; font-weight: 600;
+      }
+      .vinc-cancelar:hover { color: var(--text-primary); }
+      .vinc-cancelar:disabled { opacity: 0.6; cursor: default; }
     `,
   ],
 })
@@ -215,6 +289,12 @@ export class LoginComponent {
   password = '';
   readonly loading = signal(false);
   readonly error = signal('');
+
+  /* --- Vinculación de Google con cuenta de correo existente --- */
+  readonly mostrarVinculo = signal(false);
+  readonly correoVincular = signal('');
+  passwordVincular = '';
+  private credGooglePendiente: AuthCredential | null = null;
 
   async onSubmit(): Promise<void> {
     this.error.set('');
@@ -245,33 +325,87 @@ export class LoginComponent {
     this.loading.set(true);
     try {
       const cred = await this.auth.loginConGoogle();
-      const u = cred.user;
-
-      // ¿Ya existe su documento? Solo lo creamos la primera vez.
-      const ref = doc(this.db, 'users', u.uid);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) {
-        await setDoc(ref, {
-          email: u.email ?? '',
-          // Nombre de Google como alias inicial; si no viene, usamos la
-          // parte local del correo como respaldo.
-          alias: u.displayName ?? u.email?.split('@')[0] ?? 'Jugador',
-          rol: 'user',
-          validada: false,
-          bloqueado: false,
-          puntos: 0,
-          createdAt: serverTimestamp(),
-        });
-        // Avisa a los administradores que hay una cuenta por validar.
-        await this.auth.avisarRegistro();
-      }
-
-      await this.entrar();
+      await this.trasAutenticar(cred);
     } catch (e: unknown) {
-      this.error.set(this.mapErrorGoogle((e as { code?: string })?.code));
+      const code = (e as { code?: string })?.code;
+      // El correo ya existe con contraseña: pedimos la contraseña para
+      // vincular Google a esa misma cuenta en vez de bloquear.
+      if (code === 'auth/account-exists-with-different-credential') {
+        const credencial = this.auth.credencialGoogleDeError(e);
+        const correo =
+          (e as { customData?: { email?: string } })?.customData?.email ?? '';
+        if (credencial && correo) {
+          this.credGooglePendiente = credencial;
+          this.correoVincular.set(correo);
+          this.passwordVincular = '';
+          this.mostrarVinculo.set(true);
+        } else {
+          this.error.set(this.mapErrorGoogle(code));
+        }
+      } else {
+        this.error.set(this.mapErrorGoogle(code));
+      }
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /**
+   * Confirma la vinculación: inicia sesión con la contraseña de la cuenta
+   * existente y le engancha la credencial de Google guardada. Deja al usuario
+   * con ambos métodos activos sobre la misma cuenta.
+   */
+  async confirmarVinculo(): Promise<void> {
+    if (!this.credGooglePendiente || !this.passwordVincular) return;
+    this.error.set('');
+    this.loading.set(true);
+    try {
+      const cred = await this.auth.vincularConContrasena(
+        this.correoVincular(),
+        this.passwordVincular,
+        this.credGooglePendiente,
+      );
+      this.mostrarVinculo.set(false);
+      this.credGooglePendiente = null;
+      await this.trasAutenticar(cred);
+    } catch (e: unknown) {
+      // Aquí el error típico es contraseña incorrecta.
+      this.error.set(this.mapError((e as { code?: string })?.code));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  /** Cancela el flujo de vinculación y vuelve al login normal. */
+  cancelarVinculo(): void {
+    this.mostrarVinculo.set(false);
+    this.credGooglePendiente = null;
+    this.passwordVincular = '';
+    this.error.set('');
+  }
+
+  /**
+   * Tras autenticar (por Google o vinculación), crea el documento del usuario
+   * si es la primera vez y navega. El documento arranca pendiente de
+   * validación, igual que el registro normal.
+   */
+  private async trasAutenticar(cred: { user: { uid: string; email: string | null; displayName: string | null } }): Promise<void> {
+    const u = cred.user;
+    const ref = doc(this.db, 'users', u.uid);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      await setDoc(ref, {
+        email: u.email ?? '',
+        alias: u.displayName ?? u.email?.split('@')[0] ?? 'Jugador',
+        rol: 'user',
+        validada: false,
+        bloqueado: false,
+        puntos: 0,
+        createdAt: serverTimestamp(),
+      });
+      await this.auth.avisarRegistro();
+    }
+    await this.entrar();
   }
 
   /** Consume la invitación pendiente (si la hay) y navega a destino. */

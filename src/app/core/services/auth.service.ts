@@ -7,6 +7,8 @@ import {
     createUserWithEmailAndPassword,
     signInWithPopup,
     GoogleAuthProvider,
+    AuthCredential,
+    linkWithCredential,
     signOut,
     sendPasswordResetEmail,
     UserCredential,
@@ -39,6 +41,30 @@ export class AuthService {
         // del navegador sin preguntar.
         provider.setCustomParameters({ prompt: 'select_account' });
         return signInWithPopup(this.auth, provider);
+    }
+
+    /**
+     * Extrae la credencial de Google de un error de popup. Se usa cuando el
+     * correo ya existe con contraseña (auth/account-exists-with-different-
+     * credential): guardamos esta credencial para vincularla después de que el
+     * usuario confirme su contraseña.
+     */
+    credencialGoogleDeError(error: unknown): AuthCredential | null {
+        return GoogleAuthProvider.credentialFromError(error as never);
+    }
+
+    /**
+     * Vincula una credencial (p. ej. Google) a la cuenta que resulta de iniciar
+     * sesión con correo y contraseña. Deja al usuario con ambos métodos activos
+     * sobre la MISMA cuenta, evitando duplicados.
+     */
+    async vincularConContrasena(
+        email: string,
+        password: string,
+        credencial: AuthCredential,
+    ): Promise<UserCredential> {
+        const cred = await signInWithEmailAndPassword(this.auth, email, password);
+        return linkWithCredential(cred.user, credencial);
     }
 
     logout() {
