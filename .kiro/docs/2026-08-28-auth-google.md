@@ -60,8 +60,26 @@ Para que funcione en cada entorno (dev y prod), en la consola de Firebase:
 
 Sin habilitar el proveedor en consola, el popup fallara con `auth/operation-not-allowed`.
 
-## Pendiente (fuera de alcance de esta tarea)
+## Vinculacion de cuentas (account linking) — agregado despues
 
-- Pantalla de perfil no tiene aun edicion de alias. La respuesta de diseno indica
-  que el usuario "puede cambiarlo en perfil", pero esa funcionalidad no existe
-  todavia en `perfil.service.ts`. Queda como feature aparte.
+Antes, si el correo ya existia con contraseña y el usuario intentaba entrar con Google,
+se bloqueaba con un mensaje (Opcion A). Ahora se implemento la vinculacion (Opcion B):
+
+**Flujo:**
+1. El usuario toca "Continuar con Google"
+2. Firebase lanza `auth/account-exists-with-different-credential` (el correo ya existe con contraseña)
+3. Se captura la credencial de Google del error (`GoogleAuthProvider.credentialFromError`) y el correo
+4. Se muestra un modal pidiendo la contraseña de la cuenta existente
+5. Al confirmar: `signInWithEmailAndPassword` + `linkWithCredential` unen Google a esa cuenta
+6. El usuario queda logueado con AMBOS metodos activos sobre el MISMO uid (sin duplicados)
+
+**Metodos nuevos en AuthService:**
+- `credencialGoogleDeError(error)`: extrae la AuthCredential del error de popup
+- `vincularConContrasena(email, password, credencial)`: inicia sesion con correo y vincula la credencial
+
+**UI (login.component):** modal de vinculacion con el correo, campo de contraseña y
+botones Conectar/Cancelar. El error tipico (contraseña incorrecta) se muestra ahi mismo.
+
+**Requisito en consola Firebase:** en Authentication -> Settings, el modo de vinculacion
+debe ser "una cuenta por correo" (el comportamiento por defecto que lanza el error). Con
+"multiples cuentas por correo" no se dispara este flujo.
