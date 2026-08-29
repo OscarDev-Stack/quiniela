@@ -3477,6 +3477,20 @@ export const asignarDuenoBracket = onCall({ ...opcionesCall, secrets: [telegramT
 
         let nuevo: DuenoBk;
         if (duenoUid) {
+            // Si el bracket es de un grupo, solo se puede asignar a miembros de
+            // ese grupo. Si no, el asignado no podría siquiera ver el bracket.
+            const grupoId = b['grupoId'];
+            if (typeof grupoId === 'string' && grupoId) {
+                const esMiembro = (
+                    await tx.get(db.doc(`grupos/${grupoId}/miembros/${duenoUid}`))
+                ).exists;
+                if (!esMiembro) {
+                    throw new HttpsError(
+                        'failed-precondition',
+                        'Solo puedes asignar equipos a miembros de este grupo.',
+                    );
+                }
+            }
             // Participante registrado: buscamos su alias y lo dejamos invitado.
             const userSnap = await tx.get(db.doc(`users/${duenoUid}`));
             const alias = userSnap.exists

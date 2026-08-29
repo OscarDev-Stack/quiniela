@@ -1,10 +1,13 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
+import { of } from 'rxjs';
+import { switchMap, map } from 'rxjs/operators';
 import { Bracket } from '../../core/models/bracket.model';
 import { BracketsService } from '../../core/services/brackets.service';
 import { AdminService } from '../../core/services/admin.service';
+import { GruposService } from '../../core/services/grupos.service';
 import { ToastService } from '../../shared/toast.service';
 import { ConfirmarService } from '../../shared/confirmar.service';
 import { EscudoComponent } from '../../shared/escudo.component';
@@ -164,12 +167,42 @@ import { AppUser } from '../../core/models/user.model';
 export class AsignarDuenosComponent {
     private readonly service = inject(BracketsService);
     private readonly admin = inject(AdminService);
+    private readonly grupos = inject(GruposService);
     private readonly toast = inject(ToastService);
     private readonly confirmar = inject(ConfirmarService);
 
     readonly bracket = input.required<Bracket>();
 
-    readonly usuarios = toSignal(this.admin.getUsers(), { initialValue: [] as AppUser[] });
+    private readonly todosLosUsuarios = toSignal(this.admin.getUsers(), {
+        initialValue: [] as AppUser[],
+    });
+
+    /**
+     * uids de los miembros del grupo del bracket, si es de grupo. Para brackets
+     * globales queda null (sin restricción). Se recarga cuando cambia el
+     * bracket de entrada.
+     */
+    private readonly miembrosGrupo = toSignal(
+        toObservable(computed(() => this.bracket()?.grupoId ?? null)).pipe(
+            switchMap((grupoId) =>
+                grupoId
+                    ? this.grupos.miembros(grupoId).pipe(map((ms) => new Set(ms.map((m) => m.uid))))
+                    : of(null),
+            ),
+        ),
+        { initialValue: null as Set<string> | null },
+    );
+
+    /**
+     * Usuarios candidatos a ser dueños. Si el bracket es de un grupo, solo los
+     * miembros del grupo (los de fuera no podrían siquiera ver el bracket).
+     */
+    readonly usuarios = computed(() => {
+        const todos = this.todosLosUsuarios();
+        const miembros = this.miembrosGrupo();
+        if (!miembros) return todos; // bracket global: todos
+        return todos.filter((u) => u.id && miembros.has(u.id));
+    });
 
     private readonly tipos = signal<Record<string, string>>({});
     private readonly nombresInvitado = signal<Record<string, string>>({});
