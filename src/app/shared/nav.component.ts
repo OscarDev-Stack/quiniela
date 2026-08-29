@@ -63,6 +63,7 @@ import { ConfirmarService } from './confirmar.service';
                 </a>
                 <a routerLink="/admin/torneos" (click)="menuAbierto.set(false)"><i class="ti ti-tournament"></i> Torneos</a>
                 <a routerLink="/admin/competiciones" (click)="menuAbierto.set(false)"><i class="ti ti-trophy"></i> Ligas</a>
+                <a routerLink="/admin/grupos" (click)="menuAbierto.set(false)"><i class="ti ti-users-group"></i> Grupos</a>
                 <a routerLink="/admin/brackets" (click)="menuAbierto.set(false)"><i class="ti ti-sitemap"></i> Eliminatorias</a>
               }
 

@@ -35,6 +35,7 @@ export class AdminLayoutComponent {
     crear: 'Crear',
     competiciones: 'Ligas',
     brackets: 'Eliminatorias',
+    grupos: 'Grupos',
   };
 
   constructor() {

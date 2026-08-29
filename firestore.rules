@@ -125,22 +125,22 @@ service cloud.firestore {
 
     // GRUPOS: las escrituras las hacen las Cloud Functions (Admin SDK).
     // Desde el cliente solo se lee, y solo si perteneces al grupo.
+    // Excepción: el super admin puede leer cualquier grupo para gestionarlo.
     match /grupos/{grupoId} {
       function soyMiembro() {
         return request.auth != null &&
           exists(/databases/$(database)/documents/grupos/$(grupoId)/miembros/$(request.auth.uid));
       }
-      // Puedes leer el grupo si eres miembro. (La búsqueda por código para
-      // unirse se hace en una Cloud Function, no leyendo aquí.)
-      allow read: if soyMiembro();
+      // Puedes leer el grupo si eres miembro o si eres super admin.
+      allow read: if soyMiembro() || isAdmin();
       allow write: if false;
 
       match /miembros/{uid} {
-        allow read: if soyMiembro();
+        allow read: if soyMiembro() || isAdmin();
         allow write: if false;
       }
       match /tabla/{uid} {
-        allow read: if soyMiembro();
+        allow read: if soyMiembro() || isAdmin();
         allow write: if false;
       }
     }

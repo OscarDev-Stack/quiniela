@@ -152,6 +152,12 @@ export const routes: Routes = [
                     import('./features/admin/admin-competiciones.component').then((m) => m.AdminCompeticionesComponent),
             },
             {
+                path: 'grupos',
+                canActivate: [adminGuard],
+                loadComponent: () =>
+                    import('./features/admin/admin-grupos.component').then((m) => m.AdminGruposComponent),
+            },
+            {
                 path: 'brackets',
                 canActivate: [adminGuard],
                 loadComponent: () => import('./features/brackets/gestionar-brackets.component').then((m) => m.GestionarBracketsComponent),
