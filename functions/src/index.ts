@@ -7,6 +7,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { getMessaging } from 'firebase-admin/messaging';
+import { nombreOficial as nombreOficialEquipo } from './equipos';
 
 initializeApp();
 
@@ -93,6 +94,50 @@ const telegramWebhookSecret = defineSecret('TELEGRAM_WEBHOOK_SECRET');
 const turnstileSecret = defineSecret('TURNSTILE_SECRET_KEY');
 
 const API_BASE = 'https://api.football-data.org/v4';
+
+/** TheSportsDB: liga mexicana y resultados. Key gratuita '123' por ahora. */
+const SPORTSDB_KEY = '123';
+const SPORTSDB_BASE = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}`;
+
+/** Un evento (partido) de TheSportsDB, con los campos que usamos. */
+interface EventoSportsDb {
+    intRound?: string;
+    strHomeTeam?: string;
+    strAwayTeam?: string;
+    intHomeScore?: string | null;
+    intAwayScore?: string | null;
+    strTimestamp?: string;
+    strStatus?: string;
+    strPostponed?: string;
+}
+
+/**
+ * Trae todos los eventos de una temporada de una liga de TheSportsDB.
+ * Devuelve [] si algo falla, para que el llamador lo maneje con gracia.
+ */
+async function eventosTemporadaSportsDb(
+    ligaId: number,
+    temporada: string,
+): Promise<EventoSportsDb[]> {
+    const url = `${SPORTSDB_BASE}/eventsseason.php?id=${ligaId}&s=${encodeURIComponent(temporada)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+        throw new HttpsError('internal', `TheSportsDB respondió ${res.status}.`);
+    }
+    const data = (await res.json()) as { events?: EventoSportsDb[] | null };
+    return data.events ?? [];
+}
+
+/** Convierte el resultado de la API (marcador) al formato de la jornada. */
+function resultadoDesdeMarcador(
+    gl: number | null,
+    gv: number | null,
+): 'local' | 'empate' | 'visitante' | null {
+    if (gl === null || gv === null) return null;
+    if (gl > gv) return 'local';
+    if (gl < gv) return 'visitante';
+    return 'empate';
+}
 
 interface PartidoApi {
     id: number;
@@ -1522,6 +1567,155 @@ export const guardarPick = onCall(opcionesCall, async (req) => {
     });
 
     return { ok: true, equipo, jornada: numero };
+});
+
+/* ============================================================
+   TheSportsDB — traer una jornada desde la API
+   Devuelve los enfrentamientos de una jornada (intRound) con los
+   equipos ya normalizados a los nombres oficiales y la hora del
+   primer partido. NO guarda nada: el admin revisa y guarda con el
+   flujo normal. Publicar sigue siendo manual.
+   ============================================================ */
+export const traerJornadaApi = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const competicionId = String(req.data?.competicionId ?? '');
+    const numeroJornada = Math.floor(Number(req.data?.numeroJornada ?? 0));
+    if (!competicionId || numeroJornada < 1) {
+        throw new HttpsError('invalid-argument', 'Faltan la competición o el número de jornada.');
+    }
+
+    const compRef = db.doc(`competiciones/${competicionId}`);
+    const [adminSnap, compSnap] = await Promise.all([
+        db.doc(`admins/${uid}`).get(),
+        compRef.get(),
+    ]);
+    if (!compSnap.exists) throw new HttpsError('not-found', 'La competición no existe.');
+    const comp = compSnap.data() as Record<string, unknown>;
+    const gestores = (comp['gestores'] as string[]) ?? [];
+    if (!adminSnap.exists && !gestores.includes(uid)) {
+        throw new HttpsError('permission-denied', 'No gestionas esta competición.');
+    }
+
+    const ligaId = Number(comp['apiLigaId'] ?? 0);
+    const temporada = String(comp['apiTemporada'] ?? '');
+    if (!ligaId || !temporada) {
+        throw new HttpsError(
+            'failed-precondition',
+            'Esta competición no tiene configurada la liga y temporada de la API.',
+        );
+    }
+
+    const eventos = await eventosTemporadaSportsDb(ligaId, temporada);
+    const dela = eventos.filter((e) => Number(e.intRound ?? 0) === numeroJornada);
+    if (dela.length === 0) {
+        throw new HttpsError('not-found', `La API no tiene partidos para la jornada ${numeroJornada}.`);
+    }
+
+    // Partidos con equipos normalizados; ordenados por hora.
+    const partidos = dela
+        .map((e) => ({
+            local: nombreOficialEquipo(e.strHomeTeam),
+            visitante: nombreOficialEquipo(e.strAwayTeam),
+            timestamp: e.strTimestamp ?? '',
+        }))
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+    // Hora del primer partido de la jornada (en ISO UTC), para prellenar el cierre.
+    const primeraHora = partidos.find((p) => p.timestamp)?.timestamp ?? '';
+
+    return {
+        ok: true,
+        numeroJornada,
+        primeraHora,
+        partidos: partidos.map((p) => ({ local: p.local, visitante: p.visitante })),
+    };
+});
+
+/* ============================================================
+   TheSportsDB — traer resultados de una jornada ya guardada
+   Empareja los partidos de la jornada con los de la API (por nombre
+   normalizado) y devuelve el marcador de los que ya terminaron. NO
+   publica: el admin captura/confirma y publica manualmente.
+   ============================================================ */
+export const traerResultadosApi = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const competicionId = String(req.data?.competicionId ?? '');
+    const jornadaId = String(req.data?.jornadaId ?? '');
+    if (!competicionId || !jornadaId) {
+        throw new HttpsError('invalid-argument', 'Faltan la competición o la jornada.');
+    }
+
+    const compRef = db.doc(`competiciones/${competicionId}`);
+    const jornadaRef = compRef.collection('jornadas').doc(jornadaId);
+    const [adminSnap, compSnap, jornadaSnap] = await Promise.all([
+        db.doc(`admins/${uid}`).get(),
+        compRef.get(),
+        jornadaRef.get(),
+    ]);
+    if (!compSnap.exists || !jornadaSnap.exists) {
+        throw new HttpsError('not-found', 'Competición o jornada inexistente.');
+    }
+    const comp = compSnap.data() as Record<string, unknown>;
+    const gestores = (comp['gestores'] as string[]) ?? [];
+    if (!adminSnap.exists && !gestores.includes(uid)) {
+        throw new HttpsError('permission-denied', 'No gestionas esta competición.');
+    }
+
+    const ligaId = Number(comp['apiLigaId'] ?? 0);
+    const temporada = String(comp['apiTemporada'] ?? '');
+    if (!ligaId || !temporada) {
+        throw new HttpsError(
+            'failed-precondition',
+            'Esta competición no tiene configurada la liga y temporada de la API.',
+        );
+    }
+
+    const jornada = jornadaSnap.data() as {
+        numero: number;
+        partidos: Array<{ local: string; visitante: string }>;
+    };
+
+    const eventos = await eventosTemporadaSportsDb(ligaId, temporada);
+    const dela = eventos.filter((e) => Number(e.intRound ?? 0) === jornada.numero);
+
+    // Índice por par de equipos normalizados -> evento de la API.
+    const clave = (local: string, visitante: string) =>
+        `${nombreOficialEquipo(local)}|${nombreOficialEquipo(visitante)}`;
+    const porPar = new Map<string, EventoSportsDb>();
+    for (const e of dela) porPar.set(clave(e.strHomeTeam ?? '', e.strAwayTeam ?? ''), e);
+
+    // Para cada partido de la jornada, buscamos su marcador en la API.
+    let conResultado = 0;
+    const partidos = jornada.partidos.map((p) => {
+        const e = porPar.get(clave(p.local, p.visitante));
+        if (!e) return { ...p };
+
+        // Aplazado en la API: lo marcamos como pospuesto.
+        if (e.strPostponed === 'yes') {
+            conResultado++;
+            return { ...p, resultado: 'pospuesto' as const, golesLocal: null, golesVisitante: null };
+        }
+
+        // Solo tomamos el marcador si el partido ya terminó (FT / AET / PEN...).
+        const terminado = ['FT', 'AET', 'PEN', 'Match Finished'].includes(String(e.strStatus ?? ''));
+        const gl = e.intHomeScore != null && e.intHomeScore !== '' ? Number(e.intHomeScore) : null;
+        const gv = e.intAwayScore != null && e.intAwayScore !== '' ? Number(e.intAwayScore) : null;
+        if (!terminado || gl === null || gv === null) return { ...p };
+
+        conResultado++;
+        return {
+            ...p,
+            golesLocal: gl,
+            golesVisitante: gv,
+            resultado: resultadoDesdeMarcador(gl, gv),
+        };
+    });
+
+    return { ok: true, numero: jornada.numero, conResultado, partidos };
 });
 
 /* ============================================================
