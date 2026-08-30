@@ -33,10 +33,6 @@ import { ToastService } from '../../shared/toast.service';
           <button class="chip" (click)="recalcular()">
             <i class="ti ti-refresh"></i> Recalcular ranking
           </button>
-          <button class="chip" [disabled]="trabajando()" (click)="sincronizar()">
-            <i class="ti ti-history-toggle"></i>
-            {{ trabajando() ? 'Corrigiendo…' : 'Igualar históricos' }}
-          </button>
           <button class="chip" [disabled]="calculandoTotales()" (click)="calcularTotales()">
             <i class="ti ti-calculator"></i>
             {{ calculandoTotales() ? 'Calculando…' : 'Calcular totales' }}
@@ -222,7 +218,6 @@ export class AdminUsuariosComponent {
   private readonly toast = inject(ToastService);
 
   readonly users = toSignal(this.admin.getUsers(), { initialValue: [] as AppUser[] });
-  readonly trabajando = signal(false);
   readonly calculandoTotales = signal(false);
 
 
@@ -327,29 +322,6 @@ export class AdminUsuariosComponent {
       );
     } catch (e: unknown) {
       this.toast.error((e as Error)?.message ?? 'No se pudieron eliminar.');
-    }
-  }
-
-  /** Corrige las cuentas anteriores a que existiera el histórico. */
-  async sincronizar(): Promise<void> {
-    const ok = await this.confirmar.pedir({
-      titulo: 'Igualar históricos',
-      mensaje:
-        'Los puntos históricos de cada cuenta pasarán a ser iguales a su saldo actual. ' +
-        'Solo debe usarse si nunca has reiniciado el saldo de nadie.',
-      aceptar: 'Igualar',
-      peligro: true,
-    });
-    if (!ok) return;
-
-    this.trabajando.set(true);
-    try {
-      const r = await this.admin.sincronizarHistoricos();
-      this.toast.exito(`${r.corregidos} cuenta(s) corregida(s).`);
-    } catch (e: unknown) {
-      this.toast.error((e as Error)?.message ?? 'No se pudo sincronizar.');
-    } finally {
-      this.trabajando.set(false);
     }
   }
 
