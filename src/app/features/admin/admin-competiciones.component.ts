@@ -139,18 +139,28 @@ import { ToastService } from '../../shared/toast.service';
 
           @if (apiAbierto(c.id)) {
             <p class="nota">
-              Vincula esta competición con TheSportsDB para traer las jornadas y los
-              resultados automáticamente. Liga MX: id <strong>4350</strong>, temporada
-              <strong>2026-2027</strong>.
+              Vincula esta competición con una liga y temporada para traer las jornadas
+              y los resultados automáticamente. Elige de la lista, no necesitas saber
+              ningún código.
             </p>
             <div class="grid">
               <label class="field">
-                <span>ID de liga (API)</span>
-                <input type="number" [(ngModel)]="apiCfg(c.id).ligaId" placeholder="4350" />
+                <span>Liga</span>
+                <select [(ngModel)]="apiCfg(c.id).ligaId">
+                  <option [ngValue]="null">Sin conexión</option>
+                  @for (l of ligasApi; track l.id) {
+                    <option [ngValue]="l.id">{{ l.nombre }}</option>
+                  }
+                </select>
               </label>
               <label class="field">
                 <span>Temporada</span>
-                <input type="text" [(ngModel)]="apiCfg(c.id).temporada" placeholder="2026-2027" />
+                <select [(ngModel)]="apiCfg(c.id).temporada">
+                  <option value="">Elige…</option>
+                  @for (t of temporadasApi; track t) {
+                    <option [value]="t">{{ t }}</option>
+                  }
+                </select>
               </label>
             </div>
             <button class="btn sm" (click)="guardarApi(c)">Guardar conexión</button>
@@ -498,6 +508,13 @@ export class AdminCompeticionesComponent {
   nombre = '';
 
   /* --- Conexión con la API (TheSportsDB) --- */
+  /** Ligas soportadas por la API. Agregar aquí para habilitar más. */
+  readonly ligasApi: Array<{ id: number; nombre: string }> = [
+    { id: 4350, nombre: 'Liga MX' },
+  ];
+  /** Temporadas elegibles (formato de la API). La más reciente primero. */
+  readonly temporadasApi: string[] = ['2026-2027', '2025-2026', '2024-2025'];
+
   private readonly apiPanel = signal<string[]>([]);
   private readonly apiCfgMap: Record<string, { ligaId: number | null; temporada: string }> = {};
 

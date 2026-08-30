@@ -44,7 +44,10 @@ valores (los nombres de equipos de otras ligas requerirían ampliar el normaliza
 ### Frontend
 - **`competiciones.service.ts`**: `guardarConfigApi`, `traerJornadaApi`, `traerResultadosApi`.
 - **`admin-competiciones.component.ts`**:
-  - Panel "Conexión con la API": captura `apiLigaId` + `apiTemporada` (Liga MX: 4350 / 2026-2027).
+  - Panel "Conexión con la API": el admin elige la Liga y la Temporada de dos SELECTS
+    (catálogo `ligasApi` con Liga MX = 4350, y `temporadasApi`). No escribe códigos.
+    El botón "Guardar conexión" escribe `apiLigaId`/`apiTemporada` en la competición
+    (vinculación de una sola vez; sin ella no aparecen los botones de traer datos).
   - Botón "Traer jornada de la API" (junto a "Armar jornada completa"): prellena los
     enfrentamientos y la hora del primer partido en el borrador. El admin revisa y guarda.
   - Botón "Traer resultados de la API" (en cada jornada abierta): precarga los marcadores.
