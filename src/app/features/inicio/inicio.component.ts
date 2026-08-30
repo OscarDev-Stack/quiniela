@@ -295,7 +295,22 @@ export class InicioComponent {
   readonly cargando = signal(true);
   private readonly inicioCarga = Date.now();
 
-  private readonly me = toSignal(this.usersSrv.me$, { initialValue: null });
+  /**
+   * El inicio se arma con varias fuentes. Marcamos cuándo llegó el PRIMER
+   * dato real de cada una (los toSignal emiten un initialValue inmediato que
+   * no cuenta). El loading se apaga solo cuando todas están listas, para no
+   * mostrar el dashboard a medias.
+   */
+  private readonly listoMe = signal(false);
+  private readonly listoPartidos = signal(false);
+  private readonly listoTorneos = signal(false);
+  private readonly listoMisBrackets = signal(false);
+  private readonly listoBracketsPublicos = signal(false);
+
+  private readonly me = toSignal(
+    this.usersSrv.me$.pipe(tap(() => this.listoMe.set(true))),
+    { initialValue: null },
+  );
   readonly alias = computed(() => this.me()?.alias ?? '');
   readonly inicial = computed(() => (this.me()?.alias ?? '?').charAt(0).toUpperCase());
   readonly puntos = computed(() => this.me()?.puntos ?? 0);
@@ -303,12 +318,34 @@ export class InicioComponent {
   readonly trofeos = computed(() => this.me()?.torneosGanados ?? 0);
 
   private readonly partidos = toSignal(
-    this.partidosSrv.getPartidos().pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
+    this.partidosSrv.getPartidos().pipe(tap(() => this.listoPartidos.set(true))),
     { initialValue: [] as Partido[] },
   );
-  private readonly torneos = toSignal(this.torneosSrv.misTorneos$, { initialValue: [] as Torneo[] });
-  private readonly misBrackets = toSignal(this.bracketsSrv.misBrackets(), { initialValue: [] as Bracket[] });
-  private readonly bracketsPublicos = toSignal(this.bracketsSrv.bracketsPublicos(), { initialValue: [] as Bracket[] });
+  private readonly torneos = toSignal(
+    this.torneosSrv.misTorneos$.pipe(tap(() => this.listoTorneos.set(true))),
+    { initialValue: [] as Torneo[] },
+  );
+  private readonly misBrackets = toSignal(
+    this.bracketsSrv.misBrackets().pipe(tap(() => this.listoMisBrackets.set(true))),
+    { initialValue: [] as Bracket[] },
+  );
+  private readonly bracketsPublicos = toSignal(
+    this.bracketsSrv.bracketsPublicos().pipe(tap(() => this.listoBracketsPublicos.set(true))),
+    { initialValue: [] as Bracket[] },
+  );
+
+  /** Apaga el loading solo cuando TODAS las fuentes emitieron su primer dato. */
+  private readonly apagar = effect(() => {
+    if (
+      this.listoMe() &&
+      this.listoPartidos() &&
+      this.listoTorneos() &&
+      this.listoMisBrackets() &&
+      this.listoBracketsPublicos()
+    ) {
+      apagarCargando(this.cargando, this.inicioCarga);
+    }
+  });
 
   readonly partidosAbiertos = computed(() => {
     const ctx = this.contexto.grupoId();

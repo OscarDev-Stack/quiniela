@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -136,15 +136,27 @@ export class TorneosListComponent {
   private readonly router = inject(Router);
   private readonly contexto = inject(ContextoService);
 
-  /** True hasta que llegan los primeros torneos. */
+  /** True hasta que llegan los primeros torneos Y brackets (ambas secciones). */
   readonly cargando = signal(true);
   private readonly inicioCarga = Date.now();
+  private readonly listoTorneos = signal(false);
+  private readonly listoBrackets = signal(false);
 
   private readonly torneos = toSignal(
-    this.service.misTorneos$.pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
+    this.service.misTorneos$.pipe(tap(() => this.listoTorneos.set(true))),
     { initialValue: [] as Torneo[] },
   );
-  readonly brackets = toSignal(this.bracketsService.misBrackets(), { initialValue: [] as Bracket[] });
+  readonly brackets = toSignal(
+    this.bracketsService.misBrackets().pipe(tap(() => this.listoBrackets.set(true))),
+    { initialValue: [] as Bracket[] },
+  );
+
+  /** Apaga el loading cuando ambas fuentes de la vista ya emitieron. */
+  private readonly apagar = effect(() => {
+    if (this.listoTorneos() && this.listoBrackets()) {
+      apagarCargando(this.cargando, this.inicioCarga);
+    }
+  });
 
   readonly visibles = computed(() => {
     const ctx = this.contexto.grupoId(); // null = Global

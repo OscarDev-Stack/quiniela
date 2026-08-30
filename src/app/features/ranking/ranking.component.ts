@@ -306,10 +306,15 @@ export class RankingComponent {
   readonly enGrupo = computed(() => this.contexto.grupoId() !== null);
   readonly nombreContexto = computed(() => this.contexto.actual().nombre);
 
+  /** Marca cuándo llegó el primer dato de cada fuente de tabla. */
+  private readonly listoGlobal = signal(false);
+  private readonly listoGrupo = signal(false);
+
   /** Tabla del grupo activo (vacía si estamos en Global). */
   private readonly tablaGrupo = toSignal(
     toObservable(this.contexto.grupoId).pipe(
       switchMap((gid) => (gid ? this.gruposSrv.tabla(gid) : of([] as FilaTablaGrupo[]))),
+      tap(() => this.listoGrupo.set(true)),
     ),
     { initialValue: [] as FilaTablaGrupo[] },
   );
@@ -337,9 +342,21 @@ export class RankingComponent {
   private readonly inicioCarga = Date.now();
 
   private readonly topPorcentaje = toSignal(
-    this.service.topPorcentaje().pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
+    this.service.topPorcentaje().pipe(tap(() => this.listoGlobal.set(true))),
     { initialValue: [] as RankingDoc[] },
   );
+
+  /**
+   * Apaga el loading según el contexto: en un grupo espera la tabla del grupo;
+   * en global espera el ranking general. Así no se ve la tabla vacía mientras
+   * llega la fuente que de verdad se está mostrando.
+   */
+  private readonly apagar = effect(() => {
+    const listo = this.enGrupo() ? this.listoGrupo() : this.listoGlobal();
+    if (listo) {
+      apagarCargando(this.cargando, this.inicioCarga);
+    }
+  });
 
   constructor() {
     // Recalcula la posición cuando cambia la vista o mis números.

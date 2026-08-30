@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -109,13 +109,29 @@ export class MisPronosticosComponent {
 
   readonly cargando = signal(true);
   private readonly inicioCarga = Date.now();
+  private readonly listoPronosticos = signal(false);
+  private readonly listoPartidos = signal(false);
 
   private readonly pronosticosRaw = toSignal(
-    this.service.misPronosticos().pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
+    this.service.misPronosticos().pipe(tap(() => this.listoPronosticos.set(true))),
     { initialValue: [] as Pronostico[] },
   );
 
-  private readonly partidos = toSignal(this.partidosSrv.getPartidos(), { initialValue: [] as Partido[] });
+  private readonly partidos = toSignal(
+    this.partidosSrv.getPartidos().pipe(tap(() => this.listoPartidos.set(true))),
+    { initialValue: [] as Partido[] },
+  );
+
+  /**
+   * Apaga el loading cuando llegaron pronósticos Y partidos: el filtro por
+   * contexto necesita el mapa de partidos, así que sin ellos la lista se vería
+   * vacía o mal filtrada.
+   */
+  private readonly apagar = effect(() => {
+    if (this.listoPronosticos() && this.listoPartidos()) {
+      apagarCargando(this.cargando, this.inicioCarga);
+    }
+  });
 
   /** Mapa partidoId → grupoId, para saber a qué contexto pertenece cada pronóstico. */
   private readonly grupoDePartido = computed(() => {

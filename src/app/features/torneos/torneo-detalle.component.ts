@@ -808,13 +808,18 @@ export class TorneoDetalleComponent {
   readonly cargando = signal(true);
   private readonly inicioCarga = Date.now();
 
+  // Marcamos el primer dato real de cada fuente que arma la vista.
+  private readonly listoTorneo = signal(false);
+  private readonly listoParticipantes = signal(false);
+
   readonly torneo = toSignal(
-    this.service.torneo(this.id).pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
+    this.service.torneo(this.id).pipe(tap(() => this.listoTorneo.set(true))),
     { initialValue: null },
   );
-  readonly participantes = toSignal(this.service.participantes(this.id), {
-    initialValue: [] as Participante[],
-  });
+  readonly participantes = toSignal(
+    this.service.participantes(this.id).pipe(tap(() => this.listoParticipantes.set(true))),
+    { initialValue: [] as Participante[] },
+  );
   /** Jornada en curso, tomada de la competición. */
   private readonly jornada = toSignal(
     toObservable(computed(() => this.torneo())).pipe(
@@ -825,6 +830,18 @@ export class TorneoDetalleComponent {
     { initialValue: null as Jornada | null },
   );
   readonly yo = toSignal(this.service.miParticipacion(this.id), { initialValue: null });
+
+  /**
+   * Apaga el loading cuando el torneo y sus participantes ya llegaron. La
+   * jornada depende del torneo (switchMap encadenado) y se resuelve enseguida;
+   * no la exigimos para no dejar el spinner colgado si un torneo no tiene
+   * jornada aún.
+   */
+  private readonly apagar = effect(() => {
+    if (this.listoTorneo() && this.listoParticipantes()) {
+      apagarCargando(this.cargando, this.inicioCarga);
+    }
+  });
 
   readonly guardando = signal(false);
   /** Reloj interno para refrescar la cuenta regresiva. */
