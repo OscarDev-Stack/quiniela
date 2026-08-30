@@ -129,6 +129,44 @@ import { ToastService } from '../../shared/toast.service';
           }
         </div>
 
+        <div class="equipos">
+          <button class="toggle" (click)="alternarApi(c.id)">
+            <i class="ti" [class.ti-chevron-down]="!apiAbierto(c.id)"
+              [class.ti-chevron-up]="apiAbierto(c.id)"></i>
+            Conexión con la API (opcional)
+            @if (c.apiLigaId) { <span class="cuenta">on</span> }
+          </button>
+
+          @if (apiAbierto(c.id)) {
+            <p class="nota">
+              Vincula esta competición con una liga y temporada para traer las jornadas
+              y los resultados automáticamente. Elige de la lista, no necesitas saber
+              ningún código.
+            </p>
+            <div class="grid">
+              <label class="field">
+                <span>Liga</span>
+                <select [(ngModel)]="apiCfg(c.id).ligaId">
+                  <option [ngValue]="null">Sin conexión</option>
+                  @for (l of ligasApi; track l.id) {
+                    <option [ngValue]="l.id">{{ l.nombre }}</option>
+                  }
+                </select>
+              </label>
+              <label class="field">
+                <span>Temporada</span>
+                <select [(ngModel)]="apiCfg(c.id).temporada">
+                  <option value="">Elige…</option>
+                  @for (t of temporadasApi; track t) {
+                    <option [value]="t">{{ t }}</option>
+                  }
+                </select>
+              </label>
+            </div>
+            <button class="btn sm" (click)="guardarApi(c)">Guardar conexión</button>
+          }
+        </div>
+
         <div class="nueva">
           @if ((c.equipos ?? []).length < 2) {
             <p class="nota-vacia">
@@ -175,6 +213,12 @@ import { ToastService } from '../../shared/toast.service';
               @if (b(c.id).filas.length === 0) {
                 <button class="btn sm" (click)="llenarJornada(c)">
                   Armar jornada completa
+                </button>
+              }
+              @if (c.apiLigaId) {
+                <button class="btn sm" [disabled]="trayendo()" (click)="traerJornada(c)">
+                  <i class="ti ti-cloud-download"></i>
+                  {{ trayendo() ? 'Trayendo…' : 'Traer jornada de la API' }}
                 </button>
               }
               <button class="btn sm btn--primary" (click)="agregarJornada(c)">
@@ -267,6 +311,12 @@ import { ToastService } from '../../shared/toast.service';
                 }
 
                 <div class="acciones">
+                  @if (c.apiLigaId) {
+                    <button class="btn sm" [disabled]="trayendo()" (click)="traerResultados(c, j)">
+                      <i class="ti ti-cloud-download"></i>
+                      {{ trayendo() ? 'Trayendo…' : 'Traer resultados de la API' }}
+                    </button>
+                  }
                   <button class="btn sm" (click)="guardar(c, j)">Guardar resultados</button>
                   <button
                     class="btn sm btn--primary"
@@ -453,7 +503,129 @@ export class AdminCompeticionesComponent {
   readonly usuarios = toSignal(this.admin.getUsers(), { initialValue: [] as AppUser[] });
 
   readonly resolviendo = signal(false);
+  /** True mientras se consulta la API (traer jornada o resultados). */
+  readonly trayendo = signal(false);
   nombre = '';
+
+  /* --- Conexión con la API (TheSportsDB) --- */
+  /** Ligas soportadas por la API. Agregar aquí para habilitar más. */
+  readonly ligasApi: Array<{ id: number; nombre: string }> = [
+    { id: 4350, nombre: 'Liga MX' },
+  ];
+  /** Temporadas elegibles (formato de la API). La más reciente primero. */
+  readonly temporadasApi: string[] = ['2026-2027', '2025-2026', '2024-2025'];
+
+  private readonly apiPanel = signal<string[]>([]);
+  private readonly apiCfgMap: Record<string, { ligaId: number | null; temporada: string }> = {};
+
+  apiAbierto(competicionId: string): boolean {
+    return this.apiPanel().includes(competicionId);
+  }
+
+  alternarApi(competicionId: string): void {
+    const actuales = this.apiPanel();
+    if (actuales.includes(competicionId)) {
+      this.apiPanel.set(actuales.filter((x) => x !== competicionId));
+      return;
+    }
+    const c = this.competiciones().find((x) => x.id === competicionId);
+    this.apiCfgMap[competicionId] = {
+      ligaId: c?.apiLigaId ?? null,
+      temporada: c?.apiTemporada ?? '',
+    };
+    this.apiPanel.set([...actuales, competicionId]);
+  }
+
+  apiCfg(competicionId: string): { ligaId: number | null; temporada: string } {
+    if (!this.apiCfgMap[competicionId]) {
+      this.apiCfgMap[competicionId] = { ligaId: null, temporada: '' };
+    }
+    return this.apiCfgMap[competicionId];
+  }
+
+  async guardarApi(c: Competicion): Promise<void> {
+    const cfg = this.apiCfg(c.id);
+    const ligaId = Number(cfg.ligaId ?? 0);
+    const temporada = (cfg.temporada ?? '').trim();
+    if (!ligaId || !temporada) {
+      this.toast.error('Escribe el ID de liga y la temporada.');
+      return;
+    }
+    try {
+      await this.service.guardarConfigApi(c.id, ligaId, temporada);
+      this.avisar('Conexión con la API guardada.');
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudo guardar.');
+    }
+  }
+
+  /** Trae de la API los enfrentamientos de la jornada del borrador. */
+  async traerJornada(c: Competicion): Promise<void> {
+    const bor = this.b(c.id);
+    if (!bor.numero || bor.numero < 1) {
+      this.toast.error('Escribe primero el número de jornada.');
+      return;
+    }
+    this.trayendo.set(true);
+    try {
+      const r = await this.service.traerJornadaApi(c.id, bor.numero);
+      bor.filas = r.partidos.map((p) => ({ local: p.local, visitante: p.visitante }));
+      if (r.primeraHora) {
+        bor.cierra = this.isoALocalInput(r.primeraHora);
+      }
+
+      // Los selects solo muestran equipos del catálogo de la competición. Si la
+      // jornada trae equipos que aún no están en el catálogo, aparecerían
+      // vacíos. Así que los agregamos automáticamente para que se vean.
+      const actuales = new Set(c.equipos ?? []);
+      const nuevos: string[] = [];
+      for (const p of r.partidos) {
+        for (const eq of [p.local, p.visitante]) {
+          if (eq && !actuales.has(eq)) {
+            actuales.add(eq);
+            nuevos.push(eq);
+          }
+        }
+      }
+      if (nuevos.length > 0) {
+        await this.service.guardarEquipos(c.id, [...actuales]);
+      }
+
+      this.avisar(
+        `${r.partidos.length} partido(s) traídos de la API.` +
+          (nuevos.length > 0 ? ` Se agregaron ${nuevos.length} equipo(s) al catálogo.` : '') +
+          ' Revisa y guarda.',
+      );
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudo traer la jornada.');
+    } finally {
+      this.trayendo.set(false);
+    }
+  }
+
+  /** Trae de la API los marcadores de una jornada ya guardada. */
+  async traerResultados(c: Competicion, j: Jornada): Promise<void> {
+    this.trayendo.set(true);
+    try {
+      const r = await this.service.traerResultadosApi(c.id, j.id);
+      j.partidos = r.partidos;
+      this.avisar(
+        `${r.conResultado} resultado(s) traídos. Revisa y guarda antes de publicar.`,
+      );
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudieron traer los resultados.');
+    } finally {
+      this.trayendo.set(false);
+    }
+  }
+
+  /** Convierte un ISO UTC a formato datetime-local en la hora del navegador. */
+  private isoALocalInput(iso: string): string {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 16);
+  }
 
   borrador: Record<
     string,
@@ -510,7 +682,12 @@ export class AdminCompeticionesComponent {
     const propio = lado === 'local' ? fila.local : fila.visitante;
     if (propio) usados.delete(propio);
 
-    return (c.equipos ?? []).filter((e) => !usados.has(e));
+    const catalogo = c.equipos ?? [];
+    const lista = catalogo.filter((e) => !usados.has(e));
+    // Si el valor de la fila aún no está en el catálogo (recién traído de la
+    // API y todavía propagándose), lo incluimos para que el select lo muestre.
+    if (propio && !catalogo.includes(propio)) lista.push(propio);
+    return lista;
   }
 
   agregarFila(competicionId: string): void {

@@ -16,6 +16,7 @@ import { PronosticoBracketComponent } from './pronostico-bracket.component';
 import { TablaBracketComponent } from './tabla-bracket.component';
 import { NavComponent } from '../../shared/nav.component';
 import { CargandoComponent } from '../../shared/cargando.component';
+import { CelebracionVictoriaComponent } from '../../shared/celebracion-victoria.component';
 import { apagarCargando } from '../../shared/cargando.util';
 import { Bracket } from '../../core/models/bracket.model';
 
@@ -37,6 +38,7 @@ import { Bracket } from '../../core/models/bracket.model';
     TablaBracketComponent,
     NavComponent,
     CargandoComponent,
+    CelebracionVictoriaComponent,
   ],
   template: `
     <div class="screen">
@@ -57,6 +59,16 @@ import { Bracket } from '../../core/models/bracket.model';
             <span class="pill"><i class="ti ti-clock"></i> {{ b.modo === 'duenos' ? 'Inicia' : 'Cierra' }}: {{ fc }}</span>
           }
         </div>
+
+        @if (soyGanador()) {
+          <app-celebracion-victoria
+            titulo="¡Eres el campeón!"
+            [subtitulo]="b.modo === 'duenos'
+              ? 'Tu equipo se coronó campeón de ' + b.nombre + '.'
+              : 'Acertaste el cuadro y quedaste en primer lugar.'"
+            [premio]="miPremioBracket()"
+          />
+        }
 
         <section class="panel">
           <h2>Cuadro</h2>
@@ -408,6 +420,28 @@ export class BracketDetalleComponent {
     const uid = this.miUid();
     if (!uid) return null;
     return (this.bracket()?.duenos ?? []).find((d) => d.uid === uid) ?? null;
+  });
+
+  /**
+   * ¿Gané esta eliminatoria? En modo pronósticos, si mi pronóstico quedó en 1°
+   * lugar. En modo dueños, si soy el dueño del equipo campeón (ganadorAlias).
+   */
+  readonly soyGanador = computed(() => {
+    const b = this.bracket();
+    if (!b || b.estado !== 'finalizado') return false;
+    if (b.modo === 'duenos') {
+      const mio = this.miDueno();
+      return !!mio && b.ganadorAlias === mio.nombre;
+    }
+    return this.miPron()?.posicion === 1;
+  });
+
+  /** Premio que gané en la eliminatoria (0 si no gané o no aplica). */
+  readonly miPremioBracket = computed(() => {
+    const b = this.bracket();
+    if (!this.soyGanador()) return 0;
+    if (b?.modo === 'duenos') return Number(b?.premioPagado ?? 0);
+    return Number(this.miPron()?.premio ?? 0);
   });
 
   readonly aceptando = signal(false);

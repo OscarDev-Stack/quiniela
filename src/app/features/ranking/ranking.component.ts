@@ -20,7 +20,7 @@ import { FilaTablaGrupo } from '../../core/models/grupo.model';
 import { switchMap } from 'rxjs/operators';
 import { of } from 'rxjs';
 
-type Vista = 'puntos' | 'porcentaje';
+type Vista = 'porcentaje' | 'balance';
 
 @Component({
   selector: 'app-ranking',
@@ -41,8 +41,8 @@ type Vista = 'puntos' | 'porcentaje';
         @if (isAdmin() && !enGrupo()) {
           <div class="toggle">
             <button [class.on]="vista() === 'porcentaje'" (click)="vista.set('porcentaje')">% acierto</button>
-            <button [class.on]="vista() === 'puntos'" (click)="vista.set('puntos')">
-              <i class="ti ti-shield-check"></i> Históricos
+            <button [class.on]="vista() === 'balance'" (click)="vista.set('balance')">
+              <i class="ti ti-scale"></i> Balance
             </button>
           </div>
         }
@@ -67,8 +67,8 @@ type Vista = 'puntos' | 'porcentaje';
               <span class="col-avatar" [class]="'col-avatar--' + f.posicion">{{ inicial(f.alias) }}</span>
               <span class="col-alias">{{ f.id === miUid() ? 'Tú' : f.alias }}</span>
               <span class="col-val">
-                @if (vista() === 'puntos' && isAdmin()) {
-                  {{ f.puntos | number }} pts
+                @if (esBalance()) {
+                  {{ (f.balance ?? 0) > 0 ? '+' : '' }}{{ f.balance ?? 0 | number }} pts
                 } @else {
                   {{ f.porcentaje }}%
                 }
@@ -89,9 +89,14 @@ type Vista = 'puntos' | 'porcentaje';
           <span class="avatar">{{ inicial(f.alias) }}</span>
           <span class="alias">Tú</span>
 
-          @if (vista() === 'puntos' && isAdmin()) {
-            <span class="main" [class.neg]="f.puntos < 0">{{ f.puntos | number }}</span>
-            <span class="side">{{ f.porcentaje }}%</span>
+          @if (esBalance()) {
+            <span class="main" [class.neg]="(f.balance ?? 0) < 0">
+              {{ (f.balance ?? 0) > 0 ? '+' : '' }}{{ f.balance ?? 0 | number }}
+            </span>
+            <span class="side side--gyg">
+              <span class="ganado">+{{ f.totalGanado ?? 0 | number }}</span>
+              <span class="gastado">-{{ f.totalGastado ?? 0 | number }}</span>
+            </span>
           } @else {
             <span class="main">{{ f.porcentaje }}%</span>
             <span class="side">
@@ -121,9 +126,14 @@ type Vista = 'puntos' | 'porcentaje';
               <span class="avatar">{{ inicial(f.alias) }}</span>
               <span class="alias">{{ f.id === miUid() ? 'Tú' : f.alias }}</span>
 
-              @if (vista() === 'puntos' && isAdmin()) {
-                <span class="main" [class.neg]="f.puntos < 0">{{ f.puntos | number }}</span>
-                <span class="side">{{ f.porcentaje }}%</span>
+              @if (esBalance()) {
+                <span class="main" [class.neg]="(f.balance ?? 0) < 0">
+                  {{ (f.balance ?? 0) > 0 ? '+' : '' }}{{ f.balance ?? 0 | number }}
+                </span>
+                <span class="side side--gyg">
+                  <span class="ganado">+{{ f.totalGanado ?? 0 | number }}</span>
+                  <span class="gastado">-{{ f.totalGastado ?? 0 | number }}</span>
+                </span>
               } @else {
                 <span class="main">{{ f.porcentaje }}%</span>
                 <span class="side">
@@ -240,7 +250,16 @@ type Vista = 'puntos' | 'porcentaje';
       .side { width: 56px; text-align: right; font-size: 12px; color: var(--text-muted); }
       .fire-sm { color: var(--warning-text); font-size: 13px; vertical-align: -1px; margin-right: 2px; }
 
+      /* Ganado (verde) y gastado (rojo) en la vista Balance, para diferenciarlos. */
+      .side--gyg {
+        width: auto; min-width: 70px; display: flex; flex-direction: column;
+        align-items: flex-end; gap: 1px; line-height: 1.2;
+      }
+      .side--gyg .ganado { color: var(--success-text); font-weight: 600; }
+      .side--gyg .gastado { color: var(--danger-text); font-weight: 600; }
+
       .note { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 14px; }
+
     `,
   ],
 })
@@ -256,10 +275,15 @@ export class RankingComponent {
   readonly enGrupo = computed(() => this.contexto.grupoId() !== null);
   readonly nombreContexto = computed(() => this.contexto.actual().nombre);
 
+  /** Marca cuándo llegó el primer dato de cada fuente de tabla. */
+  private readonly listoGlobal = signal(false);
+  private readonly listoGrupo = signal(false);
+
   /** Tabla del grupo activo (vacía si estamos en Global). */
   private readonly tablaGrupo = toSignal(
     toObservable(this.contexto.grupoId).pipe(
       switchMap((gid) => (gid ? this.gruposSrv.tabla(gid) : of([] as FilaTablaGrupo[]))),
+      tap(() => this.listoGrupo.set(true)),
     ),
     { initialValue: [] as FilaTablaGrupo[] },
   );
@@ -273,10 +297,13 @@ export class RankingComponent {
   readonly vista = signal<Vista>('porcentaje');
   readonly miPosicion = signal<number | null>(null);
 
+  /** ¿Vista de balance activa? (solo admin, fuera de grupo). */
+  readonly esBalance = computed(() => this.vista() === 'balance' && this.isAdmin() && !this.enGrupo());
+
   /** Mi fila: una sola lectura, independiente de la tabla. */
   readonly miFila = toSignal(this.service.miFila(), { initialValue: null });
 
-  private readonly topPuntos = toSignal(this.service.topPuntos(), {
+  private readonly topBalance = toSignal(this.service.topBalance(), {
     initialValue: [] as RankingDoc[],
   });
   /** True hasta que llegan los primeros datos de la tabla. */
@@ -284,9 +311,21 @@ export class RankingComponent {
   private readonly inicioCarga = Date.now();
 
   private readonly topPorcentaje = toSignal(
-    this.service.topPorcentaje().pipe(tap(() => apagarCargando(this.cargando, this.inicioCarga))),
+    this.service.topPorcentaje().pipe(tap(() => this.listoGlobal.set(true))),
     { initialValue: [] as RankingDoc[] },
   );
+
+  /**
+   * Apaga el loading según el contexto: en un grupo espera la tabla del grupo;
+   * en global espera el ranking general. Así no se ve la tabla vacía mientras
+   * llega la fuente que de verdad se está mostrando.
+   */
+  private readonly apagar = effect(() => {
+    const listo = this.enGrupo() ? this.listoGrupo() : this.listoGlobal();
+    if (listo) {
+      apagarCargando(this.cargando, this.inicioCarga);
+    }
+  });
 
   constructor() {
     // Recalcula la posición cuando cambia la vista o mis números.
@@ -304,10 +343,11 @@ export class RankingComponent {
         return;
       }
 
-      // Si no aparezco (estoy fuera del top), pregunto al servidor.
+      // Si no aparezco (estoy fuera del top), pregunto al servidor. La vista
+      // balance no tiene consulta de posición propia, así que ahí no calculamos.
       const p =
-        v === 'puntos' && this.isAdmin()
-          ? this.service.miPosicionPorPuntos(f.puntos)
+        v === 'balance'
+          ? Promise.resolve(0)
           : f.calificado
             ? this.service.miPosicionPorPorcentaje(f.porcentaje)
             : Promise.resolve(0);
@@ -335,12 +375,17 @@ export class RankingComponent {
       return filas;
     }
 
-    const esPuntos = this.vista() === 'puntos' && this.isAdmin();
-    const base = [...(esPuntos ? this.topPuntos() : this.topPorcentaje())];
+    const esBalance = this.esBalance();
+    const base = [...(esBalance ? this.topBalance() : this.topPorcentaje())];
 
-    // Desempate: % → más juegos → mejor racha → alfabético.
+    // Desempate según la vista activa.
     base.sort((a, b) => {
-      if (esPuntos && b.puntos !== a.puntos) return b.puntos - a.puntos;
+      if (esBalance) {
+        const bb = b.balance ?? 0;
+        const ba = a.balance ?? 0;
+        if (bb !== ba) return bb - ba;
+        return a.alias.localeCompare(b.alias, 'es');
+      }
       if (b.porcentaje !== a.porcentaje) return b.porcentaje - a.porcentaje;
       if (b.resueltos !== a.resueltos) return b.resueltos - a.resueltos;
       const rb = b.mejorRacha ?? 0;

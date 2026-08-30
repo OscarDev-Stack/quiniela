@@ -89,6 +89,60 @@ export class CompeticionesService {
         return updateDoc(doc(this.db, 'competiciones', competicionId), { equipos: limpios });
     }
 
+    /** Vincula la competición con una liga/temporada de TheSportsDB. */
+    guardarConfigApi(competicionId: string, apiLigaId: number, apiTemporada: string) {
+        return updateDoc(doc(this.db, 'competiciones', competicionId), {
+            apiLigaId,
+            apiTemporada: apiTemporada.trim(),
+        });
+    }
+
+    /**
+     * Trae de la API los enfrentamientos de una jornada, con equipos ya
+     * normalizados y la hora del primer partido. Solo devuelve datos; el
+     * admin los revisa y guarda con el flujo normal.
+     */
+    async traerJornadaApi(
+        competicionId: string,
+        numeroJornada: number,
+    ): Promise<{
+        numeroJornada: number;
+        primeraHora: string;
+        partidos: Array<{ local: string; visitante: string }>;
+    }> {
+        const fn = httpsCallable<
+            { competicionId: string; numeroJornada: number },
+            {
+                ok: boolean;
+                numeroJornada: number;
+                primeraHora: string;
+                partidos: Array<{ local: string; visitante: string }>;
+            }
+        >(this.fns, 'traerJornadaApi');
+        const res = await fn({ competicionId, numeroJornada });
+        return res.data;
+    }
+
+    /**
+     * Trae de la API los marcadores de una jornada ya guardada. Devuelve los
+     * partidos con su resultado precargado; el admin confirma y publica.
+     */
+    async traerResultadosApi(
+        competicionId: string,
+        jornadaId: string,
+    ): Promise<{
+        numero: number;
+        conResultado: number;
+        partidos: Jornada['partidos'];
+    }> {
+        const fn = httpsCallable<
+            { competicionId: string; jornadaId: string },
+            { ok: boolean; numero: number; conResultado: number; partidos: Jornada['partidos'] }
+        >(this.fns, 'traerResultadosApi');
+        const res = await fn({ competicionId, jornadaId });
+        return res.data;
+    }
+
     cambiarGestor(competicionId: string, uid: string, agregar: boolean) {
         return updateDoc(doc(this.db, 'competiciones', competicionId), {
             gestores: agregar ? arrayUnion(uid) : arrayRemove(uid),

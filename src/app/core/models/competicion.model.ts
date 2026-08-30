@@ -12,6 +12,10 @@ export interface Competicion {
     gestores?: string[];
     /* Última jornada resuelta, para orientar al administrador. */
     ultimaJornada?: number;
+    /* Vínculo con TheSportsDB para traer jornadas y resultados de la API.
+       apiLigaId: id de la liga (Liga MX = 4350). apiTemporada: "2026-2027". */
+    apiLigaId?: number;
+    apiTemporada?: string;
     createdAt?: unknown;
 }
 

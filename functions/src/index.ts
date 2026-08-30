@@ -7,6 +7,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { getMessaging } from 'firebase-admin/messaging';
+import { nombreOficial as nombreOficialEquipo } from './equipos';
 
 initializeApp();
 
@@ -94,6 +95,105 @@ const turnstileSecret = defineSecret('TURNSTILE_SECRET_KEY');
 
 const API_BASE = 'https://api.football-data.org/v4';
 
+/** TheSportsDB: liga mexicana y resultados. Key gratuita '123' por ahora. */
+const SPORTSDB_KEY = '123';
+const SPORTSDB_BASE = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}`;
+
+/** Un evento (partido) de TheSportsDB, con los campos que usamos. */
+interface EventoSportsDb {
+    intRound?: string;
+    strHomeTeam?: string;
+    strAwayTeam?: string;
+    intHomeScore?: string | null;
+    intAwayScore?: string | null;
+    strTimestamp?: string;
+    strStatus?: string;
+    strPostponed?: string;
+}
+
+/**
+ * Trae los partidos de UNA jornada (ronda) de una liga de TheSportsDB.
+ *
+ * Usa el endpoint `eventsround`, que devuelve la jornada completa. NO se usa
+ * `eventsseason` porque con la key gratuita esa respuesta viene truncada (solo
+ * las primeras jornadas), lo que hacía que jornadas altas parecieran vacías.
+ */
+async function eventosRondaSportsDb(
+    ligaId: number,
+    ronda: number,
+    temporada: string,
+): Promise<EventoSportsDb[]> {
+    const url =
+        `${SPORTSDB_BASE}/eventsround.php?id=${ligaId}&r=${ronda}&s=${encodeURIComponent(temporada)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+        throw new HttpsError('internal', `TheSportsDB respondió ${res.status}.`);
+    }
+    const data = (await res.json()) as { events?: EventoSportsDb[] | null };
+    return data.events ?? [];
+}
+
+/** Convierte el resultado de la API (marcador) al formato de la jornada. */
+function resultadoDesdeMarcador(
+    gl: number | null,
+    gv: number | null,
+): 'local' | 'empate' | 'visitante' | null {
+    if (gl === null || gv === null) return null;
+    if (gl > gv) return 'local';
+    if (gl < gv) return 'visitante';
+    return 'empate';
+}
+
+/** Un partido de jornada tras cruzar con la API (puede traer marcador o no). */
+interface PartidoJornadaApi {
+    local: string;
+    visitante: string;
+    resultado?: 'local' | 'empate' | 'visitante' | 'pospuesto' | null;
+    golesLocal?: number | null;
+    golesVisitante?: number | null;
+}
+
+/**
+ * Cruza los partidos de una jornada con los eventos de la API y devuelve los
+ * mismos partidos con su marcador precargado (solo los que ya terminaron; los
+ * aplazados quedan como 'pospuesto'). Empareja por par de equipos normalizados.
+ * NO resuelve nada: solo precarga. Lo usan la función manual (traerResultadosApi)
+ * y el scheduler automático.
+ */
+function cruzarResultadosJornada(
+    partidos: Array<{ local: string; visitante: string }>,
+    eventos: EventoSportsDb[],
+): { conResultado: number; partidos: PartidoJornadaApi[] } {
+    // Índice por par de equipos normalizados -> evento de la API.
+    const clave = (local: string, visitante: string) =>
+        `${nombreOficialEquipo(local)}|${nombreOficialEquipo(visitante)}`;
+    const porPar = new Map<string, EventoSportsDb>();
+    for (const e of eventos) porPar.set(clave(e.strHomeTeam ?? '', e.strAwayTeam ?? ''), e);
+
+    let conResultado = 0;
+    const salida = partidos.map((p): PartidoJornadaApi => {
+        const e = porPar.get(clave(p.local, p.visitante));
+        if (!e) return { ...p };
+
+        // Aplazado en la API: lo marcamos como pospuesto.
+        if (e.strPostponed === 'yes') {
+            conResultado++;
+            return { ...p, resultado: 'pospuesto', golesLocal: null, golesVisitante: null };
+        }
+
+        // Solo tomamos el marcador si el partido ya terminó (FT / AET / PEN...).
+        const terminado = ['FT', 'AET', 'PEN', 'Match Finished'].includes(String(e.strStatus ?? ''));
+        const gl = e.intHomeScore != null && e.intHomeScore !== '' ? Number(e.intHomeScore) : null;
+        const gv = e.intAwayScore != null && e.intAwayScore !== '' ? Number(e.intAwayScore) : null;
+        if (!terminado || gl === null || gv === null) return { ...p };
+
+        conResultado++;
+        return { ...p, golesLocal: gl, golesVisitante: gv, resultado: resultadoDesdeMarcador(gl, gv) };
+    });
+
+    return { conResultado, partidos: salida };
+}
+
 interface PartidoApi {
     id: number;
     utcDate: string;
@@ -164,6 +264,8 @@ async function actualizarRanking(uids: string[]): Promise<void> {
             const resueltos = Number(u['resueltos'] ?? 0);
             const aciertos = Number(u['aciertos'] ?? 0);
             const email = String(u['email'] ?? '');
+            const totalGastado = Number(u['totalGastado'] ?? 0);
+            const totalGanado = Number(u['totalGanado'] ?? 0);
             batch.set(rankRef, {
                 alias: String(u['alias'] ?? '').trim() || email.split('@')[0] || 'jugador',
                 // Histórico: no lo afecta el reinicio de saldo del administrador.
@@ -176,6 +278,10 @@ async function actualizarRanking(uids: string[]): Promise<void> {
                 calificado: resueltos >= MIN_RESUELTOS,
                 racha: Number(u['racha'] ?? 0),
                 mejorRacha: Number(u['mejorRacha'] ?? 0),
+                // Totales para la tabla de histórico (solo admin).
+                totalGastado,
+                totalGanado,
+                balance: totalGanado - totalGastado,
                 actualizado: FieldValue.serverTimestamp(),
             });
         }
@@ -304,6 +410,9 @@ export const crearPronostico = onCall(opcionesCall, async (req) => {
             puntos: despues,
             // El histórico acumula el neto: devuelve lo anterior, cobra lo nuevo.
             puntosHistoricos: FieldValue.increment(apuestaPrevia - apuesta),
+            // Total gastado bruto: el delta de esta apuesta (positivo si sube,
+            // negativo si baja al editar). Así refleja lo realmente apostado.
+            totalGastado: FieldValue.increment(apuesta - apuestaPrevia),
             bloqueado: despues - APUESTA_BASE < TOPE_INFERIOR,
         });
 
@@ -485,6 +594,9 @@ async function ejecutarLiquidacion(
                     {
                         puntos: FieldValue.increment(p.apuesta),
                         puntosHistoricos: FieldValue.increment(p.apuesta),
+                        // Devolución: revierte el gasto original (Opción 1). No
+                        // cuenta como ganancia; deja el balance como si no apostó.
+                        totalGastado: FieldValue.increment(-p.apuesta),
                         resueltos: FieldValue.increment(1),
                     },
                     { merge: true },
@@ -510,6 +622,7 @@ async function ejecutarLiquidacion(
                     {
                         puntos: FieldValue.increment(premio),
                         puntosHistoricos: FieldValue.increment(premio),
+                        totalGanado: FieldValue.increment(premio),
                         resueltos: FieldValue.increment(1),
                         aciertos: FieldValue.increment(1),
                         racha: FieldValue.increment(1),
@@ -753,6 +866,8 @@ export const cancelarPartido = onCall(opcionesCall, async (req) => {
                 {
                     puntos: FieldValue.increment(p.apuesta),
                     puntosHistoricos: FieldValue.increment(p.apuesta),
+                    // Cancelación: revierte el gasto (Opción 1), no cuenta como ganancia.
+                    totalGastado: FieldValue.increment(-p.apuesta),
                 },
                 { merge: true },
             );
@@ -827,6 +942,8 @@ export const recalcularRanking = onCall(opcionesCall, async (req) => {
         const resueltos = Number(u['resueltos'] ?? 0);
         const aciertos = Number(u['aciertos'] ?? 0);
         const email = String(u['email'] ?? '');
+        const totalGastado = Number(u['totalGastado'] ?? 0);
+        const totalGanado = Number(u['totalGanado'] ?? 0);
         batch.set(db.doc(`ranking/${d.id}`), {
             alias: String(u['alias'] ?? '').trim() || email.split('@')[0] || 'jugador',
             puntos: Number(u['puntosHistoricos'] ?? u['puntos'] ?? 0),
@@ -838,6 +955,9 @@ export const recalcularRanking = onCall(opcionesCall, async (req) => {
             calificado: resueltos >= MIN_RESUELTOS,
             racha: Number(u['racha'] ?? 0),
             mejorRacha: Number(u['mejorRacha'] ?? 0),
+            totalGastado,
+            totalGanado,
+            balance: totalGanado - totalGastado,
             actualizado: FieldValue.serverTimestamp(),
         });
         escritos++;
@@ -845,6 +965,127 @@ export const recalcularRanking = onCall(opcionesCall, async (req) => {
 
     await batch.commit();
     return { ok: true, jugadores: escritos };
+});
+
+/* ============================================================
+   BACKFILL de totales gastado/ganado (admin, una sola vez)
+   Recorre TODO el ledger y reconstruye totalGastado y totalGanado
+   por usuario, para las cuentas que ya existían antes de que se
+   empezaran a acumular estos campos. Luego regenera el ranking.
+   Idempotente: siempre parte de cero y reescribe el total exacto.
+   ============================================================ */
+export const backfillTotales = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+    const adminSnap = await db.doc(`admins/${uid}`).get();
+    if (!adminSnap.exists) throw new HttpsError('permission-denied', 'Solo un administrador.');
+
+    // Tipos que cuentan como GANANCIA (premios reales).
+    const TIPOS_GANADO = new Set(['premio', 'torneo-premio', 'bracket-premio']);
+    // Tipos que afectan el GASTO. El signo del monto ya lo resuelve la fórmula
+    // (gasto = -monto): en apuestas/entradas el monto es negativo (suma gasto),
+    // en devoluciones el monto es positivo (resta gasto).
+    const TIPOS_GASTO = new Set([
+        'apuesta',
+        'apuesta-edicion',
+        'torneo-entrada',
+        'torneo-revivir',
+        'bracket-entrada',
+        'devolucion',
+        'devolucion-cancelacion',
+        'torneo-devolucion',
+    ]);
+
+    const totales = new Map<string, { gastado: number; ganado: number }>();
+    const acc = (u: string) => {
+        let t = totales.get(u);
+        if (!t) {
+            t = { gastado: 0, ganado: 0 };
+            totales.set(u, t);
+        }
+        return t;
+    };
+
+    // Recorre el ledger por páginas para no cargar todo en memoria de golpe.
+    const PAGINA = 2000;
+    let ultimo: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+    for (;;) {
+        let q = db.collection('ledger').orderBy('__name__').limit(PAGINA);
+        if (ultimo) q = q.startAfter(ultimo);
+        const snap = await q.get();
+        if (snap.empty) break;
+
+        for (const d of snap.docs) {
+            const m = d.data() as Record<string, unknown>;
+            const u = String(m['uid'] ?? '');
+            // Movimientos del sistema (reserva) y ajustes de admin no cuentan.
+            if (!u || u === 'reserva') continue;
+            const tipo = String(m['tipo'] ?? '');
+            const monto = Number(m['monto'] ?? 0);
+
+            if (TIPOS_GANADO.has(tipo)) {
+                acc(u).ganado += monto;
+            } else if (TIPOS_GASTO.has(tipo)) {
+                // gasto = -monto (monto negativo suma; positivo/devolución resta)
+                acc(u).gastado += -monto;
+            }
+            // 'reinicio', 'bote', 'sobrante' y otros se ignoran.
+        }
+
+        ultimo = snap.docs[snap.docs.length - 1];
+        if (snap.size < PAGINA) break;
+    }
+
+    // Escribe los totales en cada usuario, en lotes.
+    const entradas = [...totales.entries()];
+    let escritos = 0;
+    for (let i = 0; i < entradas.length; i += 400) {
+        const batch = db.batch();
+        for (const [u, t] of entradas.slice(i, i + 400)) {
+            batch.set(
+                db.doc(`users/${u}`),
+                { totalGastado: Math.max(0, t.gastado), totalGanado: Math.max(0, t.ganado) },
+                { merge: true },
+            );
+            escritos++;
+        }
+        await batch.commit();
+    }
+
+    // Regenera el ranking para que las nuevas columnas queden reflejadas.
+    const users = await db.collection('users').get();
+    const rank = db.batch();
+    users.docs.forEach((d) => {
+        const uu = d.data();
+        if (uu['validada'] !== true || uu['noParticipa'] === true) {
+            rank.delete(db.doc(`ranking/${d.id}`));
+            return;
+        }
+        const resueltos = Number(uu['resueltos'] ?? 0);
+        const aciertos = Number(uu['aciertos'] ?? 0);
+        const email = String(uu['email'] ?? '');
+        const totalGastado = Number(uu['totalGastado'] ?? 0);
+        const totalGanado = Number(uu['totalGanado'] ?? 0);
+        rank.set(db.doc(`ranking/${d.id}`), {
+            alias: String(uu['alias'] ?? '').trim() || email.split('@')[0] || 'jugador',
+            puntos: Number(uu['puntosHistoricos'] ?? uu['puntos'] ?? 0),
+            saldo: Number(uu['puntos'] ?? 0),
+            torneosGanados: Number(uu['torneosGanados'] ?? 0),
+            aciertos,
+            resueltos,
+            porcentaje: resueltos > 0 ? Math.round((aciertos / resueltos) * 100) : 0,
+            calificado: resueltos >= MIN_RESUELTOS,
+            racha: Number(uu['racha'] ?? 0),
+            mejorRacha: Number(uu['mejorRacha'] ?? 0),
+            totalGastado,
+            totalGanado,
+            balance: totalGanado - totalGastado,
+            actualizado: FieldValue.serverTimestamp(),
+        });
+    });
+    await rank.commit();
+
+    return { ok: true, usuarios: escritos };
 });
 
 /* ============================================================
@@ -1273,6 +1514,7 @@ export const unirseTorneo = onCall(opcionesCall, async (req) => {
             tx.update(userRef, {
                 puntos: saldo - costo,
                 puntosHistoricos: FieldValue.increment(-costo),
+                totalGastado: FieldValue.increment(costo),
                 bloqueado: saldo - costo - APUESTA_BASE < TOPE_INFERIOR,
             });
             tx.update(torneo.ref, { bolsa: FieldValue.increment(costo) });
@@ -1380,6 +1622,121 @@ export const guardarPick = onCall(opcionesCall, async (req) => {
     });
 
     return { ok: true, equipo, jornada: numero };
+});
+
+/* ============================================================
+   TheSportsDB — traer una jornada desde la API
+   Devuelve los enfrentamientos de una jornada (intRound) con los
+   equipos ya normalizados a los nombres oficiales y la hora del
+   primer partido. NO guarda nada: el admin revisa y guarda con el
+   flujo normal. Publicar sigue siendo manual.
+   ============================================================ */
+export const traerJornadaApi = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const competicionId = String(req.data?.competicionId ?? '');
+    const numeroJornada = Math.floor(Number(req.data?.numeroJornada ?? 0));
+    if (!competicionId || numeroJornada < 1) {
+        throw new HttpsError('invalid-argument', 'Faltan la competición o el número de jornada.');
+    }
+
+    const compRef = db.doc(`competiciones/${competicionId}`);
+    const [adminSnap, compSnap] = await Promise.all([
+        db.doc(`admins/${uid}`).get(),
+        compRef.get(),
+    ]);
+    if (!compSnap.exists) throw new HttpsError('not-found', 'La competición no existe.');
+    const comp = compSnap.data() as Record<string, unknown>;
+    const gestores = (comp['gestores'] as string[]) ?? [];
+    if (!adminSnap.exists && !gestores.includes(uid)) {
+        throw new HttpsError('permission-denied', 'No gestionas esta competición.');
+    }
+
+    const ligaId = Number(comp['apiLigaId'] ?? 0);
+    const temporada = String(comp['apiTemporada'] ?? '');
+    if (!ligaId || !temporada) {
+        throw new HttpsError(
+            'failed-precondition',
+            'Esta competición no tiene configurada la liga y temporada de la API.',
+        );
+    }
+
+    const dela = await eventosRondaSportsDb(ligaId, numeroJornada, temporada);
+    if (dela.length === 0) {
+        throw new HttpsError('not-found', `La API no tiene partidos para la jornada ${numeroJornada}.`);
+    }
+
+    // Partidos con equipos normalizados; ordenados por hora.
+    const partidos = dela
+        .map((e) => ({
+            local: nombreOficialEquipo(e.strHomeTeam),
+            visitante: nombreOficialEquipo(e.strAwayTeam),
+            timestamp: e.strTimestamp ?? '',
+        }))
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+    // Hora del primer partido de la jornada (en ISO UTC), para prellenar el cierre.
+    const primeraHora = partidos.find((p) => p.timestamp)?.timestamp ?? '';
+
+    return {
+        ok: true,
+        numeroJornada,
+        primeraHora,
+        partidos: partidos.map((p) => ({ local: p.local, visitante: p.visitante })),
+    };
+});
+
+/* ============================================================
+   TheSportsDB — traer resultados de una jornada ya guardada
+   Empareja los partidos de la jornada con los de la API (por nombre
+   normalizado) y devuelve el marcador de los que ya terminaron. NO
+   publica: el admin captura/confirma y publica manualmente.
+   ============================================================ */
+export const traerResultadosApi = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const competicionId = String(req.data?.competicionId ?? '');
+    const jornadaId = String(req.data?.jornadaId ?? '');
+    if (!competicionId || !jornadaId) {
+        throw new HttpsError('invalid-argument', 'Faltan la competición o la jornada.');
+    }
+
+    const compRef = db.doc(`competiciones/${competicionId}`);
+    const jornadaRef = compRef.collection('jornadas').doc(jornadaId);
+    const [adminSnap, compSnap, jornadaSnap] = await Promise.all([
+        db.doc(`admins/${uid}`).get(),
+        compRef.get(),
+        jornadaRef.get(),
+    ]);
+    if (!compSnap.exists || !jornadaSnap.exists) {
+        throw new HttpsError('not-found', 'Competición o jornada inexistente.');
+    }
+    const comp = compSnap.data() as Record<string, unknown>;
+    const gestores = (comp['gestores'] as string[]) ?? [];
+    if (!adminSnap.exists && !gestores.includes(uid)) {
+        throw new HttpsError('permission-denied', 'No gestionas esta competición.');
+    }
+
+    const ligaId = Number(comp['apiLigaId'] ?? 0);
+    const temporada = String(comp['apiTemporada'] ?? '');
+    if (!ligaId || !temporada) {
+        throw new HttpsError(
+            'failed-precondition',
+            'Esta competición no tiene configurada la liga y temporada de la API.',
+        );
+    }
+
+    const jornada = jornadaSnap.data() as {
+        numero: number;
+        partidos: Array<{ local: string; visitante: string }>;
+    };
+
+    const dela = await eventosRondaSportsDb(ligaId, jornada.numero, temporada);
+    const { conResultado, partidos } = cruzarResultadosJornada(jornada.partidos, dela);
+
+    return { ok: true, numero: jornada.numero, conResultado, partidos };
 });
 
 /* ============================================================
@@ -1600,6 +1957,7 @@ export const resolverJornadaCompeticion = onCall(
                         {
                             puntos: FieldValue.increment(porCabeza),
                             puntosHistoricos: FieldValue.increment(porCabeza),
+                            totalGanado: FieldValue.increment(porCabeza),
                         },
                         { merge: true },
                     );
@@ -1765,6 +2123,7 @@ export const finalizarTorneo = onCall(opcionesCall, async (req) => {
                 {
                     puntos: FieldValue.increment(porCabeza),
                     puntosHistoricos: FieldValue.increment(porCabeza),
+                    totalGanado: FieldValue.increment(porCabeza),
                 },
                 { merge: true },
             );
@@ -1939,6 +2298,7 @@ export const resolverPendientes = onCall(opcionesCall, async (req) => {
                     {
                         puntos: FieldValue.increment(porCabeza),
                         puntosHistoricos: FieldValue.increment(porCabeza),
+                        totalGanado: FieldValue.increment(porCabeza),
                     },
                     { merge: true },
                 );
@@ -2021,6 +2381,8 @@ export const cerrarInscripciones = onSchedule(
                         {
                             puntos: FieldValue.increment(pago),
                             puntosHistoricos: FieldValue.increment(pago),
+                            // Torneo cancelado: revierte el gasto de la entrada.
+                            totalGastado: FieldValue.increment(-pago),
                         },
                         { merge: true },
                     );
@@ -2419,6 +2781,7 @@ async function cerrarQuiniela(
                 {
                     puntos: FieldValue.increment(porCabeza),
                     puntosHistoricos: FieldValue.increment(porCabeza),
+                    totalGanado: FieldValue.increment(porCabeza),
                 },
                 { merge: true },
             );
@@ -2986,6 +3349,81 @@ export const solicitarReinicio = onCall(
    la eliminación: este es el aviso que más partidas salva.
    ============================================================ */
 
+/* ============================================================
+   LIGAS — precarga automática de resultados de jornada
+   Para las competiciones vinculadas a la API (apiLigaId), revisa
+   las jornadas aún NO resueltas y precarga los marcadores de los
+   partidos que ya terminaron. NO resuelve nada: solo deja los
+   resultados listos para que el admin revise y publique. Es el
+   equivalente de "Traer resultados de la API", pero automático.
+   ============================================================ */
+export const revisarJornadas = onSchedule(
+    { schedule: cada(30), timeZone: 'America/Mexico_City' },
+    async () => {
+        // Competiciones con conexión a la API configurada.
+        const comps = await db.collection('competiciones').where('apiLigaId', '>', 0).get();
+        if (comps.empty) {
+            logger.info('Sin competiciones vinculadas a la API.');
+            return;
+        }
+
+        let jornadasTocadas = 0;
+
+        for (const compDoc of comps.docs) {
+            const comp = compDoc.data() as Record<string, unknown>;
+            const ligaId = Number(comp['apiLigaId'] ?? 0);
+            const temporada = String(comp['apiTemporada'] ?? '');
+            if (!ligaId || !temporada) continue;
+
+            // Jornadas aún no resueltas: son las candidatas a precargar.
+            const jornadas = await compDoc.ref
+                .collection('jornadas')
+                .where('estado', '==', 'abierta')
+                .get();
+
+            for (const jDoc of jornadas.docs) {
+                const j = jDoc.data() as {
+                    numero: number;
+                    cierraAt?: Timestamp;
+                    partidos: Array<{ local: string; visitante: string }>;
+                };
+
+                // Solo revisamos jornadas cuyo primer partido ya empezó. Antes
+                // de eso no hay nada que traer. (cierraAt = hora del 1er partido.)
+                const cierra = j.cierraAt?.toMillis() ?? 0;
+                if (!cierra || cierra > Date.now()) continue;
+
+                let eventos;
+                try {
+                    eventos = await eventosRondaSportsDb(ligaId, j.numero, temporada);
+                } catch (e) {
+                    logger.warn(`No se pudo consultar la jornada ${j.numero} de ${compDoc.id}.`, e);
+                    continue;
+                }
+
+                const { conResultado, partidos } = cruzarResultadosJornada(j.partidos, eventos);
+                if (conResultado === 0) continue;
+
+                // Solo escribe si algo cambió, para no gastar escrituras de más.
+                const cambio = partidos.some((p, i) => {
+                    const orig = j.partidos[i] as Record<string, unknown>;
+                    return (
+                        (p.golesLocal ?? null) !== (orig['golesLocal'] ?? null) ||
+                        (p.golesVisitante ?? null) !== (orig['golesVisitante'] ?? null) ||
+                        (p.resultado ?? null) !== (orig['resultado'] ?? null)
+                    );
+                });
+                if (!cambio) continue;
+
+                await jDoc.ref.update({ partidos });
+                jornadasTocadas++;
+            }
+        }
+
+        logger.info(`Precarga de jornadas: ${jornadasTocadas} jornada(s) actualizada(s).`);
+    },
+);
+
 /** Cuánto antes del cierre se manda el recordatorio. */
 const AVISO_HORAS_ANTES = 2;
 
@@ -3133,7 +3571,10 @@ export const revivir = onCall(
 
             // Cobro.
             if (costo > 0) {
-                tx.update(userRef, { puntos: FieldValue.increment(-costo) });
+                tx.update(userRef, {
+                    puntos: FieldValue.increment(-costo),
+                    totalGastado: FieldValue.increment(costo),
+                });
                 tx.set(torneoRef, { bolsa: FieldValue.increment(costo) }, { merge: true });
                 // Queda en el ledger, igual que la entrada: el pago por revivir
                 // es auditable y aparece en el historial de movimientos.
@@ -3556,7 +3997,10 @@ export const aceptarDuenoBracket = onCall(opcionesCall, async (req) => {
             if (puntos - costo < TOPE_INFERIOR) {
                 throw new HttpsError('failed-precondition', 'No te alcanza el saldo para entrar.');
             }
-            tx.update(userRef, { puntos: FieldValue.increment(-costo) });
+            tx.update(userRef, {
+                puntos: FieldValue.increment(-costo),
+                totalGastado: FieldValue.increment(costo),
+            });
             // Todo movimiento de puntos queda en el ledger.
             tx.set(db.collection('ledger').doc(), {
                 uid,
@@ -3815,7 +4259,10 @@ export const guardarPronosticoBracket = onCall(opcionesCall, async (req) => {
             if (saldo - costo < TOPE_INFERIOR) {
                 throw new HttpsError('failed-precondition', 'No te alcanza el saldo para entrar.');
             }
-            tx.update(userRef, { puntos: FieldValue.increment(-costo) });
+            tx.update(userRef, {
+                puntos: FieldValue.increment(-costo),
+                totalGastado: FieldValue.increment(costo),
+            });
             tx.set(bracketRef, { bolsa: FieldValue.increment(costo) }, { merge: true });
             // Todo movimiento de puntos queda en el ledger.
             tx.set(db.collection('ledger').doc(), {
@@ -4020,6 +4467,7 @@ async function calificarDuenos(
                 {
                     puntos: FieldValue.increment(bolsa),
                     puntosHistoricos: FieldValue.increment(bolsa),
+                    totalGanado: FieldValue.increment(bolsa),
                 },
                 { merge: true },
             );
@@ -4120,6 +4568,7 @@ export const calificarBracket = onCall(
                     {
                         puntos: FieldValue.increment(premio),
                         puntosHistoricos: FieldValue.increment(premio),
+                        totalGanado: FieldValue.increment(premio),
                     },
                     { merge: true },
                 );
@@ -4280,7 +4729,10 @@ async function cobrarDuenosPendientes(
             const snap = await tx.get(userRef);
             const puntos = Number((snap.data() as Record<string, unknown>)?.['puntos'] ?? 0);
             if (puntos < costo) return false; // sin saldo: se le quita el equipo.
-            tx.update(userRef, { puntos: FieldValue.increment(-costo) });
+            tx.update(userRef, {
+                puntos: FieldValue.increment(-costo),
+                totalGastado: FieldValue.increment(costo),
+            });
             // Todo movimiento de puntos queda en el ledger.
             tx.set(db.collection('ledger').doc(), {
                 uid,

@@ -34,6 +34,11 @@ export interface RankingDoc {
     calificado?: boolean;
     racha?: number;
     mejorRacha?: number;
+    /** Totales para la tabla de histórico (solo admin). */
+    totalGastado?: number;
+    totalGanado?: number;
+    /** Diferencia ganado − gastado. */
+    balance?: number;
 }
 
 export interface FilaRanking extends RankingDoc {
@@ -62,6 +67,19 @@ export class RankingService {
             where('calificado', '==', true),
             orderBy('porcentaje', 'desc'),
             orderBy('resueltos', 'desc'),
+            limit(TOP_LIMITE),
+        );
+        return collectionData(q, { idField: 'id' }) as Observable<RankingDoc[]>;
+    }
+
+    /**
+     * Top por balance (ganado − gastado), de mayor a menor. Es la tabla de
+     * histórico que ve el admin: quién va más arriba en la diferencia.
+     */
+    topBalance(): Observable<RankingDoc[]> {
+        const q = query(
+            collection(this.db, 'ranking'),
+            orderBy('balance', 'desc'),
             limit(TOP_LIMITE),
         );
         return collectionData(q, { idField: 'id' }) as Observable<RankingDoc[]>;

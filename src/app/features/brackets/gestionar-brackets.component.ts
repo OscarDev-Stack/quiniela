@@ -472,11 +472,15 @@ export class GestionarBracketsComponent {
       return;
     }
 
-    // ¿Empate que necesita penales? Solo si es el último partido de la llave.
+    // ¿Empate que necesita penales? Al capturar el ÚLTIMO partido de la llave
+    // se calcula el GLOBAL (ida + vuelta). Si el global empata y el desempate
+    // es penales, hay que preguntar quién ganó la tanda. Antes solo se miraba
+    // el marcador de ese partido, así que un global empatado con la vuelta no
+    // empatada (ej: 1-2 y 2-1) no disparaba el modal y la llave no resolvía.
     const esFinal = l.ronda === rondasDe(b.config.equipos) - 1;
     const desempate = esFinal ? b.config.desempateFinal : b.config.desempateRondas;
     const esUltimo = indice === l.partidos.length - 1;
-    if (gl === gv && esUltimo && desempate === 'penales') {
+    if (esUltimo && desempate === 'penales' && this.globalEmpata(l, indice, gl, gv)) {
       // En vez de un prompt(), abrimos un modal para elegir quién ganó en
       // penales, mostrando los nombres reales de los equipos.
       this.penalesPend.set({ b, l, indice, gl, gv });
@@ -484,6 +488,32 @@ export class GestionarBracketsComponent {
     }
 
     await this.guardarCaptura(b, l, indice, gl, gv, null);
+  }
+
+  /**
+   * Suma el marcador global de la llave (ida + vuelta), usando el marcador
+   * recién capturado para el partido `indice`, y dice si quedó empatado.
+   * En la vuelta, local y visitante se invierten (el de casa es el visitante
+   * de la ida). Un partido único simplemente compara ese marcador.
+   */
+  private globalEmpata(l: Llave, indice: number, gl: number, gv: number): boolean {
+    let local = 0;
+    let visitante = 0;
+    for (let i = 0; i < l.partidos.length; i++) {
+      const p = l.partidos[i];
+      // Para el partido que se está capturando ahora, usa los goles nuevos.
+      const golesL = i === indice ? gl : p.golesLocal;
+      const golesV = i === indice ? gv : p.golesVisitante;
+      if (typeof golesL !== 'number' || typeof golesV !== 'number') return false;
+      if (p.tipo === 'vuelta') {
+        local += golesV;
+        visitante += golesL;
+      } else {
+        local += golesL;
+        visitante += golesV;
+      }
+    }
+    return local === visitante;
   }
 
   /** Estado del modal de penales (empate en el último partido de una llave). */
