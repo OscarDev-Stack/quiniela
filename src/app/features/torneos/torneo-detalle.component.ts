@@ -14,6 +14,7 @@ import { ReglasTorneoComponent } from './reglas-torneo.component';
 import { PartidosJornadaComponent } from './partidos-jornada.component';
 import { TablaPosicionesComponent } from './tabla-posiciones.component';
 import { CartonesJornadaComponent } from './cartones-jornada.component';
+import { CelebracionVictoriaComponent } from '../../shared/celebracion-victoria.component';
 import { TorneosService } from '../../core/services/torneos.service';
 import {
   Torneo,
@@ -36,6 +37,7 @@ import { ToastService } from '../../shared/toast.service';
     CartonesJornadaComponent,
     CargandoComponent,
     EscudoComponent,
+    CelebracionVictoriaComponent,
   ],
   template: `
     <div class="screen">
@@ -93,22 +95,13 @@ import { ToastService } from '../../shared/toast.service';
 
         @if (t.estado === 'finalizado' && yo()) {
           @if (soyGanador()) {
-            <div class="final final--gano">
-              <div class="trofeo"><i class="ti ti-trophy"></i></div>
-              <h2>¡Felicidades, ganaste!</h2>
-              @if (esQuiniela()) {
-                <p>
-                  Terminaste primero con {{ yo()!.puntosTorneo ?? 0 }} puntos
-                  entre {{ participantes().length }} jugador(es).
-                </p>
-              } @else {
-                <p>Fuiste el último en pie de {{ participantes().length }} participantes.</p>
-              }
-              @if (miPremio() > 0) {
-                <div class="premio-grande">+{{ miPremio() | number }} pts</div>
-                <p class="detalle">Ya están en tu saldo.</p>
-              }
-            </div>
+            <app-celebracion-victoria
+              titulo="¡Felicidades, ganaste!"
+              [subtitulo]="esQuiniela()
+                ? 'Terminaste primero con ' + (yo()!.puntosTorneo ?? 0) + ' puntos entre ' + participantes().length + ' jugador(es).'
+                : 'Fuiste el último en pie de ' + participantes().length + ' participantes.'"
+              [premio]="miPremio()"
+            />
           } @else {
             <div class="final final--perdio">
               <div class="trofeo"><i class="ti ti-confetti"></i></div>
