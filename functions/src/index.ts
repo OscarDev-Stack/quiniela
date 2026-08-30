@@ -112,14 +112,19 @@ interface EventoSportsDb {
 }
 
 /**
- * Trae todos los eventos de una temporada de una liga de TheSportsDB.
- * Devuelve [] si algo falla, para que el llamador lo maneje con gracia.
+ * Trae los partidos de UNA jornada (ronda) de una liga de TheSportsDB.
+ *
+ * Usa el endpoint `eventsround`, que devuelve la jornada completa. NO se usa
+ * `eventsseason` porque con la key gratuita esa respuesta viene truncada (solo
+ * las primeras jornadas), lo que hacía que jornadas altas parecieran vacías.
  */
-async function eventosTemporadaSportsDb(
+async function eventosRondaSportsDb(
     ligaId: number,
+    ronda: number,
     temporada: string,
 ): Promise<EventoSportsDb[]> {
-    const url = `${SPORTSDB_BASE}/eventsseason.php?id=${ligaId}&s=${encodeURIComponent(temporada)}`;
+    const url =
+        `${SPORTSDB_BASE}/eventsround.php?id=${ligaId}&r=${ronda}&s=${encodeURIComponent(temporada)}`;
     const res = await fetch(url);
     if (!res.ok) {
         throw new HttpsError('internal', `TheSportsDB respondió ${res.status}.`);
@@ -1607,8 +1612,7 @@ export const traerJornadaApi = onCall(opcionesCall, async (req) => {
         );
     }
 
-    const eventos = await eventosTemporadaSportsDb(ligaId, temporada);
-    const dela = eventos.filter((e) => Number(e.intRound ?? 0) === numeroJornada);
+    const dela = await eventosRondaSportsDb(ligaId, numeroJornada, temporada);
     if (dela.length === 0) {
         throw new HttpsError('not-found', `La API no tiene partidos para la jornada ${numeroJornada}.`);
     }
@@ -1679,8 +1683,7 @@ export const traerResultadosApi = onCall(opcionesCall, async (req) => {
         partidos: Array<{ local: string; visitante: string }>;
     };
 
-    const eventos = await eventosTemporadaSportsDb(ligaId, temporada);
-    const dela = eventos.filter((e) => Number(e.intRound ?? 0) === jornada.numero);
+    const dela = await eventosRondaSportsDb(ligaId, jornada.numero, temporada);
 
     // Índice por par de equipos normalizados -> evento de la API.
     const clave = (local: string, visitante: string) =>

@@ -32,8 +32,12 @@ valores (los nombres de equipos de otras ligas requerirían ampliar el normaliza
   nombres de la API ("Tigres UANL", "Santos Laguna", "America") a los nombres oficiales
   del catálogo ("Tigres", "Santos", "América"), quitando acentos y usando alias.
 - **`functions/src/index.ts`**:
-  - Constantes `SPORTSDB_KEY = '123'`, `SPORTSDB_BASE` y helper `eventosTemporadaSportsDb`.
-  - **`traerJornadaApi(competicionId, numeroJornada)`**: filtra la temporada por `intRound`,
+  - Constantes `SPORTSDB_KEY = '123'`, `SPORTSDB_BASE` y helper `eventosRondaSportsDb`.
+  - **IMPORTANTE:** se usa el endpoint `eventsround.php?id={liga}&r={jornada}&s={temporada}`,
+    que trae la jornada completa. NO se usa `eventsseason` porque con la key gratuita esa
+    respuesta viene truncada (solo las primeras jornadas), lo que hacía que jornadas altas
+    (ej: la 4) parecieran vacías.
+  - **`traerJornadaApi(competicionId, numeroJornada)`**: trae la jornada directa de la API,
     devuelve los enfrentamientos con equipos normalizados y la hora del primer partido
     (ISO UTC). No guarda nada.
   - **`traerResultadosApi(competicionId, jornadaId)`**: empareja los partidos de la jornada
