@@ -144,6 +144,56 @@ function resultadoDesdeMarcador(
     return 'empate';
 }
 
+/** Un partido de jornada tras cruzar con la API (puede traer marcador o no). */
+interface PartidoJornadaApi {
+    local: string;
+    visitante: string;
+    resultado?: 'local' | 'empate' | 'visitante' | 'pospuesto' | null;
+    golesLocal?: number | null;
+    golesVisitante?: number | null;
+}
+
+/**
+ * Cruza los partidos de una jornada con los eventos de la API y devuelve los
+ * mismos partidos con su marcador precargado (solo los que ya terminaron; los
+ * aplazados quedan como 'pospuesto'). Empareja por par de equipos normalizados.
+ * NO resuelve nada: solo precarga. Lo usan la función manual (traerResultadosApi)
+ * y el scheduler automático.
+ */
+function cruzarResultadosJornada(
+    partidos: Array<{ local: string; visitante: string }>,
+    eventos: EventoSportsDb[],
+): { conResultado: number; partidos: PartidoJornadaApi[] } {
+    // Índice por par de equipos normalizados -> evento de la API.
+    const clave = (local: string, visitante: string) =>
+        `${nombreOficialEquipo(local)}|${nombreOficialEquipo(visitante)}`;
+    const porPar = new Map<string, EventoSportsDb>();
+    for (const e of eventos) porPar.set(clave(e.strHomeTeam ?? '', e.strAwayTeam ?? ''), e);
+
+    let conResultado = 0;
+    const salida = partidos.map((p): PartidoJornadaApi => {
+        const e = porPar.get(clave(p.local, p.visitante));
+        if (!e) return { ...p };
+
+        // Aplazado en la API: lo marcamos como pospuesto.
+        if (e.strPostponed === 'yes') {
+            conResultado++;
+            return { ...p, resultado: 'pospuesto', golesLocal: null, golesVisitante: null };
+        }
+
+        // Solo tomamos el marcador si el partido ya terminó (FT / AET / PEN...).
+        const terminado = ['FT', 'AET', 'PEN', 'Match Finished'].includes(String(e.strStatus ?? ''));
+        const gl = e.intHomeScore != null && e.intHomeScore !== '' ? Number(e.intHomeScore) : null;
+        const gv = e.intAwayScore != null && e.intAwayScore !== '' ? Number(e.intAwayScore) : null;
+        if (!terminado || gl === null || gv === null) return { ...p };
+
+        conResultado++;
+        return { ...p, golesLocal: gl, golesVisitante: gv, resultado: resultadoDesdeMarcador(gl, gv) };
+    });
+
+    return { conResultado, partidos: salida };
+}
+
 interface PartidoApi {
     id: number;
     utcDate: string;
@@ -1684,39 +1734,7 @@ export const traerResultadosApi = onCall(opcionesCall, async (req) => {
     };
 
     const dela = await eventosRondaSportsDb(ligaId, jornada.numero, temporada);
-
-    // Índice por par de equipos normalizados -> evento de la API.
-    const clave = (local: string, visitante: string) =>
-        `${nombreOficialEquipo(local)}|${nombreOficialEquipo(visitante)}`;
-    const porPar = new Map<string, EventoSportsDb>();
-    for (const e of dela) porPar.set(clave(e.strHomeTeam ?? '', e.strAwayTeam ?? ''), e);
-
-    // Para cada partido de la jornada, buscamos su marcador en la API.
-    let conResultado = 0;
-    const partidos = jornada.partidos.map((p) => {
-        const e = porPar.get(clave(p.local, p.visitante));
-        if (!e) return { ...p };
-
-        // Aplazado en la API: lo marcamos como pospuesto.
-        if (e.strPostponed === 'yes') {
-            conResultado++;
-            return { ...p, resultado: 'pospuesto' as const, golesLocal: null, golesVisitante: null };
-        }
-
-        // Solo tomamos el marcador si el partido ya terminó (FT / AET / PEN...).
-        const terminado = ['FT', 'AET', 'PEN', 'Match Finished'].includes(String(e.strStatus ?? ''));
-        const gl = e.intHomeScore != null && e.intHomeScore !== '' ? Number(e.intHomeScore) : null;
-        const gv = e.intAwayScore != null && e.intAwayScore !== '' ? Number(e.intAwayScore) : null;
-        if (!terminado || gl === null || gv === null) return { ...p };
-
-        conResultado++;
-        return {
-            ...p,
-            golesLocal: gl,
-            golesVisitante: gv,
-            resultado: resultadoDesdeMarcador(gl, gv),
-        };
-    });
+    const { conResultado, partidos } = cruzarResultadosJornada(jornada.partidos, dela);
 
     return { ok: true, numero: jornada.numero, conResultado, partidos };
 });
@@ -3330,6 +3348,81 @@ export const solicitarReinicio = onCall(
    antes del primer partido. En supervivencia, no elegir cuesta
    la eliminación: este es el aviso que más partidas salva.
    ============================================================ */
+
+/* ============================================================
+   LIGAS — precarga automática de resultados de jornada
+   Para las competiciones vinculadas a la API (apiLigaId), revisa
+   las jornadas aún NO resueltas y precarga los marcadores de los
+   partidos que ya terminaron. NO resuelve nada: solo deja los
+   resultados listos para que el admin revise y publique. Es el
+   equivalente de "Traer resultados de la API", pero automático.
+   ============================================================ */
+export const revisarJornadas = onSchedule(
+    { schedule: cada(30), timeZone: 'America/Mexico_City' },
+    async () => {
+        // Competiciones con conexión a la API configurada.
+        const comps = await db.collection('competiciones').where('apiLigaId', '>', 0).get();
+        if (comps.empty) {
+            logger.info('Sin competiciones vinculadas a la API.');
+            return;
+        }
+
+        let jornadasTocadas = 0;
+
+        for (const compDoc of comps.docs) {
+            const comp = compDoc.data() as Record<string, unknown>;
+            const ligaId = Number(comp['apiLigaId'] ?? 0);
+            const temporada = String(comp['apiTemporada'] ?? '');
+            if (!ligaId || !temporada) continue;
+
+            // Jornadas aún no resueltas: son las candidatas a precargar.
+            const jornadas = await compDoc.ref
+                .collection('jornadas')
+                .where('estado', '==', 'abierta')
+                .get();
+
+            for (const jDoc of jornadas.docs) {
+                const j = jDoc.data() as {
+                    numero: number;
+                    cierraAt?: Timestamp;
+                    partidos: Array<{ local: string; visitante: string }>;
+                };
+
+                // Solo revisamos jornadas cuyo primer partido ya empezó. Antes
+                // de eso no hay nada que traer. (cierraAt = hora del 1er partido.)
+                const cierra = j.cierraAt?.toMillis() ?? 0;
+                if (!cierra || cierra > Date.now()) continue;
+
+                let eventos;
+                try {
+                    eventos = await eventosRondaSportsDb(ligaId, j.numero, temporada);
+                } catch (e) {
+                    logger.warn(`No se pudo consultar la jornada ${j.numero} de ${compDoc.id}.`, e);
+                    continue;
+                }
+
+                const { conResultado, partidos } = cruzarResultadosJornada(j.partidos, eventos);
+                if (conResultado === 0) continue;
+
+                // Solo escribe si algo cambió, para no gastar escrituras de más.
+                const cambio = partidos.some((p, i) => {
+                    const orig = j.partidos[i] as Record<string, unknown>;
+                    return (
+                        (p.golesLocal ?? null) !== (orig['golesLocal'] ?? null) ||
+                        (p.golesVisitante ?? null) !== (orig['golesVisitante'] ?? null) ||
+                        (p.resultado ?? null) !== (orig['resultado'] ?? null)
+                    );
+                });
+                if (!cambio) continue;
+
+                await jDoc.ref.update({ partidos });
+                jornadasTocadas++;
+            }
+        }
+
+        logger.info(`Precarga de jornadas: ${jornadasTocadas} jornada(s) actualizada(s).`);
+    },
+);
 
 /** Cuánto antes del cierre se manda el recordatorio. */
 const AVISO_HORAS_ANTES = 2;
