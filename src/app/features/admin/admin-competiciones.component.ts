@@ -573,7 +573,29 @@ export class AdminCompeticionesComponent {
       if (r.primeraHora) {
         bor.cierra = this.isoALocalInput(r.primeraHora);
       }
-      this.avisar(`${r.partidos.length} partido(s) traídos de la API. Revisa y guarda.`);
+
+      // Los selects solo muestran equipos del catálogo de la competición. Si la
+      // jornada trae equipos que aún no están en el catálogo, aparecerían
+      // vacíos. Así que los agregamos automáticamente para que se vean.
+      const actuales = new Set(c.equipos ?? []);
+      const nuevos: string[] = [];
+      for (const p of r.partidos) {
+        for (const eq of [p.local, p.visitante]) {
+          if (eq && !actuales.has(eq)) {
+            actuales.add(eq);
+            nuevos.push(eq);
+          }
+        }
+      }
+      if (nuevos.length > 0) {
+        await this.service.guardarEquipos(c.id, [...actuales]);
+      }
+
+      this.avisar(
+        `${r.partidos.length} partido(s) traídos de la API.` +
+          (nuevos.length > 0 ? ` Se agregaron ${nuevos.length} equipo(s) al catálogo.` : '') +
+          ' Revisa y guarda.',
+      );
     } catch (e: unknown) {
       this.toast.error((e as Error)?.message ?? 'No se pudo traer la jornada.');
     } finally {
@@ -660,7 +682,12 @@ export class AdminCompeticionesComponent {
     const propio = lado === 'local' ? fila.local : fila.visitante;
     if (propio) usados.delete(propio);
 
-    return (c.equipos ?? []).filter((e) => !usados.has(e));
+    const catalogo = c.equipos ?? [];
+    const lista = catalogo.filter((e) => !usados.has(e));
+    // Si el valor de la fila aún no está en el catálogo (recién traído de la
+    // API y todavía propagándose), lo incluimos para que el select lo muestre.
+    if (propio && !catalogo.includes(propio)) lista.push(propio);
+    return lista;
   }
 
   agregarFila(competicionId: string): void {
