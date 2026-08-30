@@ -37,6 +37,10 @@ import { ToastService } from '../../shared/toast.service';
             <i class="ti ti-history-toggle"></i>
             {{ trabajando() ? 'Corrigiendo…' : 'Igualar históricos' }}
           </button>
+          <button class="chip" [disabled]="calculandoTotales()" (click)="calcularTotales()">
+            <i class="ti ti-calculator"></i>
+            {{ calculandoTotales() ? 'Calculando…' : 'Calcular totales' }}
+          </button>
         </div>
       </header>
 
@@ -219,6 +223,7 @@ export class AdminUsuariosComponent {
 
   readonly users = toSignal(this.admin.getUsers(), { initialValue: [] as AppUser[] });
   readonly trabajando = signal(false);
+  readonly calculandoTotales = signal(false);
 
 
 
@@ -354,6 +359,31 @@ export class AdminUsuariosComponent {
       this.toast.exito(`Ranking actualizado: ${r.jugadores} jugador(es).`);
     } catch (e: unknown) {
       this.toast.error((e as Error)?.message ?? 'No se pudo recalcular.');
+    }
+  }
+
+  /**
+   * Reconstruye total gastado/ganado de todos desde el ledger. Se corre una
+   * vez para las cuentas anteriores a estos campos; luego se mantienen solos.
+   */
+  async calcularTotales(): Promise<void> {
+    const ok = await this.confirmar.pedir({
+      titulo: 'Calcular totales',
+      mensaje:
+        'Recorrerá todo el historial de movimientos para reconstruir el total ' +
+        'gastado y ganado de cada jugador. Puede tardar unos segundos.',
+      aceptar: 'Calcular',
+    });
+    if (!ok) return;
+
+    this.calculandoTotales.set(true);
+    try {
+      const r = await this.admin.backfillTotales();
+      this.toast.exito(`Totales calculados para ${r.usuarios} jugador(es).`);
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudieron calcular.');
+    } finally {
+      this.calculandoTotales.set(false);
     }
   }
 }

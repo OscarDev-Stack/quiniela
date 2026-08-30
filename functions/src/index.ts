@@ -164,6 +164,8 @@ async function actualizarRanking(uids: string[]): Promise<void> {
             const resueltos = Number(u['resueltos'] ?? 0);
             const aciertos = Number(u['aciertos'] ?? 0);
             const email = String(u['email'] ?? '');
+            const totalGastado = Number(u['totalGastado'] ?? 0);
+            const totalGanado = Number(u['totalGanado'] ?? 0);
             batch.set(rankRef, {
                 alias: String(u['alias'] ?? '').trim() || email.split('@')[0] || 'jugador',
                 // Histórico: no lo afecta el reinicio de saldo del administrador.
@@ -176,6 +178,10 @@ async function actualizarRanking(uids: string[]): Promise<void> {
                 calificado: resueltos >= MIN_RESUELTOS,
                 racha: Number(u['racha'] ?? 0),
                 mejorRacha: Number(u['mejorRacha'] ?? 0),
+                // Totales para la tabla de histórico (solo admin).
+                totalGastado,
+                totalGanado,
+                balance: totalGanado - totalGastado,
                 actualizado: FieldValue.serverTimestamp(),
             });
         }
@@ -304,6 +310,9 @@ export const crearPronostico = onCall(opcionesCall, async (req) => {
             puntos: despues,
             // El histórico acumula el neto: devuelve lo anterior, cobra lo nuevo.
             puntosHistoricos: FieldValue.increment(apuestaPrevia - apuesta),
+            // Total gastado bruto: el delta de esta apuesta (positivo si sube,
+            // negativo si baja al editar). Así refleja lo realmente apostado.
+            totalGastado: FieldValue.increment(apuesta - apuestaPrevia),
             bloqueado: despues - APUESTA_BASE < TOPE_INFERIOR,
         });
 
@@ -485,6 +494,9 @@ async function ejecutarLiquidacion(
                     {
                         puntos: FieldValue.increment(p.apuesta),
                         puntosHistoricos: FieldValue.increment(p.apuesta),
+                        // Devolución: revierte el gasto original (Opción 1). No
+                        // cuenta como ganancia; deja el balance como si no apostó.
+                        totalGastado: FieldValue.increment(-p.apuesta),
                         resueltos: FieldValue.increment(1),
                     },
                     { merge: true },
@@ -510,6 +522,7 @@ async function ejecutarLiquidacion(
                     {
                         puntos: FieldValue.increment(premio),
                         puntosHistoricos: FieldValue.increment(premio),
+                        totalGanado: FieldValue.increment(premio),
                         resueltos: FieldValue.increment(1),
                         aciertos: FieldValue.increment(1),
                         racha: FieldValue.increment(1),
@@ -753,6 +766,8 @@ export const cancelarPartido = onCall(opcionesCall, async (req) => {
                 {
                     puntos: FieldValue.increment(p.apuesta),
                     puntosHistoricos: FieldValue.increment(p.apuesta),
+                    // Cancelación: revierte el gasto (Opción 1), no cuenta como ganancia.
+                    totalGastado: FieldValue.increment(-p.apuesta),
                 },
                 { merge: true },
             );
@@ -827,6 +842,8 @@ export const recalcularRanking = onCall(opcionesCall, async (req) => {
         const resueltos = Number(u['resueltos'] ?? 0);
         const aciertos = Number(u['aciertos'] ?? 0);
         const email = String(u['email'] ?? '');
+        const totalGastado = Number(u['totalGastado'] ?? 0);
+        const totalGanado = Number(u['totalGanado'] ?? 0);
         batch.set(db.doc(`ranking/${d.id}`), {
             alias: String(u['alias'] ?? '').trim() || email.split('@')[0] || 'jugador',
             puntos: Number(u['puntosHistoricos'] ?? u['puntos'] ?? 0),
@@ -838,6 +855,9 @@ export const recalcularRanking = onCall(opcionesCall, async (req) => {
             calificado: resueltos >= MIN_RESUELTOS,
             racha: Number(u['racha'] ?? 0),
             mejorRacha: Number(u['mejorRacha'] ?? 0),
+            totalGastado,
+            totalGanado,
+            balance: totalGanado - totalGastado,
             actualizado: FieldValue.serverTimestamp(),
         });
         escritos++;
@@ -845,6 +865,127 @@ export const recalcularRanking = onCall(opcionesCall, async (req) => {
 
     await batch.commit();
     return { ok: true, jugadores: escritos };
+});
+
+/* ============================================================
+   BACKFILL de totales gastado/ganado (admin, una sola vez)
+   Recorre TODO el ledger y reconstruye totalGastado y totalGanado
+   por usuario, para las cuentas que ya existían antes de que se
+   empezaran a acumular estos campos. Luego regenera el ranking.
+   Idempotente: siempre parte de cero y reescribe el total exacto.
+   ============================================================ */
+export const backfillTotales = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+    const adminSnap = await db.doc(`admins/${uid}`).get();
+    if (!adminSnap.exists) throw new HttpsError('permission-denied', 'Solo un administrador.');
+
+    // Tipos que cuentan como GANANCIA (premios reales).
+    const TIPOS_GANADO = new Set(['premio', 'torneo-premio', 'bracket-premio']);
+    // Tipos que afectan el GASTO. El signo del monto ya lo resuelve la fórmula
+    // (gasto = -monto): en apuestas/entradas el monto es negativo (suma gasto),
+    // en devoluciones el monto es positivo (resta gasto).
+    const TIPOS_GASTO = new Set([
+        'apuesta',
+        'apuesta-edicion',
+        'torneo-entrada',
+        'torneo-revivir',
+        'bracket-entrada',
+        'devolucion',
+        'devolucion-cancelacion',
+        'torneo-devolucion',
+    ]);
+
+    const totales = new Map<string, { gastado: number; ganado: number }>();
+    const acc = (u: string) => {
+        let t = totales.get(u);
+        if (!t) {
+            t = { gastado: 0, ganado: 0 };
+            totales.set(u, t);
+        }
+        return t;
+    };
+
+    // Recorre el ledger por páginas para no cargar todo en memoria de golpe.
+    const PAGINA = 2000;
+    let ultimo: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+    for (;;) {
+        let q = db.collection('ledger').orderBy('__name__').limit(PAGINA);
+        if (ultimo) q = q.startAfter(ultimo);
+        const snap = await q.get();
+        if (snap.empty) break;
+
+        for (const d of snap.docs) {
+            const m = d.data() as Record<string, unknown>;
+            const u = String(m['uid'] ?? '');
+            // Movimientos del sistema (reserva) y ajustes de admin no cuentan.
+            if (!u || u === 'reserva') continue;
+            const tipo = String(m['tipo'] ?? '');
+            const monto = Number(m['monto'] ?? 0);
+
+            if (TIPOS_GANADO.has(tipo)) {
+                acc(u).ganado += monto;
+            } else if (TIPOS_GASTO.has(tipo)) {
+                // gasto = -monto (monto negativo suma; positivo/devolución resta)
+                acc(u).gastado += -monto;
+            }
+            // 'reinicio', 'bote', 'sobrante' y otros se ignoran.
+        }
+
+        ultimo = snap.docs[snap.docs.length - 1];
+        if (snap.size < PAGINA) break;
+    }
+
+    // Escribe los totales en cada usuario, en lotes.
+    const entradas = [...totales.entries()];
+    let escritos = 0;
+    for (let i = 0; i < entradas.length; i += 400) {
+        const batch = db.batch();
+        for (const [u, t] of entradas.slice(i, i + 400)) {
+            batch.set(
+                db.doc(`users/${u}`),
+                { totalGastado: Math.max(0, t.gastado), totalGanado: Math.max(0, t.ganado) },
+                { merge: true },
+            );
+            escritos++;
+        }
+        await batch.commit();
+    }
+
+    // Regenera el ranking para que las nuevas columnas queden reflejadas.
+    const users = await db.collection('users').get();
+    const rank = db.batch();
+    users.docs.forEach((d) => {
+        const uu = d.data();
+        if (uu['validada'] !== true || uu['noParticipa'] === true) {
+            rank.delete(db.doc(`ranking/${d.id}`));
+            return;
+        }
+        const resueltos = Number(uu['resueltos'] ?? 0);
+        const aciertos = Number(uu['aciertos'] ?? 0);
+        const email = String(uu['email'] ?? '');
+        const totalGastado = Number(uu['totalGastado'] ?? 0);
+        const totalGanado = Number(uu['totalGanado'] ?? 0);
+        rank.set(db.doc(`ranking/${d.id}`), {
+            alias: String(uu['alias'] ?? '').trim() || email.split('@')[0] || 'jugador',
+            puntos: Number(uu['puntosHistoricos'] ?? uu['puntos'] ?? 0),
+            saldo: Number(uu['puntos'] ?? 0),
+            torneosGanados: Number(uu['torneosGanados'] ?? 0),
+            aciertos,
+            resueltos,
+            porcentaje: resueltos > 0 ? Math.round((aciertos / resueltos) * 100) : 0,
+            calificado: resueltos >= MIN_RESUELTOS,
+            racha: Number(uu['racha'] ?? 0),
+            mejorRacha: Number(uu['mejorRacha'] ?? 0),
+            totalGastado,
+            totalGanado,
+            balance: totalGanado - totalGastado,
+            actualizado: FieldValue.serverTimestamp(),
+        });
+    });
+    await rank.commit();
+
+    return { ok: true, usuarios: escritos };
 });
 
 /* ============================================================
@@ -1273,6 +1414,7 @@ export const unirseTorneo = onCall(opcionesCall, async (req) => {
             tx.update(userRef, {
                 puntos: saldo - costo,
                 puntosHistoricos: FieldValue.increment(-costo),
+                totalGastado: FieldValue.increment(costo),
                 bloqueado: saldo - costo - APUESTA_BASE < TOPE_INFERIOR,
             });
             tx.update(torneo.ref, { bolsa: FieldValue.increment(costo) });
@@ -1600,6 +1742,7 @@ export const resolverJornadaCompeticion = onCall(
                         {
                             puntos: FieldValue.increment(porCabeza),
                             puntosHistoricos: FieldValue.increment(porCabeza),
+                            totalGanado: FieldValue.increment(porCabeza),
                         },
                         { merge: true },
                     );
@@ -1765,6 +1908,7 @@ export const finalizarTorneo = onCall(opcionesCall, async (req) => {
                 {
                     puntos: FieldValue.increment(porCabeza),
                     puntosHistoricos: FieldValue.increment(porCabeza),
+                    totalGanado: FieldValue.increment(porCabeza),
                 },
                 { merge: true },
             );
@@ -1939,6 +2083,7 @@ export const resolverPendientes = onCall(opcionesCall, async (req) => {
                     {
                         puntos: FieldValue.increment(porCabeza),
                         puntosHistoricos: FieldValue.increment(porCabeza),
+                        totalGanado: FieldValue.increment(porCabeza),
                     },
                     { merge: true },
                 );
@@ -2021,6 +2166,8 @@ export const cerrarInscripciones = onSchedule(
                         {
                             puntos: FieldValue.increment(pago),
                             puntosHistoricos: FieldValue.increment(pago),
+                            // Torneo cancelado: revierte el gasto de la entrada.
+                            totalGastado: FieldValue.increment(-pago),
                         },
                         { merge: true },
                     );
@@ -2419,6 +2566,7 @@ async function cerrarQuiniela(
                 {
                     puntos: FieldValue.increment(porCabeza),
                     puntosHistoricos: FieldValue.increment(porCabeza),
+                    totalGanado: FieldValue.increment(porCabeza),
                 },
                 { merge: true },
             );
@@ -3133,7 +3281,10 @@ export const revivir = onCall(
 
             // Cobro.
             if (costo > 0) {
-                tx.update(userRef, { puntos: FieldValue.increment(-costo) });
+                tx.update(userRef, {
+                    puntos: FieldValue.increment(-costo),
+                    totalGastado: FieldValue.increment(costo),
+                });
                 tx.set(torneoRef, { bolsa: FieldValue.increment(costo) }, { merge: true });
                 // Queda en el ledger, igual que la entrada: el pago por revivir
                 // es auditable y aparece en el historial de movimientos.
@@ -3556,7 +3707,10 @@ export const aceptarDuenoBracket = onCall(opcionesCall, async (req) => {
             if (puntos - costo < TOPE_INFERIOR) {
                 throw new HttpsError('failed-precondition', 'No te alcanza el saldo para entrar.');
             }
-            tx.update(userRef, { puntos: FieldValue.increment(-costo) });
+            tx.update(userRef, {
+                puntos: FieldValue.increment(-costo),
+                totalGastado: FieldValue.increment(costo),
+            });
             // Todo movimiento de puntos queda en el ledger.
             tx.set(db.collection('ledger').doc(), {
                 uid,
@@ -3815,7 +3969,10 @@ export const guardarPronosticoBracket = onCall(opcionesCall, async (req) => {
             if (saldo - costo < TOPE_INFERIOR) {
                 throw new HttpsError('failed-precondition', 'No te alcanza el saldo para entrar.');
             }
-            tx.update(userRef, { puntos: FieldValue.increment(-costo) });
+            tx.update(userRef, {
+                puntos: FieldValue.increment(-costo),
+                totalGastado: FieldValue.increment(costo),
+            });
             tx.set(bracketRef, { bolsa: FieldValue.increment(costo) }, { merge: true });
             // Todo movimiento de puntos queda en el ledger.
             tx.set(db.collection('ledger').doc(), {
@@ -4020,6 +4177,7 @@ async function calificarDuenos(
                 {
                     puntos: FieldValue.increment(bolsa),
                     puntosHistoricos: FieldValue.increment(bolsa),
+                    totalGanado: FieldValue.increment(bolsa),
                 },
                 { merge: true },
             );
@@ -4120,6 +4278,7 @@ export const calificarBracket = onCall(
                     {
                         puntos: FieldValue.increment(premio),
                         puntosHistoricos: FieldValue.increment(premio),
+                        totalGanado: FieldValue.increment(premio),
                     },
                     { merge: true },
                 );
@@ -4280,7 +4439,10 @@ async function cobrarDuenosPendientes(
             const snap = await tx.get(userRef);
             const puntos = Number((snap.data() as Record<string, unknown>)?.['puntos'] ?? 0);
             if (puntos < costo) return false; // sin saldo: se le quita el equipo.
-            tx.update(userRef, { puntos: FieldValue.increment(-costo) });
+            tx.update(userRef, {
+                puntos: FieldValue.increment(-costo),
+                totalGastado: FieldValue.increment(costo),
+            });
             // Todo movimiento de puntos queda en el ledger.
             tx.set(db.collection('ledger').doc(), {
                 uid,

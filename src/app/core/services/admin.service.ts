@@ -205,6 +205,20 @@ export class AdminService {
     }
 
     /**
+     * Reconstruye totalGastado/totalGanado de todos los usuarios desde el
+     * ledger. Se corre una sola vez para las cuentas anteriores a estos
+     * campos; de ahí en adelante se mantienen solos con cada movimiento.
+     */
+    async backfillTotales(): Promise<{ usuarios: number }> {
+        const fn = httpsCallable<Record<string, never>, { ok: boolean; usuarios: number }>(
+            this.fns,
+            'backfillTotales',
+        );
+        const res = await fn({} as Record<string, never>);
+        return res.data;
+    }
+
+    /**
      * Registra el resultado y liquida el partido.
      * Toda la lógica corre en Cloud Functions: reparto proporcional,
      * redondeo hacia abajo, sobrante a la reserva y devoluciones.

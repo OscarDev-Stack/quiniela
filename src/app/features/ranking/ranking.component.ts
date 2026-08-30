@@ -20,7 +20,7 @@ import { FilaTablaGrupo } from '../../core/models/grupo.model';
 import { switchMap } from 'rxjs/operators';
 import { of } from 'rxjs';
 
-type Vista = 'puntos' | 'porcentaje';
+type Vista = 'puntos' | 'porcentaje' | 'balance';
 
 @Component({
   selector: 'app-ranking',
@@ -44,6 +44,9 @@ type Vista = 'puntos' | 'porcentaje';
             <button [class.on]="vista() === 'puntos'" (click)="vista.set('puntos')">
               <i class="ti ti-shield-check"></i> Históricos
             </button>
+            <button [class.on]="vista() === 'balance'" (click)="vista.set('balance')">
+              <i class="ti ti-scale"></i> Balance
+            </button>
           </div>
         }
       </div>
@@ -56,6 +59,29 @@ type Vista = 'puntos' | 'porcentaje';
         <app-cargando texto="Cargando la tabla" />
       } @else if (tabla().length === 0) {
         <p class="empty">Todavía no hay datos para la tabla.</p>
+      } @else if (vista() === 'balance' && isAdmin()) {
+        <!-- Vista Balance: tabla con gastado, ganado y diferencia. -->
+        <div class="bal-tabla">
+          <div class="bal-cab">
+            <span class="bal-pos">#</span>
+            <span class="bal-jug">Jugador</span>
+            <span class="bal-col">Gastado</span>
+            <span class="bal-col">Ganado</span>
+            <span class="bal-col bal-col--dif">Dif.</span>
+          </div>
+          @for (f of tabla(); track f.id) {
+            <div class="bal-fila" [class.bal-fila--me]="f.id === miUid()"
+              [class.bal-fila--clic]="isAdmin()" (click)="verPerfil(f)">
+              <span class="bal-pos">{{ f.posicion }}</span>
+              <span class="bal-jug">{{ f.id === miUid() ? 'Tú' : f.alias }}</span>
+              <span class="bal-col">{{ f.totalGastado ?? 0 | number }}</span>
+              <span class="bal-col">{{ f.totalGanado ?? 0 | number }}</span>
+              <span class="bal-col bal-col--dif" [class.neg]="(f.balance ?? 0) < 0">
+                {{ (f.balance ?? 0) > 0 ? '+' : '' }}{{ f.balance ?? 0 | number }}
+              </span>
+            </div>
+          }
+        </div>
       } @else {
         <!-- Podio estilo F1: 2° a la izquierda, 1° al centro (más alto), 3° a la derecha. -->
         <div class="podio">
@@ -79,8 +105,8 @@ type Vista = 'puntos' | 'porcentaje';
         </div>
       }
 
-      <!-- Tu lugar, si no estás en el podio. -->
-      @if (miLugar(); as f) {
+      <!-- Tu lugar, si no estás en el podio (no aplica a la vista balance). -->
+      @if (vista() !== 'balance' && miLugar(); as f) {
         <div class="separador">
           <span>{{ estoyEnTabla() ? 'Tu lugar' : 'Fuera del top ' + limite }}</span>
         </div>
@@ -105,8 +131,8 @@ type Vista = 'puntos' | 'porcentaje';
         </div>
       }
 
-      <!-- El resto de la tabla, a un toque. -->
-      @if (resto().length > 0) {
+      <!-- El resto de la tabla, a un toque (no aplica a la vista balance). -->
+      @if (vista() !== 'balance' && resto().length > 0) {
         @if (verTodos()) {
           <div class="separador"><span>Los demás</span></div>
 
@@ -241,6 +267,30 @@ type Vista = 'puntos' | 'porcentaje';
       .fire-sm { color: var(--warning-text); font-size: 13px; vertical-align: -1px; margin-right: 2px; }
 
       .note { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 14px; }
+
+      /* ===== Vista Balance (admin): gastado / ganado / diferencia ===== */
+      .bal-tabla { display: flex; flex-direction: column; margin-top: 4px; }
+      .bal-cab, .bal-fila {
+        display: grid;
+        grid-template-columns: 26px 1fr 68px 68px 74px;
+        align-items: center; gap: 6px;
+        padding: 9px 6px;
+      }
+      .bal-cab {
+        font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px;
+        color: var(--text-muted); border-bottom: 1px solid var(--border);
+      }
+      .bal-fila { border-bottom: 1px solid var(--border); }
+      .bal-fila--clic { cursor: pointer; }
+      .bal-fila--me { background: var(--accent-bg); border-radius: var(--radius); border-bottom-color: transparent; }
+      .bal-pos { font-size: 13px; font-weight: 600; color: var(--text-secondary); text-align: center; }
+      .bal-jug {
+        font-size: 14px; font-weight: 600; min-width: 0;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .bal-col { font-size: 13px; text-align: right; color: var(--text-secondary); }
+      .bal-col--dif { font-weight: 700; color: var(--success-text); }
+      .bal-col--dif.neg { color: var(--danger-text); }
     `,
   ],
 })
@@ -277,6 +327,9 @@ export class RankingComponent {
   readonly miFila = toSignal(this.service.miFila(), { initialValue: null });
 
   private readonly topPuntos = toSignal(this.service.topPuntos(), {
+    initialValue: [] as RankingDoc[],
+  });
+  private readonly topBalance = toSignal(this.service.topBalance(), {
     initialValue: [] as RankingDoc[],
   });
   /** True hasta que llegan los primeros datos de la tabla. */
@@ -336,10 +389,19 @@ export class RankingComponent {
     }
 
     const esPuntos = this.vista() === 'puntos' && this.isAdmin();
-    const base = [...(esPuntos ? this.topPuntos() : this.topPorcentaje())];
+    const esBalance = this.vista() === 'balance' && this.isAdmin();
+    const base = [
+      ...(esBalance ? this.topBalance() : esPuntos ? this.topPuntos() : this.topPorcentaje()),
+    ];
 
-    // Desempate: % → más juegos → mejor racha → alfabético.
+    // Desempate según la vista activa.
     base.sort((a, b) => {
+      if (esBalance) {
+        const bb = b.balance ?? 0;
+        const ba = a.balance ?? 0;
+        if (bb !== ba) return bb - ba;
+        return a.alias.localeCompare(b.alias, 'es');
+      }
       if (esPuntos && b.puntos !== a.puntos) return b.puntos - a.puntos;
       if (b.porcentaje !== a.porcentaje) return b.porcentaje - a.porcentaje;
       if (b.resueltos !== a.resueltos) return b.resueltos - a.resueltos;
