@@ -33,7 +33,7 @@ import { Bracket } from '../../core/models/bracket.model';
   imports: [CommonModule, NavComponent, CargandoComponent, EscudoComponent],
   template: `
     <div class="screen">
-      <app-nav [minimal]="true" title="Inicio" [ocultarSaldo]="true" [mostrarContexto]="true" />
+      <app-nav [minimal]="true" title="Inicio" [ocultarSaldo]="true" />
 
       @if (cargando()) {
         <app-cargando texto="Cargando tu inicio" />

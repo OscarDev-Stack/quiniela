@@ -31,9 +31,9 @@ import { ConfirmarService } from './confirmar.service';
           <app-campanita [puntos]="me()?.puntos ?? 0" />
         }
 
-        @if (mostrarContexto()) {
-          <app-selector-contexto />
-        }
+        <!-- Selector de contexto (Global/grupos) siempre visible en la barra
+             principal, para cambiar rápido sin ir al inicio. -->
+        <app-selector-contexto />
 
         <div class="menu-admin" [class.menu-admin--abierto]="menuAbierto()">
           <button class="icono-top" (click)="menuAbierto.set(!menuAbierto())" aria-label="Menú">
@@ -269,8 +269,6 @@ export class NavComponent {
   readonly minimal = input(false);
   /** Si es true, oculta el saldo de la barra (útil cuando ya se muestra en la propia vista). */
   readonly ocultarSaldo = input(false);
-  /** Si es true, muestra el selector de contexto (Global/grupos). Solo en el inicio. */
-  readonly mostrarContexto = input(false);
 
   /** Menú desplegable de administración (tres puntos). */
   readonly menuAbierto = signal(false);
