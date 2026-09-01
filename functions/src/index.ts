@@ -4245,20 +4245,21 @@ export const recordarJornada = onSchedule(
 );
 
 /* ============================================================
-   OPORTUNIDADES — resumen "por cerrar"
-   Cada hora arma UN SOLO aviso por usuario juntando los partidos
-   sueltos y los torneos públicos (de su grupo o globales) que
-   están por cerrar. Así, si abren 3 partidos y 2 torneos, el
-   usuario recibe un solo mensaje en vez de cinco.
+   RESUMEN DEL DÍA — oportunidades por cerrar
+   UNA SOLA pasada al día (9:00 am) arma UN SOLO aviso por usuario
+   juntando los partidos sueltos y los torneos públicos (de su grupo
+   o globales) que cierran en las próximas 24h. Así, aunque a lo
+   largo del día abran 5 partidos y 3 torneos, el usuario recibe un
+   único mensaje una vez al día, sin goteo hora a hora.
 
    Categoría 'oportunidades' (default OFF). El dedupe es POR USUARIO
    (campo oportunidadesAvisadas en el user): a cada quien se le avisa
-   una sola vez de cada partido/torneo, aunque el scheduler corra
-   muchas veces mientras la oportunidad sigue abierta.
+   una sola vez de cada partido/torneo, así que lo que ya entró en el
+   resumen de hoy no se repite mañana aunque siga abierto.
    ============================================================ */
 
-/** Ventana hacia adelante para considerar algo "por cerrar". */
-const OPORTUNIDAD_HORAS = 12;
+/** Ventana hacia adelante para el resumen del día. */
+const OPORTUNIDAD_HORAS = 24;
 
 /** Texto compacto tipo "2h 15m" / "45m" a partir de milisegundos. */
 function faltaTexto(ms: number): string {
@@ -4276,7 +4277,8 @@ interface OportunidadItem {
 
 export const avisarOportunidades = onSchedule(
     {
-        schedule: cada(60),
+        // Una sola pasada al día, a las 9:00 am (hora de México).
+        schedule: '0 9 * * *',
         timeZone: 'America/Mexico_City',
         secrets: [telegramToken],
     },
@@ -4380,8 +4382,8 @@ export const avisarOportunidades = onSchedule(
                 .map((i) => i.texto);
             const encabezado =
                 nuevos.length === 1
-                    ? '👀 <b>Una oportunidad por cerrar</b>'
-                    : `👀 <b>${nuevos.length} oportunidades por cerrar</b>`;
+                    ? '📅 <b>Resumen del día: 1 oportunidad</b>'
+                    : `📅 <b>Resumen del día: ${nuevos.length} oportunidades</b>`;
             const texto = `${encabezado}\n\n${lineas.join('\n')}\n\nEntra a la app para participar.`;
 
             const enviados = await avisar([uid], texto, 'oportunidades');

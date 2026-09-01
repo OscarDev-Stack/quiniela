@@ -269,8 +269,8 @@ import { APP_VERSION } from '../../core/version';
 
               <label class="switch switch--cat">
                 <span class="txt">
-                  <span class="tit">Oportunidades</span>
-                  <small class="pista">Torneos públicos y partidos por cerrar en tu grupo o global.</small>
+                  <span class="tit">Resumen del día</span>
+                  <small class="pista">Un aviso diario con los torneos públicos y partidos por cerrar de tu grupo o global.</small>
                 </span>
                 <input
                   type="checkbox"
