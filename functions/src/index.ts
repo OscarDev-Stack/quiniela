@@ -749,12 +749,16 @@ async function ejecutarLiquidacion(
 
     const uidsAfectados = new Set<string>();
     let repartido = 0;
+    // Para el aviso de resultado: qué le pasó a cada quien.
+    const premioPorUid = new Map<string, number>(); // ganó (premio) o devolución
+    const devueltoUids = new Set<string>();
 
     const ops: Array<(batch: FirebaseFirestore.WriteBatch) => void> = [];
 
     if (ganadores.length === 0) {
         for (const p of pronosticos) {
             uidsAfectados.add(p.uid);
+            devueltoUids.add(p.uid);
             ops.push((batch) => {
                 batch.update(p.ref, { estado: 'devuelto', premio: p.apuesta });
                 batch.set(
@@ -783,6 +787,7 @@ async function ejecutarLiquidacion(
             const premio = Math.floor((p.apuesta * bolsa) / apostadoGanadores);
             repartido += premio;
             uidsAfectados.add(p.uid);
+            premioPorUid.set(p.uid, premio);
             ops.push((batch) => {
                 batch.update(p.ref, { estado: 'ganado', premio });
                 batch.set(
@@ -910,6 +915,10 @@ async function ejecutarLiquidacion(
         );
     }
 
+    // Aviso de resultado a cada quien que pronosticó (categoría 'partidos').
+    // Un solo aviso por usuario, según su desenlace.
+    await avisarResultadoPartido(partido, uidsAfectados, premioPorUid, devueltoUids);
+
     return {
         ok: true,
         participantes: pronosticos.length,
@@ -917,6 +926,44 @@ async function ejecutarLiquidacion(
         bolsa,
         sobrante,
     };
+}
+
+/**
+ * Avisa a cada usuario el resultado de su pronóstico suelto ya liquidado.
+ * Un mensaje por usuario, según ganó / perdió / se le devolvió. Categoría
+ * 'partidos' (default ON). No detiene la liquidación si algo falla.
+ */
+async function avisarResultadoPartido(
+    partido: Record<string, unknown>,
+    uidsAfectados: Set<string>,
+    premioPorUid: Map<string, number>,
+    devueltoUids: Set<string>,
+): Promise<void> {
+    const enfrenta = `${String(partido['homeTeam'] ?? '')} vs ${String(partido['awayTeam'] ?? '')}`.trim();
+    const titulo = enfrenta && enfrenta !== 'vs' ? enfrenta : 'Tu pronóstico';
+
+    for (const uid of uidsAfectados) {
+        let texto: string;
+        if (devueltoUids.has(uid)) {
+            texto =
+                `↩️ <b>${titulo}</b>\n` +
+                'Nadie le atinó, así que te devolvimos tu apuesta. La próxima será.';
+        } else if (premioPorUid.has(uid)) {
+            const premio = premioPorUid.get(uid) ?? 0;
+            texto =
+                `✅ <b>${titulo}</b>\n` +
+                `¡Le atinaste! Ganaste ${premio} pts.`;
+        } else {
+            texto =
+                `❌ <b>${titulo}</b>\n` +
+                'Esta vez no se dio. ¡A la próxima!';
+        }
+        try {
+            await avisar([uid], texto, 'partidos');
+        } catch {
+            // Un fallo de aviso no debe tumbar la liquidación.
+        }
+    }
 }
 
 
@@ -4194,6 +4241,162 @@ export const recordarJornada = onSchedule(
         }
 
         if (avisados > 0) logger.info(`Recordatorio enviado a ${avisados} jugador(es).`);
+    },
+);
+
+/* ============================================================
+   OPORTUNIDADES — resumen "por cerrar"
+   Cada hora arma UN SOLO aviso por usuario juntando los partidos
+   sueltos y los torneos públicos (de su grupo o globales) que
+   están por cerrar. Así, si abren 3 partidos y 2 torneos, el
+   usuario recibe un solo mensaje en vez de cinco.
+
+   Categoría 'oportunidades' (default OFF). El dedupe es POR USUARIO
+   (campo oportunidadesAvisadas en el user): a cada quien se le avisa
+   una sola vez de cada partido/torneo, aunque el scheduler corra
+   muchas veces mientras la oportunidad sigue abierta.
+   ============================================================ */
+
+/** Ventana hacia adelante para considerar algo "por cerrar". */
+const OPORTUNIDAD_HORAS = 12;
+
+/** Texto compacto tipo "2h 15m" / "45m" a partir de milisegundos. */
+function faltaTexto(ms: number): string {
+    const min = Math.max(1, Math.round(ms / 60000));
+    if (min >= 60) return `${Math.floor(min / 60)}h ${min % 60}m`;
+    return `${min}m`;
+}
+
+interface OportunidadItem {
+    id: string;
+    grupoId: string | null;
+    texto: string; // línea ya formateada para el resumen
+    cierraMs: number;
+}
+
+export const avisarOportunidades = onSchedule(
+    {
+        schedule: cada(60),
+        timeZone: 'America/Mexico_City',
+        secrets: [telegramToken],
+    },
+    async () => {
+        const ahora = Date.now();
+        const limite = ahora + OPORTUNIDAD_HORAS * 60 * 60 * 1000;
+        const limiteTs = Timestamp.fromMillis(limite);
+        const ahoraTs = Timestamp.fromMillis(ahora);
+
+        // --- Candidatos: partidos sueltos por cerrar ---
+        const partidosItems: OportunidadItem[] = [];
+        const partSnap = await db
+            .collection('partidos')
+            .where('closesAt', '>=', ahoraTs)
+            .where('closesAt', '<=', limiteTs)
+            .get();
+        for (const d of partSnap.docs) {
+            const p = d.data() as Record<string, unknown>;
+            const status = String(p['status'] ?? '');
+            if (status !== 'abierto' && status !== 'cierra-pronto') continue;
+            const cierra = p['closesAt'] as Timestamp | undefined;
+            if (!cierra) continue;
+            const cierraMs = cierra.toMillis();
+            if (cierraMs <= ahora || cierraMs > limite) continue;
+
+            const local = String(p['homeTeam'] ?? '');
+            const visitante = String(p['awayTeam'] ?? '');
+            partidosItems.push({
+                id: d.id,
+                grupoId: (p['grupoId'] as string | null | undefined) ?? null,
+                texto: `⚽ ${local} vs ${visitante} — cierra en ${faltaTexto(cierraMs - ahora)}`,
+                cierraMs,
+            });
+        }
+
+        // --- Candidatos: torneos en inscripción por cerrar ---
+        const torneosItems: OportunidadItem[] = [];
+        const torneoSnap = await db
+            .collection('torneos')
+            .where('estado', '==', 'inscripcion')
+            .where('cierreInscripcion', '>=', ahoraTs)
+            .where('cierreInscripcion', '<=', limiteTs)
+            .get();
+        for (const d of torneoSnap.docs) {
+            const t = d.data() as Record<string, unknown>;
+            const cierra = t['cierreInscripcion'] as Timestamp | undefined;
+            if (!cierra) continue;
+            const cierraMs = cierra.toMillis();
+            if (cierraMs <= ahora || cierraMs > limite) continue;
+
+            torneosItems.push({
+                id: d.id,
+                grupoId: (t['grupoId'] as string | null | undefined) ?? null,
+                texto: `🏆 ${String(t['nombre'] ?? 'Torneo')} — inscripción cierra en ${faltaTexto(cierraMs - ahora)}`,
+                cierraMs,
+            });
+        }
+
+        const todos = [...partidosItems, ...torneosItems];
+        if (todos.length === 0) return;
+
+        // Ítems globales (para todos) y por grupo (solo miembros).
+        const globales = todos.filter((i) => !i.grupoId);
+        const porGrupo = new Map<string, OportunidadItem[]>();
+        for (const i of todos) {
+            if (!i.grupoId) continue;
+            const arr = porGrupo.get(i.grupoId) ?? [];
+            arr.push(i);
+            porGrupo.set(i.grupoId, arr);
+        }
+
+        // Solo usuarios con algún canal activo: los demás nunca reciben nada.
+        // (Firestore no permite OR entre campos, así que traemos ambos y unimos.)
+        const [conPush, conTg] = await Promise.all([
+            db.collection('users').where('pushActivo', '==', true).get(),
+            db.collection('users').where('notificaciones', '==', true).get(),
+        ]);
+        const usuarios = new Map<string, Record<string, unknown>>();
+        for (const d of [...conPush.docs, ...conTg.docs]) usuarios.set(d.id, d.data());
+
+        let avisados = 0;
+
+        for (const [uid, u] of usuarios) {
+            const gruposUser = (u['grupos'] as string[] | undefined) ?? [];
+
+            // Ítems que aplican a este usuario: globales + los de sus grupos.
+            const aplican: OportunidadItem[] = [...globales];
+            for (const g of gruposUser) {
+                const arr = porGrupo.get(g);
+                if (arr) aplican.push(...arr);
+            }
+            if (aplican.length === 0) continue;
+
+            // Dedupe por usuario: no repetir el mismo ítem mientras siga abierto.
+            const yaAvisado = (u['oportunidadesAvisadas'] ?? {}) as Record<string, number>;
+            const nuevos = aplican.filter((i) => yaAvisado[i.id] == null);
+            if (nuevos.length === 0) continue;
+
+            const lineas = nuevos
+                .sort((a, b) => a.cierraMs - b.cierraMs)
+                .map((i) => i.texto);
+            const encabezado =
+                nuevos.length === 1
+                    ? '👀 <b>Una oportunidad por cerrar</b>'
+                    : `👀 <b>${nuevos.length} oportunidades por cerrar</b>`;
+            const texto = `${encabezado}\n\n${lineas.join('\n')}\n\nEntra a la app para participar.`;
+
+            const enviados = await avisar([uid], texto, 'oportunidades');
+            if (enviados > 0 || u['pushActivo'] === true) avisados++;
+
+            // Marca los ítems avisados (con su cierre) y limpia los ya vencidos.
+            const marca: Record<string, number> = {};
+            for (const [id, ms] of Object.entries(yaAvisado)) {
+                if (typeof ms === 'number' && ms > ahora) marca[id] = ms;
+            }
+            for (const i of nuevos) marca[i.id] = i.cierraMs;
+            await db.doc(`users/${uid}`).set({ oportunidadesAvisadas: marca }, { merge: true });
+        }
+
+        if (avisados > 0) logger.info(`Oportunidades: aviso enviado a ${avisados} usuario(s).`);
     },
 );
 
