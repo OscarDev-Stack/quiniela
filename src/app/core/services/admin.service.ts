@@ -123,6 +123,7 @@ export class AdminService {
         closesAtMs: number;
         porcentajeBote?: number;
         apiFixtureId?: number;
+        apiEventId?: string;
     }): Promise<{ id: string }> {
         const fn = httpsCallable<typeof data, { ok: boolean; id: string }>(
             this.fns,
@@ -191,6 +192,29 @@ export class AdminService {
         >(this.fns, 'formaEquiposApi');
         const res = await fn({ homeTeamId, awayTeamId });
         return { formaLocal: res.data.formaLocal, formaVisitante: res.data.formaVisitante };
+    }
+
+    /** Busca próximos partidos de una liga en TheSportsDB. */
+    async buscarFixturesSportsDb(liga: string) {
+        const fn = httpsCallable<
+            { liga: string },
+            {
+                ok: boolean;
+                liga: string;
+                partidos: Array<{
+                    apiEventId: string;
+                    fecha: string;
+                    homeTeam: string;
+                    awayTeam: string;
+                    homeTeamId: string | null;
+                    awayTeamId: string | null;
+                    ronda: string;
+                    competition: string;
+                }>;
+            }
+        >(this.fns, 'buscarFixturesSportsDb');
+        const res = await fn({ liga });
+        return res.data.partidos;
     }
 
     /** Reconstruye las bolsas desde los pronósticos reales. */

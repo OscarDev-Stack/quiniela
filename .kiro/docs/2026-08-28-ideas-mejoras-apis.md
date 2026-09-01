@@ -2,9 +2,44 @@
 
 ## Fecha: 28 de agosto 2026
 
-Backlog de ideas para no perderlas. NADA de esto esta implementado; es una
-lista priorizada para decidir en que trabajar. Todo pensado para respetar la
-CAPA GRATUITA de las dos APIs.
+Backlog de ideas para no perderlas. Lista priorizada para decidir en que
+trabajar.
+
+NOTA: TheSportsDB paso a PREMIUM (Single Developer, $90/año via Patreon). La
+key vive en el secret SPORTSDB_KEY (configurado en dev; falta en prod cuando
+se despliegue alla). Con premium la tabla ya no se trunca a 5 equipos.
+
+## PLAN DE CONTINGENCIA si la suscripcion caduca (REGLA DE DISENO)
+
+Principio: la API es ENRIQUECIMIENTO, nunca dependencia critica. Si el dia de
+manana no se paga (o la API falla), la app debe seguir funcionando.
+
+Reglas para TODA feature que use la API (actuales y futuras):
+1. Nada critico depende de la API. Resolver jornadas, premios, puntos y el
+   CIERRE de partidos SIEMPRE tienen el camino manual del admin. El cierre por
+   API se mantiene solo como comodidad; si falla, el admin cierra a mano.
+2. Degradacion SILENCIOSA para el usuario final: si no hay datos frescos, la
+   seccion simplemente NO aparece. El usuario nunca ve errores, datos a medias
+   ni tablas incompletas.
+3. AVISO solo para el admin: cuando la API no responde o devuelve datos
+   incompletos, avisar al admin (banner/toast/Telegram) para que sepa que hay
+   que revisar la suscripcion. El usuario no se entera.
+4. No mostrar datos incompletos: p.ej. si la tabla trae menos equipos de los
+   esperados (sintoma de key gratuita), NO mostrarla (mejor nada que 5 de 18).
+5. Marcar frescura: mostrar "actualizada hace X" para que un dato viejo se
+   note y no se confunda con actual.
+6. Toda funcion que consulte la API va en try/catch y no rompe el flujo que la
+   contiene (ya aplicado en refrescarTablaCompeticion, revisarJornadas, etc.).
+
+Estado actual verificado ante caida de la API:
+- tablaLigaSportsDb lanza si falla, pero refrescarTablaCompeticion y
+  resolverJornadaCompeticion lo envuelven: la resolucion NO se rompe; la tabla
+  se queda con el ultimo cache.
+- eventosRondaSportsDb: traerJornada/traerResultados avisan al admin por toast;
+  el flujo manual sigue disponible. revisarJornadas tiene try/catch por jornada.
+- La forma reciente usa football-data, independiente de TheSportsDB.
+- Conclusion: hoy la app NO se rompe si caduca; el riesgo es mostrar datos
+  viejos/incompletos sin avisar -> lo cubren las reglas 2-5.
 
 ## Como usamos las APIs hoy (punto de partida)
 
@@ -65,13 +100,18 @@ CAPA GRATUITA de las dos APIs.
    TheSportsDB). Por eso la forma solo aparecera en partidos de ligas que
    football-data si cubre y que se creen por su buscador.
 
-13. [PENDIENTE - decision aparte, mas grande] Integrar TheSportsDB al flujo de
-    "crear partido" (buscador de fixtures), igual que football-data hoy, para
-    poder crear partidos de Liga MX (y demas ligas de TheSportsDB) por API. Dos
-    caminos a decidir: (a) sumar TheSportsDB como segunda fuente del buscador,
-    o (b) reemplazar football-data por TheSportsDB. Implica: buscador por
-    liga/fecha con TheSportsDB, guardar su id de evento, y adaptar la captura
-    de resultados/forma a esa fuente.
+13. [HECHO - camino (a), conviven ambas] Integrar TheSportsDB al flujo de
+    "crear partido". Buscador unico con selector de FUENTE (TheSportsDB /
+    football-data). TheSportsDB busca los proximos partidos de una liga
+    (eventsnextleague) para 7 ligas: Liga MX, Champions, Premier, LaLiga,
+    Serie A, Bundesliga, Ligue 1 (se quito Brasileirao; Eurocopa fuera por
+    inactiva). El partido guarda apiEventId (distinto de apiFixtureId de
+    football-data). crearPartidoGrupo tambien acepta apiEventId.
+    Resolucion automatica: nuevo scheduler revisarResultadosSportsDb (cada 15
+    min) liquida los partidos con apiEventId al terminar (lookupevent), con el
+    mismo fallback manual del admin. La meta de migrar TODO a TheSportsDB al
+    extender la licencia ya esta encaminada; football-data se puede retirar
+    cuando se decida (buscador + revisarResultados + forma reciente).
 
 ## Cosas de las APIs que NO aprovechamos (y estan gratis)
 

@@ -105,15 +105,37 @@ const sportsDbBase = (key: string): string =>
 
 /** Un evento (partido) de TheSportsDB, con los campos que usamos. */
 interface EventoSportsDb {
+    idEvent?: string;
     intRound?: string;
     strHomeTeam?: string;
     strAwayTeam?: string;
+    idHomeTeam?: string;
+    idAwayTeam?: string;
+    strLeague?: string;
     intHomeScore?: string | null;
     intAwayScore?: string | null;
     strTimestamp?: string;
     strStatus?: string;
     strPostponed?: string;
 }
+
+/**
+ * Ligas soportadas por el buscador de partidos de TheSportsDB. La clave es un
+ * código corto que usa el front; el valor es el id de liga de TheSportsDB y su
+ * nombre visible. Cubrimos las mismas que football-data (menos Brasileirão) y
+ * agregamos Liga MX.
+ */
+const LIGAS_SPORTSDB: Record<string, { id: number; nombre: string }> = {
+    LIGAMX: { id: 4350, nombre: 'Liga MX' },
+    CL: { id: 4480, nombre: 'Champions League' },
+    PL: { id: 4328, nombre: 'Premier League' },
+    PD: { id: 4335, nombre: 'LaLiga' },
+    SA: { id: 4332, nombre: 'Serie A' },
+    BL1: { id: 4331, nombre: 'Bundesliga' },
+    FL1: { id: 4334, nombre: 'Ligue 1' },
+    // EC (Eurocopa): torneo de selecciones inactivo la mayor parte del tiempo;
+    // se deja fuera hasta poder confirmar su id cuando haya edición en curso.
+};
 
 /**
  * Trae los partidos de UNA jornada (ronda) de una liga de TheSportsDB.
@@ -1345,6 +1367,69 @@ export const buscarFixtures = onCall({ ...opcionesCall, secrets: [footballDataKe
 });
 
 /**
+ * Próximos partidos de una liga de TheSportsDB (eventsnextleague). Devuelve
+ * los eventos que aún no han empezado, con equipos, ids y hora. Lanza si la
+ * API responde con error.
+ */
+async function eventosProximosLigaSportsDb(
+    ligaId: number,
+    key: string,
+): Promise<EventoSportsDb[]> {
+    const url = `${sportsDbBase(key)}/eventsnextleague.php?id=${ligaId}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+        throw new HttpsError('internal', `TheSportsDB respondió ${res.status}.`);
+    }
+    const data = (await res.json()) as { events?: EventoSportsDb[] | null };
+    return data.events ?? [];
+}
+
+/* ============================================================
+   TheSportsDB — buscar próximos partidos de una liga
+   El admin elige una liga soportada y crea el partido con un clic.
+   Convive con buscarFixtures (football-data); la meta es migrar todo
+   a esta fuente cuando se extienda la suscripción.
+   ============================================================ */
+export const buscarFixturesSportsDb = onCall(
+    { ...opcionesCall, secrets: [sportsDbKey] },
+    async (req) => {
+        const uid = req.auth?.uid;
+        if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+        const adminSnap = await db.doc(`admins/${uid}`).get();
+        if (!adminSnap.exists) throw new HttpsError('permission-denied', 'Solo un administrador.');
+
+        const liga = String(req.data?.liga ?? '');
+        const cfg = LIGAS_SPORTSDB[liga];
+        if (!cfg) throw new HttpsError('invalid-argument', 'Liga no soportada.');
+
+        const eventos = await eventosProximosLigaSportsDb(cfg.id, sportsDbKey.value());
+        const ahora = Date.now();
+
+        const partidos = eventos
+            // Solo los que no han empezado y tienen hora futura.
+            .filter((e) => {
+                if (e.strStatus && e.strStatus !== 'NS' && e.strStatus !== '') return false;
+                const ts = e.strTimestamp ? new Date(e.strTimestamp).getTime() : 0;
+                return ts > ahora;
+            })
+            .map((e) => ({
+                apiEventId: String(e.idEvent ?? ''),
+                fecha: e.strTimestamp ?? '',
+                homeTeam: nombreOficialEquipo(e.strHomeTeam),
+                awayTeam: nombreOficialEquipo(e.strAwayTeam),
+                homeTeamId: e.idHomeTeam ?? null,
+                awayTeamId: e.idAwayTeam ?? null,
+                ronda: e.intRound ?? '',
+                competition: e.strLeague || cfg.nombre,
+            }))
+            .filter((p) => p.apiEventId && p.homeTeam && p.awayTeam)
+            .sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+        return { ok: true, liga: cfg.nombre, partidos };
+    },
+);
+
+/**
  * Forma reciente (ultimos partidos terminados) de un equipo de football-data,
  * como texto tipo "WWDLW" (mas reciente al final). Devuelve '' si no hay datos
  * o el recurso no esta disponible en el plan; nunca lanza, para no romper la
@@ -1481,6 +1566,103 @@ export const revisarResultados = onSchedule(
                 console.log(`Liquidado automático ${d.id}: ${local}-${visitante} → ${resultado}`);
             } catch (e) {
                 logger.warn(`No se pudo liquidar ${d.id} automáticamente; queda para el admin.`, e);
+                await d.ref.update({
+                    resultadoPropuesto: resultado,
+                    marcadorPropuesto: `${local}-${visitante}`,
+                    propuestoAt: FieldValue.serverTimestamp(),
+                    alertaApi: 'La liquidación automática falló. Revísalo y liquida a mano.',
+                });
+            }
+        }
+    },
+);
+
+/**
+ * Lee un evento de TheSportsDB por su idEvent (lookupevent). Devuelve null si
+ * no existe o la API falla; nunca lanza.
+ */
+async function lookupEventoSportsDb(idEvent: string, key: string): Promise<EventoSportsDb | null> {
+    try {
+        const res = await fetch(`${sportsDbBase(key)}/lookupevent.php?id=${idEvent}`);
+        if (!res.ok) return null;
+        const data = (await res.json()) as { events?: EventoSportsDb[] | null };
+        return data.events?.[0] ?? null;
+    } catch {
+        return null;
+    }
+}
+
+/* ============================================================
+   Revisar resultados en TheSportsDB (partidos con apiEventId)
+   Equivalente a revisarResultados pero para partidos creados con
+   el buscador de TheSportsDB. Precarga/liquida los que ya terminaron.
+   Nada crítico depende de esto: si falla, el admin liquida a mano.
+   ============================================================ */
+export const revisarResultadosSportsDb = onSchedule(
+    { schedule: cada(15), timeZone: 'America/Mexico_City', secrets: [sportsDbKey] },
+    async () => {
+        const snap = await db.collection('partidos').where('status', '==', 'en-juego').get();
+        if (snap.empty) return;
+
+        const ahora = Date.now();
+        const candidatos = snap.docs.filter((d) => {
+            const p = d.data();
+            if (p['liquidado'] === true) return false;
+            if (p['resultadoPropuesto']) return false;
+            if (!p['apiEventId']) return false; // solo los de TheSportsDB
+            const cierre = p['closesAt'] as Timestamp | undefined;
+            if (!cierre) return false;
+            return ahora >= cierre.toMillis() + MINUTOS_ANTES_DE_CONSULTAR * 60 * 1000;
+        });
+
+        if (candidatos.length === 0) return;
+
+        const terminados = ['FT', 'AET', 'PEN', 'Match Finished'];
+        const key = sportsDbKey.value();
+
+        for (const d of candidatos) {
+            const p = d.data();
+            const ev = await lookupEventoSportsDb(String(p['apiEventId']), key);
+            if (!ev) continue;
+
+            if (ev.strPostponed === 'yes') {
+                await d.ref.update({
+                    alertaApi: 'El partido aparece como aplazado en la API. Revísalo manualmente.',
+                });
+                continue;
+            }
+            if (!terminados.includes(String(ev.strStatus ?? ''))) continue;
+
+            const local = Number(ev.intHomeScore ?? NaN);
+            const visitante = Number(ev.intAwayScore ?? NaN);
+            if (!Number.isFinite(local) || !Number.isFinite(visitante)) continue;
+
+            const tipo = String(p['type'] ?? '1x2');
+            let resultado: string;
+            if (tipo === 'quien-pasa') {
+                resultado = local >= visitante ? 'pasa-local' : 'pasa-visitante';
+            } else if (local > visitante) {
+                resultado = 'local';
+            } else if (visitante > local) {
+                resultado = 'visitante';
+            } else {
+                resultado = tipo === '1x2' ? 'empate' : '';
+            }
+
+            if (!resultado) {
+                await d.ref.update({
+                    alertaApi: 'Terminó en empate y este partido no admite empate. Revísalo.',
+                });
+                continue;
+            }
+
+            // La API confirmó el final: liquidamos solos. Si falla, queda para
+            // el admin (nada crítico depende de la API).
+            try {
+                await ejecutarLiquidacion(d.id, resultado);
+                console.log(`Liquidado auto (SportsDB) ${d.id}: ${local}-${visitante} → ${resultado}`);
+            } catch (e) {
+                logger.warn(`No se pudo liquidar ${d.id} (SportsDB); queda para el admin.`, e);
                 await d.ref.update({
                     resultadoPropuesto: resultado,
                     marcadorPropuesto: `${local}-${visitante}`,
@@ -5371,6 +5553,7 @@ export const crearPartidoGrupo = onCall(opcionesCall, async (req) => {
         grupoId,
     };
     if (typeof d.apiFixtureId === 'number') doc['apiFixtureId'] = d.apiFixtureId;
+    if (typeof d.apiEventId === 'string' && d.apiEventId) doc['apiEventId'] = d.apiEventId;
 
     const ref = await db.collection('partidos').add(doc);
     return { ok: true, id: ref.id };

@@ -173,7 +173,16 @@ import { ToastService } from '../../shared/toast.service';
               }
             </div>
             @if (c.apiLigaId && c.tabla?.length) {
-              <p class="nota">Tabla cargada: {{ c.tabla?.length }} equipos. Se actualiza sola al resolver cada jornada.</p>
+              @if (tablaIncompleta(c)) {
+                <p class="nota nota--alerta">
+                  <i class="ti ti-alert-triangle"></i>
+                  La tabla cargó solo {{ c.tabla?.length }} equipos (parece incompleta).
+                  Suele pasar si la suscripción a la API caducó o volvió a la key gratuita.
+                  Los jugadores no la verán hasta que esté completa. Revisa la suscripción.
+                </p>
+              } @else {
+                <p class="nota">Tabla cargada: {{ c.tabla?.length }} equipos. Se actualiza sola al resolver cada jornada.</p>
+              }
             }
           }
         </div>
@@ -395,6 +404,11 @@ import { ToastService } from '../../shared/toast.service';
         border-radius: 999px; padding: 2px 9px;
       }
       .nota { font-size: 12px; color: var(--text-muted); margin: 10px 0 4px; }
+      .nota--alerta {
+        color: var(--warning-text); background: var(--warning-bg);
+        border-radius: var(--radius); padding: 8px 10px;
+        display: flex; align-items: flex-start; gap: 6px;
+      }
       .gestor { display: flex; align-items: center; justify-content: space-between;
         gap: 10px; font-size: 13px; padding: 8px 0;
         border-bottom: 1px solid var(--border); }
@@ -629,6 +643,19 @@ export class AdminCompeticionesComponent {
     } finally {
       this.trayendo.set(false);
     }
+  }
+
+  /**
+   * ¿La tabla cacheada parece incompleta? (síntoma de suscripción caducada o
+   * key gratuita que trunca a 5 filas). Mismo criterio que el componente que
+   * la muestra: al menos 80% del catálogo, o un mínimo de 8 equipos.
+   */
+  tablaIncompleta(c: Competicion): boolean {
+    const n = c.tabla?.length ?? 0;
+    if (n === 0) return false; // sin tabla aún: no es "incompleta", es que no se ha cargado
+    const catalogo = c.equipos?.length ?? 0;
+    const minimo = catalogo > 0 ? Math.ceil(catalogo * 0.8) : 8;
+    return n < minimo;
   }
 
   /** Fuerza la descarga de la tabla de posiciones oficial de la liga. */

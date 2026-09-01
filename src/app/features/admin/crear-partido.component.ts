@@ -49,26 +49,46 @@ import { NavComponent } from '../../shared/nav.component';
       @if (verApi()) {
       <div class="grid">
         <label class="field">
-          <span>Competición</span>
-          <select [(ngModel)]="busqueda.competicion">
-            <option value="CL">Champions League</option>
-            <option value="PL">Premier League</option>
-            <option value="PD">LaLiga</option>
-            <option value="SA">Serie A</option>
-            <option value="BL1">Bundesliga</option>
-            <option value="FL1">Ligue 1</option>
-            <option value="EC">Eurocopa</option>
-            <option value="BSA">Brasileirão</option>
+          <span>Fuente</span>
+          <select [(ngModel)]="busqueda.fuente" (ngModelChange)="encontrados.set([])">
+            <option value="sportsdb">TheSportsDB</option>
+            <option value="football-data">football-data</option>
           </select>
         </label>
-        <label class="field">
-          <span>Desde</span>
-          <input type="date" [(ngModel)]="busqueda.desde" />
-        </label>
-        <label class="field">
-          <span>Hasta</span>
-          <input type="date" [(ngModel)]="busqueda.hasta" />
-        </label>
+
+        @if (busqueda.fuente === 'sportsdb') {
+          <label class="field">
+            <span>Liga</span>
+            <select [(ngModel)]="busqueda.ligaSportsDb">
+              @for (l of ligasSportsDb; track l.code) {
+                <option [value]="l.code">{{ l.label }}</option>
+              }
+            </select>
+          </label>
+        } @else {
+          <label class="field">
+            <span>Competición</span>
+            <select [(ngModel)]="busqueda.competicion">
+              <option value="CL">Champions League</option>
+              <option value="PL">Premier League</option>
+              <option value="PD">LaLiga</option>
+              <option value="SA">Serie A</option>
+              <option value="BL1">Bundesliga</option>
+              <option value="FL1">Ligue 1</option>
+              <option value="EC">Eurocopa</option>
+              <option value="BSA">Brasileirão</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Desde</span>
+            <input type="date" [(ngModel)]="busqueda.desde" />
+          </label>
+          <label class="field">
+            <span>Hasta</span>
+            <input type="date" [(ngModel)]="busqueda.hasta" />
+          </label>
+        }
+
         <label class="field">
           <span>Tipo de mercado</span>
           <select [(ngModel)]="busqueda.type">
@@ -79,10 +99,10 @@ import { NavComponent } from '../../shared/nav.component';
         </label>
       </div>
       <button class="btn" [disabled]="buscando()" (click)="buscar()">
-        {{ buscando() ? 'Buscando…' : 'Buscar partidos' }}
+        {{ buscando() ? 'Buscando…' : (busqueda.fuente === 'sportsdb' ? 'Buscar próximos partidos' : 'Buscar partidos') }}
       </button>
 
-      @for (f of encontrados(); track f.apiFixtureId) {
+      @for (f of encontrados(); track f.clave) {
         <div class="row">
           <div class="row-main">
             <div class="row-title">{{ f.homeTeam }} vs {{ f.awayTeam }}</div>
@@ -317,9 +337,14 @@ export class CrearPartidoComponent {
     .toISOString()
     .slice(0, 16);
 
+  // Resultado unificado de ambas fuentes: football-data trae apiFixtureId +
+  // homeTeamId numérico; TheSportsDB trae apiEventId. Cada partido lleva un
+  // 'clave' único para el track del @for.
   readonly encontrados = signal<
     Array<{
-      apiFixtureId: number;
+      clave: string;
+      apiFixtureId?: number;
+      apiEventId?: string;
       fecha: string;
       homeTeam: string;
       awayTeam: string;
@@ -329,7 +354,20 @@ export class CrearPartidoComponent {
     }>
   >([]);
 
+  /** Ligas de TheSportsDB soportadas por el buscador (código → etiqueta). */
+  readonly ligasSportsDb = [
+    { code: 'LIGAMX', label: 'Liga MX' },
+    { code: 'CL', label: 'Champions League' },
+    { code: 'PL', label: 'Premier League' },
+    { code: 'PD', label: 'LaLiga' },
+    { code: 'SA', label: 'Serie A' },
+    { code: 'BL1', label: 'Bundesliga' },
+    { code: 'FL1', label: 'Ligue 1' },
+  ];
+
   busqueda = {
+    fuente: 'sportsdb' as 'sportsdb' | 'football-data',
+    ligaSportsDb: 'LIGAMX',
     competicion: 'CL',
     desde: '',
     hasta: '',
@@ -355,19 +393,49 @@ export class CrearPartidoComponent {
   }
 
   async buscar(): Promise<void> {
-    if (!this.busqueda.desde) {
-      this.toast.error('Elige al menos la fecha inicial.');
-      return;
-    }
     this.buscando.set(true);
     try {
-      const r = await this.admin.buscarFixtures(
-        this.busqueda.competicion,
-        this.busqueda.desde,
-        this.busqueda.hasta || this.busqueda.desde,
-      );
-      this.encontrados.set(r);
-      if (r.length === 0) this.toast.error('No se encontraron partidos próximos en esas fechas.');
+      if (this.busqueda.fuente === 'sportsdb') {
+        const r = await this.admin.buscarFixturesSportsDb(this.busqueda.ligaSportsDb);
+        this.encontrados.set(
+          r.map((p) => ({
+            clave: 'ev-' + p.apiEventId,
+            apiEventId: p.apiEventId,
+            fecha: p.fecha,
+            homeTeam: p.homeTeam,
+            awayTeam: p.awayTeam,
+            // TheSportsDB da ids de equipo como string; no los usamos para la
+            // forma (eso es de football-data), así que van en null.
+            homeTeamId: null,
+            awayTeamId: null,
+            competition: p.competition,
+          })),
+        );
+        if (r.length === 0) this.toast.error('No hay próximos partidos para esa liga.');
+      } else {
+        if (!this.busqueda.desde) {
+          this.toast.error('Elige al menos la fecha inicial.');
+          return;
+        }
+        const r = await this.admin.buscarFixtures(
+          this.busqueda.competicion,
+          this.busqueda.desde,
+          this.busqueda.hasta || this.busqueda.desde,
+        );
+        this.encontrados.set(
+          r.map((p) => ({
+            clave: 'fx-' + p.apiFixtureId,
+            apiFixtureId: p.apiFixtureId,
+            fecha: p.fecha,
+            homeTeam: p.homeTeam,
+            awayTeam: p.awayTeam,
+            homeTeamId: p.homeTeamId,
+            awayTeamId: p.awayTeamId,
+            competition: p.competition,
+          })),
+        );
+        if (r.length === 0) this.toast.error('No se encontraron partidos próximos en esas fechas.');
+      }
     } catch (e: unknown) {
       this.toast.error((e as Error)?.message ?? 'No se pudo buscar.');
     } finally {
@@ -377,7 +445,9 @@ export class CrearPartidoComponent {
 
   /** Crea el partido con los datos reales y su vínculo con la API. */
   async crearDesdeApi(f: {
-    apiFixtureId: number;
+    clave: string;
+    apiFixtureId?: number;
+    apiEventId?: string;
     fecha: string;
     homeTeam: string;
     awayTeam: string;
@@ -399,19 +469,22 @@ export class CrearPartidoComponent {
         awayTeam: nombreOficial(f.awayTeam),
         type: this.busqueda.type,
         closesAtMs: inicio.getTime(),
-        apiFixtureId: f.apiFixtureId,
+        ...(f.apiFixtureId ? { apiFixtureId: f.apiFixtureId } : {}),
+        ...(f.apiEventId ? { apiEventId: f.apiEventId } : {}),
       });
     } else {
-      // Forma reciente de cada equipo: se captura una sola vez aquí y se
-      // guarda en el doc. Si la API no la trae, quedan vacías y no se muestran.
+      // Forma reciente (solo football-data, que da ids numéricos de equipo).
+      // Se captura una sola vez aquí y se guarda; si no hay, queda vacía.
       let formaLocal = '';
       let formaVisitante = '';
-      try {
-        const forma = await this.admin.formaEquipos(f.homeTeamId ?? null, f.awayTeamId ?? null);
-        formaLocal = forma.formaLocal;
-        formaVisitante = forma.formaVisitante;
-      } catch {
-        // La forma es un extra informativo: si falla, el partido se crea igual.
+      if (f.homeTeamId || f.awayTeamId) {
+        try {
+          const forma = await this.admin.formaEquipos(f.homeTeamId ?? null, f.awayTeamId ?? null);
+          formaLocal = forma.formaLocal;
+          formaVisitante = forma.formaVisitante;
+        } catch {
+          // La forma es un extra informativo: si falla, el partido se crea igual.
+        }
       }
 
       await this.admin.crearPartido({
@@ -421,13 +494,14 @@ export class CrearPartidoComponent {
         type: this.busqueda.type,
         status: 'abierto',
         closesAt: Timestamp.fromDate(inicio),
-        apiFixtureId: f.apiFixtureId,
+        ...(f.apiFixtureId ? { apiFixtureId: f.apiFixtureId } : {}),
+        ...(f.apiEventId ? { apiEventId: f.apiEventId } : {}),
         ...(formaLocal ? { formaLocal } : {}),
         ...(formaVisitante ? { formaVisitante } : {}),
         grupoId: null,
       });
     }
-    this.encontrados.set(this.encontrados().filter((x) => x.apiFixtureId !== f.apiFixtureId));
+    this.encontrados.set(this.encontrados().filter((x) => x.clave !== f.clave));
     this.toast.exito(`Partido creado: ${f.homeTeam} vs ${f.awayTeam}.`);
   }
 

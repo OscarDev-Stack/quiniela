@@ -37,8 +37,11 @@ export interface Partido {
     premioPor100?: Record<string, number>;
     prizes?: PremioResultado[];
     resultadoOficial?: string;
-    /* Vínculo con el partido real de API-Football. */
+    /* Vínculo con el partido real de API-Football (football-data). */
     apiFixtureId?: number;
+    /* Vínculo con el evento de TheSportsDB (idEvent). Fuente alterna a
+       apiFixtureId; la meta es migrar todo a esta cuando madure. */
+    apiEventId?: string;
     /* Forma reciente (últimos 5) de cada equipo, tipo "WWDLW". Se captura una
        sola vez al crear el partido desde la API; informativa, no cambia. */
     formaLocal?: string;

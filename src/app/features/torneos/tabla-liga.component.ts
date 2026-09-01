@@ -16,7 +16,7 @@ import { Competicion, FilaTablaLiga } from '../../core/models/competicion.model'
   standalone: true,
   imports: [CommonModule, EscudoComponent],
   template: `
-    @if (filas().length > 0) {
+    @if (tablaValida()) {
       <div class="tabla-liga">
         <div class="cabecera">
           <span class="titulo">Tabla de {{ competicion().nombre }}</span>
@@ -147,6 +147,22 @@ export class TablaLigaComponent {
   readonly filas = computed<FilaTablaLiga[]>(() =>
     [...(this.competicion().tabla ?? [])].sort((a, b) => a.posicion - b.posicion),
   );
+
+  /**
+   * ¿La tabla está completa como para mostrarla? Regla de contingencia: si la
+   * suscripción caduca y la API vuelve a truncar (key gratuita = 5 filas),
+   * mejor NO mostrar una tabla incompleta. Exigimos que cubra al menos la
+   * mayoría del catálogo de equipos de la competición; si no hay catálogo de
+   * referencia, un mínimo razonable de 8 equipos.
+   */
+  readonly tablaValida = computed<boolean>(() => {
+    const n = this.filas().length;
+    if (n === 0) return false;
+    const catalogo = this.competicion().equipos?.length ?? 0;
+    // Umbral: 80% del catálogo si lo conocemos, o al menos 8 equipos.
+    const minimo = catalogo > 0 ? Math.ceil(catalogo * 0.8) : 8;
+    return n >= minimo;
+  });
 
   /** ¿Alguna fila trae zona? Para decidir si mostramos la leyenda. */
   readonly hayZonas = computed(() => this.filas().some((f) => this.zonaClase(f.zona) !== 'normal'));
