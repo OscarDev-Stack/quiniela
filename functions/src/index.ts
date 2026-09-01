@@ -1487,7 +1487,9 @@ export const buscarFixturesSportsDb = onCall(
                 homeTeamId: e.idHomeTeam ?? null,
                 awayTeamId: e.idAwayTeam ?? null,
                 ronda: e.intRound ?? '',
-                competition: e.strLeague || cfg.nombre,
+                // Usamos SIEMPRE nuestro nombre en español (cfg.nombre), no el
+                // de la API (que viene en inglés: "Spanish La Liga", etc.).
+                competition: cfg.nombre,
                 // Id de liga de TheSportsDB: liga el partido a la tabla cacheada
                 // (para mostrar la forma reciente de sus equipos).
                 apiLigaId: cfg.id,
