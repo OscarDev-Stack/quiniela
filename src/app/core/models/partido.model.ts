@@ -42,6 +42,9 @@ export interface Partido {
     /* Vínculo con el evento de TheSportsDB (idEvent). Fuente alterna a
        apiFixtureId; la meta es migrar todo a esta cuando madure. */
     apiEventId?: string;
+    /* Id de liga de TheSportsDB (ej. Liga MX = 4350). Liga el partido a la
+       tabla cacheada para mostrar la forma reciente de sus equipos. */
+    apiLigaId?: number;
     /* Marcador EN VIVO (TheSportsDB premium). Se actualiza mientras el
        partido está en juego; solo informativo. vivoMinuto: "63", "HT"… */
     vivoLocal?: number;

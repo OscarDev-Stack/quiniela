@@ -345,6 +345,7 @@ export class CrearPartidoComponent {
       clave: string;
       apiFixtureId?: number;
       apiEventId?: string;
+      apiLigaId?: number;
       fecha: string;
       homeTeam: string;
       awayTeam: string;
@@ -401,6 +402,7 @@ export class CrearPartidoComponent {
           r.map((p) => ({
             clave: 'ev-' + p.apiEventId,
             apiEventId: p.apiEventId,
+            apiLigaId: p.apiLigaId,
             fecha: p.fecha,
             homeTeam: p.homeTeam,
             awayTeam: p.awayTeam,
@@ -448,6 +450,7 @@ export class CrearPartidoComponent {
     clave: string;
     apiFixtureId?: number;
     apiEventId?: string;
+    apiLigaId?: number;
     fecha: string;
     homeTeam: string;
     awayTeam: string;
@@ -471,6 +474,7 @@ export class CrearPartidoComponent {
         closesAtMs: inicio.getTime(),
         ...(f.apiFixtureId ? { apiFixtureId: f.apiFixtureId } : {}),
         ...(f.apiEventId ? { apiEventId: f.apiEventId } : {}),
+        ...(f.apiLigaId ? { apiLigaId: f.apiLigaId } : {}),
       });
     } else {
       // Forma reciente (solo football-data, que da ids numéricos de equipo).
@@ -496,6 +500,7 @@ export class CrearPartidoComponent {
         closesAt: Timestamp.fromDate(inicio),
         ...(f.apiFixtureId ? { apiFixtureId: f.apiFixtureId } : {}),
         ...(f.apiEventId ? { apiEventId: f.apiEventId } : {}),
+        ...(f.apiLigaId ? { apiLigaId: f.apiLigaId } : {}),
         ...(formaLocal ? { formaLocal } : {}),
         ...(formaVisitante ? { formaVisitante } : {}),
         grupoId: null,

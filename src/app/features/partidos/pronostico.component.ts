@@ -18,6 +18,8 @@ import {
 } from '../../core/services/pronosticos.service';
 import { Partido, TipoPartido, fechaCierre } from '../../core/models/partido.model';
 import { ResultadoPronostico } from '../../core/models/pronostico.model';
+import { CompeticionesService } from '../../core/services/competiciones.service';
+import { Competicion } from '../../core/models/competicion.model';
 
 interface Opcion {
   value: ResultadoPronostico;
@@ -41,19 +43,19 @@ interface Opcion {
             <span class="team">{{ p.awayTeam }}</span>
           </div>
 
-          @if (p.formaLocal || p.formaVisitante) {
+          @if (formaLocalEfectiva() || formaVisitanteEfectiva()) {
             <div class="forma">
               <div class="forma-lado">
                 <span class="forma-eq">{{ p.homeTeam }}</span>
                 <span class="racha">
-                  @for (r of formaDe(p.formaLocal); track $index) {
+                  @for (r of formaDe(formaLocalEfectiva()); track $index) {
                     <span class="punto" [class]="'punto--' + r"></span>
                   }
                 </span>
               </div>
               <div class="forma-lado forma-lado--der">
                 <span class="racha">
-                  @for (r of formaDe(p.formaVisitante); track $index) {
+                  @for (r of formaDe(formaVisitanteEfectiva()); track $index) {
                     <span class="punto" [class]="'punto--' + r"></span>
                   }
                 </span>
@@ -205,10 +207,40 @@ export class PronosticoComponent {
   private readonly db = inject(Firestore);
   private readonly service = inject(PronosticosService);
   private readonly users = inject(UserService);
+  private readonly competiciones = inject(CompeticionesService);
 
   readonly multiplicadores = Array.from({ length: MULTIPLICADOR_MAX }, (_, i) => i + 1);
 
   private readonly id = this.route.snapshot.paramMap.get('id')!;
+
+  /** Todas las competiciones, para localizar la tabla cacheada por apiLigaId. */
+  private readonly comps = toSignal(this.competiciones.competiciones(), {
+    initialValue: [] as Competicion[],
+  });
+
+  /**
+   * Forma reciente efectiva de un lado del partido. Prioriza la guardada en el
+   * partido (football-data). Si no hay pero el partido tiene apiLigaId, la
+   * busca en la tabla cacheada de esa liga (TheSportsDB), cruzando por nombre
+   * de equipo. Así Liga MX (que football-data no cubre) también muestra forma.
+   */
+  private formaDesdeTabla(equipo: string): string {
+    const p = this.partido();
+    if (!p?.apiLigaId) return '';
+    const comp = this.comps().find((c) => c.apiLigaId === p.apiLigaId && (c.tabla?.length ?? 0) > 0);
+    const fila = comp?.tabla?.find((f) => f.equipo === equipo);
+    return fila?.forma ?? '';
+  }
+
+  readonly formaLocalEfectiva = computed(() => {
+    const p = this.partido();
+    return p?.formaLocal || this.formaDesdeTabla(p?.homeTeam ?? '');
+  });
+
+  readonly formaVisitanteEfectiva = computed(() => {
+    const p = this.partido();
+    return p?.formaVisitante || this.formaDesdeTabla(p?.awayTeam ?? '');
+  });
 
   /** Convierte la forma "WWDLW" en un arreglo de W/D/L para pintar puntitos. */
   formaDe(forma: string | undefined): string[] {

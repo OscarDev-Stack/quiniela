@@ -1422,6 +1422,9 @@ export const buscarFixturesSportsDb = onCall(
                 awayTeamId: e.idAwayTeam ?? null,
                 ronda: e.intRound ?? '',
                 competition: e.strLeague || cfg.nombre,
+                // Id de liga de TheSportsDB: liga el partido a la tabla cacheada
+                // (para mostrar la forma reciente de sus equipos).
+                apiLigaId: cfg.id,
             }))
             .filter((p) => p.apiEventId && p.homeTeam && p.awayTeam)
             .sort((a, b) => a.fecha.localeCompare(b.fecha));
@@ -5598,6 +5601,7 @@ export const crearPartidoGrupo = onCall(opcionesCall, async (req) => {
     };
     if (typeof d.apiFixtureId === 'number') doc['apiFixtureId'] = d.apiFixtureId;
     if (typeof d.apiEventId === 'string' && d.apiEventId) doc['apiEventId'] = d.apiEventId;
+    if (typeof d.apiLigaId === 'number' && d.apiLigaId) doc['apiLigaId'] = d.apiLigaId;
 
     const ref = await db.collection('partidos').add(doc);
     return { ok: true, id: ref.id };

@@ -124,6 +124,7 @@ export class AdminService {
         porcentajeBote?: number;
         apiFixtureId?: number;
         apiEventId?: string;
+        apiLigaId?: number;
     }): Promise<{ id: string }> {
         const fn = httpsCallable<typeof data, { ok: boolean; id: string }>(
             this.fns,
@@ -210,6 +211,7 @@ export class AdminService {
                     awayTeamId: string | null;
                     ronda: string;
                     competition: string;
+                    apiLigaId: number;
                 }>;
             }
         >(this.fns, 'buscarFixturesSportsDb');
