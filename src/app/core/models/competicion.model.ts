@@ -48,6 +48,13 @@ export interface PartidoJornada {
     /* Marcador final. Necesario para la quiniela por puntos. */
     golesLocal?: number | null;
     golesVisitante?: number | null;
+    /* Id del evento en TheSportsDB (si la jornada se trajo de la API), para
+       consultar su marcador en vivo. */
+    apiEventId?: string;
+    /* Marcador EN VIVO mientras el partido está en curso (solo informativo). */
+    vivoLocal?: number;
+    vivoVisitante?: number;
+    vivoMinuto?: string;
 }
 
 /** Deduce quién ganó a partir del marcador. */

@@ -2054,11 +2054,13 @@ export const traerJornadaApi = onCall({ ...opcionesCall, secrets: [sportsDbKey] 
         throw new HttpsError('not-found', `La API no tiene partidos para la jornada ${numeroJornada}.`);
     }
 
-    // Partidos con equipos normalizados; ordenados por hora.
+    // Partidos con equipos normalizados; ordenados por hora. Guardamos el
+    // idEvent para poder consultar su marcador en vivo después.
     const partidos = dela
         .map((e) => ({
             local: nombreOficialEquipo(e.strHomeTeam),
             visitante: nombreOficialEquipo(e.strAwayTeam),
+            apiEventId: String(e.idEvent ?? ''),
             timestamp: e.strTimestamp ?? '',
         }))
         .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
@@ -2070,7 +2072,11 @@ export const traerJornadaApi = onCall({ ...opcionesCall, secrets: [sportsDbKey] 
         ok: true,
         numeroJornada,
         primeraHora,
-        partidos: partidos.map((p) => ({ local: p.local, visitante: p.visitante })),
+        partidos: partidos.map((p) => ({
+            local: p.local,
+            visitante: p.visitante,
+            apiEventId: p.apiEventId,
+        })),
     };
 });
 

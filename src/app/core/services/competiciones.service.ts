@@ -108,7 +108,7 @@ export class CompeticionesService {
     ): Promise<{
         numeroJornada: number;
         primeraHora: string;
-        partidos: Array<{ local: string; visitante: string }>;
+        partidos: Array<{ local: string; visitante: string; apiEventId?: string }>;
     }> {
         const fn = httpsCallable<
             { competicionId: string; numeroJornada: number },
@@ -116,7 +116,7 @@ export class CompeticionesService {
                 ok: boolean;
                 numeroJornada: number;
                 primeraHora: string;
-                partidos: Array<{ local: string; visitante: string }>;
+                partidos: Array<{ local: string; visitante: string; apiEventId?: string }>;
             }
         >(this.fns, 'traerJornadaApi');
         const res = await fn({ competicionId, numeroJornada });
@@ -153,7 +153,7 @@ export class CompeticionesService {
         competicionId: string,
         numero: number,
         cierraAt: Date,
-        partidos: Array<{ local: string; visitante: string }>,
+        partidos: Array<{ local: string; visitante: string; apiEventId?: string }>,
     ) {
         return addDoc(collection(this.db, `competiciones/${competicionId}/jornadas`), {
             numero,

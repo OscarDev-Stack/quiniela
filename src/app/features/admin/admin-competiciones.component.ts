@@ -596,7 +596,11 @@ export class AdminCompeticionesComponent {
     this.trayendo.set(true);
     try {
       const r = await this.service.traerJornadaApi(c.id, bor.numero);
-      bor.filas = r.partidos.map((p) => ({ local: p.local, visitante: p.visitante }));
+      bor.filas = r.partidos.map((p) => ({
+        local: p.local,
+        visitante: p.visitante,
+        ...(p.apiEventId ? { apiEventId: p.apiEventId } : {}),
+      }));
       let cierrePrellenado = '';
       if (r.primeraHora) {
         bor.cierra = this.isoALocalInput(r.primeraHora);
@@ -717,7 +721,11 @@ export class AdminCompeticionesComponent {
 
   borrador: Record<
     string,
-    { numero: number; cierra: string; filas: Array<{ local: string; visitante: string }> }
+    {
+      numero: number;
+      cierra: string;
+      filas: Array<{ local: string; visitante: string; apiEventId?: string }>;
+    }
   > = {};
 
   /** Texto del catálogo de equipos mientras se edita. */
@@ -797,7 +805,7 @@ export class AdminCompeticionesComponent {
   b(competicionId: string): {
     numero: number;
     cierra: string;
-    filas: Array<{ local: string; visitante: string }>;
+    filas: Array<{ local: string; visitante: string; apiEventId?: string }>;
   } {
     if (!this.borrador[competicionId]) {
       this.borrador[competicionId] = { numero: 1, cierra: '', filas: [] };
