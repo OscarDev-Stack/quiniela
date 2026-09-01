@@ -99,6 +99,7 @@ import { StatsService } from '../../shared/stats.service';
         @if (t.estado === 'finalizado' && yo()) {
           @if (soyGanador()) {
             <app-celebracion-victoria
+              class="p-final"
               titulo="¡Felicidades, ganaste!"
               [subtitulo]="esQuiniela()
                 ? 'Terminaste primero con ' + (yo()!.puntosTorneo ?? 0) + ' puntos entre ' + participantes().length + ' jugador(es).'
@@ -106,7 +107,7 @@ import { StatsService } from '../../shared/stats.service';
               [premio]="miPremio()"
             />
           } @else {
-            <div class="final final--perdio">
+            <div class="final final--perdio p-final">
               <div class="trofeo"><i class="ti ti-confetti"></i></div>
               <h2>Torneo terminado</h2>
               @if (esQuiniela()) {
@@ -576,6 +577,9 @@ import { StatsService } from '../../shared/stats.service';
       .flujo > .p-equipos { order: 3; }
       .flujo > .p-jugadores { order: 6; }
       .flujo > .reglas-panel { order: 9; }
+      /* El resultado final (ganaste / terminó) siempre justo bajo la franja. */
+      .flujo > .p-final { order: 0; }
+      .flujo--cerrada > .p-final { order: 0; }
 
       .flujo--cerrada > .p-partidos { order: 1; }
       .flujo--cerrada > .p-jugadores { order: 2; }
