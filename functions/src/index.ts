@@ -109,6 +109,21 @@ const sportsDbBase = (key: string): string =>
     `https://www.thesportsdb.com/api/v1/json/${(key ?? '').trim() || '123'}`;
 
 /**
+ * TheSportsDB entrega strTimestamp en UTC pero SIN zona (ej.
+ * "2026-09-04T19:00:00"). Si se pasa así a new Date() se interpreta como hora
+ * local y se desfasa. Esta función lo normaliza a ISO UTC agregando la 'Z',
+ * para que siempre se interprete como UTC (igual que el utcDate de
+ * football-data). Devuelve '' si viene vacío.
+ */
+function tsUtcSportsDb(strTimestamp: string | undefined): string {
+    const t = (strTimestamp ?? '').trim();
+    if (!t) return '';
+    // Si ya trae zona (Z o +hh:mm), se deja tal cual; si no, se marca como UTC.
+    if (/[Zz]$/.test(t) || /[+-]\d{2}:?\d{2}$/.test(t)) return t;
+    return t.replace(' ', 'T') + 'Z';
+}
+
+/**
  * Llama a la API V2 de TheSportsDB (premium). La key va en el header
  * 'X-API-KEY'. Devuelve el JSON crudo, o lanza si la respuesta no es OK.
  * V2 es la que soporta la key premium para los endpoints de calendario/eventos.
@@ -1457,15 +1472,16 @@ export const buscarFixturesSportsDb = onCall(
         const ahora = Date.now();
 
         const partidos = eventos
-            // Solo los que no han empezado y tienen hora futura.
+            // Solo los que no han empezado y tienen hora futura (UTC normalizado).
             .filter((e) => {
                 if (e.strStatus && e.strStatus !== 'NS' && e.strStatus !== '') return false;
-                const ts = e.strTimestamp ? new Date(e.strTimestamp).getTime() : 0;
+                const iso = tsUtcSportsDb(e.strTimestamp);
+                const ts = iso ? new Date(iso).getTime() : 0;
                 return ts > ahora;
             })
             .map((e) => ({
                 apiEventId: String(e.idEvent ?? ''),
-                fecha: e.strTimestamp ?? '',
+                fecha: tsUtcSportsDb(e.strTimestamp),
                 homeTeam: nombreOficialEquipo(e.strHomeTeam),
                 awayTeam: nombreOficialEquipo(e.strAwayTeam),
                 homeTeamId: e.idHomeTeam ?? null,
@@ -2183,7 +2199,7 @@ export const traerJornadaApi = onCall({ ...opcionesCall, secrets: [sportsDbKey] 
             local: nombreOficialEquipo(e.strHomeTeam),
             visitante: nombreOficialEquipo(e.strAwayTeam),
             apiEventId: String(e.idEvent ?? ''),
-            timestamp: e.strTimestamp ?? '',
+            timestamp: tsUtcSportsDb(e.strTimestamp),
         }))
         .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
