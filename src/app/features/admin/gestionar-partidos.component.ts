@@ -74,7 +74,7 @@ interface Outcome {
               @if (cierre(p); as c) { · cierra {{ c | date: 'dd/MM, h:mm a' }} }
             </div>
             <div class="row-origen">
-              @if (p.apiFixtureId) {
+              @if (p.apiFixtureId || p.apiEventId) {
                 <span class="origen origen--api"><i class="ti ti-cloud"></i> API</span>
               } @else {
                 <span class="origen origen--manual"><i class="ti ti-hand-finger"></i> Manual</span>
