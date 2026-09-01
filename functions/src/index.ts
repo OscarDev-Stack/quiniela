@@ -116,6 +116,7 @@ interface EventoSportsDb {
     intAwayScore?: string | null;
     strTimestamp?: string;
     strStatus?: string;
+    strProgress?: string;
     strPostponed?: string;
 }
 
@@ -1669,6 +1670,49 @@ export const revisarResultadosSportsDb = onSchedule(
                     propuestoAt: FieldValue.serverTimestamp(),
                     alertaApi: 'La liquidación automática falló. Revísalo y liquida a mano.',
                 });
+            }
+        }
+    },
+);
+
+/* ============================================================
+   Marcador EN VIVO (TheSportsDB premium, livescore 2 min)
+   Actualiza el marcador parcial y el minuto de los partidos en
+   juego con apiEventId, para mostrarlo en las tarjetas. Es solo
+   informativo: no liquida ni depende de esto nada crítico.
+   ============================================================ */
+export const actualizarMarcadoresEnVivo = onSchedule(
+    { schedule: cada(3), timeZone: 'America/Mexico_City', secrets: [sportsDbKey] },
+    async () => {
+        const snap = await db.collection('partidos').where('status', '==', 'en-juego').get();
+        if (snap.empty) return;
+
+        // Solo partidos vivos de TheSportsDB que aún no se liquidaron.
+        const candidatos = snap.docs.filter((d) => {
+            const p = d.data();
+            return !p['liquidado'] && !!p['apiEventId'];
+        });
+        if (candidatos.length === 0) return;
+
+        const key = sportsDbKey.value();
+
+        for (const d of candidatos) {
+            const ev = await lookupEventoSportsDb(String(d.data()['apiEventId']), key);
+            if (!ev) continue;
+
+            const local = Number(ev.intHomeScore ?? NaN);
+            const visitante = Number(ev.intAwayScore ?? NaN);
+            // strProgress trae el minuto ("63") en partidos en curso; si no,
+            // usamos el estado (ej. "HT" medio tiempo). Puede venir vacío.
+            const minuto = String(ev.strProgress ?? '').trim() || String(ev.strStatus ?? '').trim();
+
+            const cambios: Record<string, unknown> = {};
+            if (Number.isFinite(local)) cambios['vivoLocal'] = local;
+            if (Number.isFinite(visitante)) cambios['vivoVisitante'] = visitante;
+            if (minuto) cambios['vivoMinuto'] = minuto;
+
+            if (Object.keys(cambios).length > 0) {
+                await d.ref.update(cambios).catch(() => undefined);
             }
         }
     },

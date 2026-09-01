@@ -42,6 +42,11 @@ export interface Partido {
     /* Vínculo con el evento de TheSportsDB (idEvent). Fuente alterna a
        apiFixtureId; la meta es migrar todo a esta cuando madure. */
     apiEventId?: string;
+    /* Marcador EN VIVO (TheSportsDB premium). Se actualiza mientras el
+       partido está en juego; solo informativo. vivoMinuto: "63", "HT"… */
+    vivoLocal?: number;
+    vivoVisitante?: number;
+    vivoMinuto?: string;
     /* Forma reciente (últimos 5) de cada equipo, tipo "WWDLW". Se captura una
        sola vez al crear el partido desde la API; informativa, no cambia. */
     formaLocal?: string;

@@ -68,12 +68,20 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
               <app-escudo [equipo]="m.homeTeam" [size]="26" />
               {{ m.homeTeam }}
             </span>
-            <span class="vs">vs</span>
+            @if (hayMarcadorVivo(m)) {
+              <span class="marcador-vivo">{{ m.vivoLocal }} - {{ m.vivoVisitante }}</span>
+            } @else {
+              <span class="vs">vs</span>
+            }
             <span class="team team--right">
               {{ m.awayTeam }}
               <app-escudo [equipo]="m.awayTeam" [size]="26" />
             </span>
           </div>
+
+          @if (m.status === 'en-juego' && m.vivoMinuto) {
+            <div class="minuto-vivo"><span class="live-dot" aria-hidden="true"></span> {{ minutoTexto(m.vivoMinuto) }}</div>
+          }
 
           @if (fechaHora(m); as fh) {
             <div class="fecha-partido"><i class="ti ti-calendar-event"></i> {{ fh }}</div>
@@ -227,6 +235,22 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
       }
       .team--right { justify-content: flex-end; }
       .vs { font-size: 13px; color: var(--text-muted); }
+      .marcador-vivo {
+        font-size: 20px; font-weight: 800; color: var(--text-primary);
+        font-variant-numeric: tabular-nums; white-space: nowrap;
+      }
+      .minuto-vivo {
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+        font-size: 12px; font-weight: 700; color: #d63b3b; margin: -8px 0 12px;
+      }
+      .minuto-vivo .live-dot {
+        width: 7px; height: 7px; border-radius: 50%; background: #d63b3b;
+        box-shadow: 0 0 0 0 rgba(214, 59, 59, 0.6);
+        animation: latido-vivo 1.4s ease-out infinite;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .minuto-vivo .live-dot { animation: none; }
+      }
 
       .fecha-partido {
         display: flex; align-items: center; justify-content: center; gap: 5px;
@@ -359,6 +383,23 @@ export class PartidosListComponent {
 
   restante(p: Partido): string {
     return textoRestante(p, this.ahora());
+  }
+
+  /** ¿El partido tiene marcador en vivo para mostrar? (solo en juego). */
+  hayMarcadorVivo(p: Partido): boolean {
+    return (
+      p.status === 'en-juego' &&
+      typeof p.vivoLocal === 'number' &&
+      typeof p.vivoVisitante === 'number'
+    );
+  }
+
+  /**
+   * Texto del minuto en vivo: si es un número le agrega la comilla ("63'");
+   * si es un estado ("HT", "Half Time"...) lo muestra tal cual.
+   */
+  minutoTexto(min: string): string {
+    return /^\d+$/.test(min) ? `${min}'` : min;
   }
 
   /** Fecha y hora del partido en zona MX, ej. "sáb 6 sep · 19:00". Null si no hay. */
