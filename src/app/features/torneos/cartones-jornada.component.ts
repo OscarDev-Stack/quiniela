@@ -1,5 +1,6 @@
 import { Component, computed, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { EscudoComponent } from '../../shared/escudo.component';
 import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
 import { Quiniela } from '../../core/models/torneo.model';
 
@@ -7,15 +8,16 @@ const PUNTOS_EXACTO = 5;
 const PUNTOS_RESULTADO = 3;
 
 /**
- * Los pronósticos de todos, uno por fila y un partido por columna.
- * El color de cada celda dice cuánto sumó: así cualquiera puede
- * verificar los puntos sin creerle a nadie.
+ * Cartones de la jornada, en vista POR PARTIDO: una tarjeta por encuentro
+ * (con escudos y nombre completo, sin abreviaturas ambiguas), su marcador
+ * real, y debajo el pronóstico de cada jugador con el color de su acierto.
+ * El color dice cuánto sumó, así cualquiera verifica los puntos.
  */
 @Component({
-    selector: 'app-cartones-jornada',
-    standalone: true,
-    imports: [CommonModule],
-    template: `
+  selector: 'app-cartones-jornada',
+  standalone: true,
+  imports: [CommonModule, EscudoComponent],
+  template: `
     <section class="panel">
       <div class="panel-head">
         <h3>Cartones de la jornada {{ jornada().numero }}</h3>
@@ -29,164 +31,180 @@ const PUNTOS_RESULTADO = 3;
 
       <p class="ayuda">Ya cerró el plazo, así que todos los pronósticos quedan a la vista.</p>
 
-      <div class="tablero">
-        <table>
-          <thead>
-            <tr>
-              <th class="col-jugador">Jugador</th>
-              @for (p of jornada().partidos; track $index) {
-                <th [title]="p.local + ' vs ' + p.visitante">
-                  <span class="abrev">{{ abreviar(p.local) }}</span>
-                  <span class="abrev abrev--vis">{{ abreviar(p.visitante) }}</span>
-                  @if (p.resultado && p.resultado !== 'pospuesto') {
-                    <span class="real">{{ p.golesLocal }}-{{ p.golesVisitante }}</span>
-                  } @else if (p.resultado === 'pospuesto') {
-                    <span class="real apl">Apl</span>
-                  } @else {
-                    <span class="real">–</span>
-                  }
-                </th>
-              }
-              <th class="col-total">Pts</th>
-            </tr>
-          </thead>
+      @if (cartones().length === 0) {
+        <p class="vacio">Nadie envió pronósticos en esta jornada.</p>
+      } @else {
+        <!-- Totales de la jornada, arriba para no perder el ranking. -->
+        <div class="totales">
+          @for (c of cartones(); track c.id) {
+            <span class="chip-total" [class.chip-total--yo]="c.uid === miUid()">
+              {{ c.uid === miUid() ? 'Tú' : c.alias }}
+              <strong>{{ puntosCarton(c) }}</strong>
+            </span>
+          }
+        </div>
 
-          <tbody>
-            @for (c of cartones(); track c.id) {
-              <tr [class.fila-yo]="c.uid === miUid()">
-                <td class="col-jugador">{{ c.alias }}</td>
-                @for (p of jornada().partidos; track $index) {
-                  <td>
+        <div class="partidos">
+          @for (p of jornada().partidos; track $index) {
+            <div class="match">
+              <div class="match-head">
+                <span class="lado">
+                  <app-escudo [equipo]="p.local" [size]="22" />
+                  <span class="eq">{{ p.local }}</span>
+                </span>
+                <span class="centro">
+                  @if (p.resultado && p.resultado !== 'pospuesto') {
+                    <span class="marcador">{{ p.golesLocal }} - {{ p.golesVisitante }}</span>
+                  } @else if (p.resultado === 'pospuesto') {
+                    <span class="estado apl">Aplazado</span>
+                  } @else {
+                    <span class="estado">vs</span>
+                  }
+                </span>
+                <span class="lado lado--der">
+                  <span class="eq">{{ p.visitante }}</span>
+                  <app-escudo [equipo]="p.visitante" [size]="22" />
+                </span>
+              </div>
+
+              <div class="picks">
+                @for (c of cartones(); track c.id) {
+                  <div class="pick" [class.pick--yo]="c.uid === miUid()">
+                    <span class="pick-alias">{{ c.uid === miUid() ? 'Tú' : c.alias }}</span>
                     @if (c.marcadores[$index]; as m) {
-                      <span class="celda" [class]="'celda--' + acierto(p, m)">
+                      <span class="pick-marca" [class]="'pick-marca--' + acierto(p, m)">
                         {{ m.local }}-{{ m.visitante }}
                       </span>
                     } @else {
-                      <span class="celda celda--vacio">–</span>
+                      <span class="pick-marca pick-marca--vacio">–</span>
                     }
-                  </td>
+                  </div>
                 }
-                <td class="col-total">{{ puntosCarton(c) }}</td>
-              </tr>
-            } @empty {
-              <tr>
-                <td class="col-jugador" [attr.colspan]="jornada().partidos.length + 2">
-                  Nadie envió pronósticos en esta jornada.
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
     </section>
   `,
-    styles: [
-        `
+  styles: [
+    `
       .panel {
         background: var(--surface-2); border: 1px solid var(--border);
         border-radius: 12px; padding: 16px 18px; margin-bottom: 14px;
       }
-      .panel-head {
-        display: flex; align-items: center; justify-content: space-between;
-        gap: 8px; margin-bottom: 8px;
-      }
+      .panel-head { margin-bottom: 8px; }
       h3 { font-size: 15px; font-weight: 600; margin: 0; }
+
       .leyenda {
         display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 10px;
         font-size: 11px; color: var(--text-muted);
       }
       .leyenda-item { display: inline-flex; align-items: center; gap: 6px; }
-      .muestra {
-        width: 12px; height: 12px; border-radius: 4px; flex-shrink: 0;
-        background: var(--surface-1);
-      }
+      .muestra { width: 12px; height: 12px; border-radius: 4px; flex-shrink: 0; background: var(--surface-1); }
       .muestra--5 { background: var(--success-bg); border: 1px solid var(--success-text); }
       .muestra--3 { background: var(--accent-bg); border: 1px solid var(--accent-text); }
       .muestra--0 { background: var(--surface-1); border: 1px solid var(--border); opacity: 0.6; }
       .ayuda { font-size: 12px; color: var(--text-secondary); margin: 0 0 12px; }
+      .vacio { font-size: 13px; color: var(--text-muted); margin: 8px 0; }
 
-      .tablero { overflow-x: auto; margin: 0 -4px; -webkit-overflow-scrolling: touch; }
-      table { border-collapse: collapse; font-size: 12px; }
-      th, td { padding: 6px 5px; text-align: center; white-space: nowrap; }
-      thead th {
-        font-weight: 500; color: var(--text-muted); font-size: 10px;
-        border-bottom: 1px solid var(--border); vertical-align: bottom;
+      /* Ranking compacto de totales de la jornada. */
+      .totales { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+      .chip-total {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 12px; color: var(--text-secondary);
+        background: var(--surface-1); border: 1px solid var(--border);
+        border-radius: 999px; padding: 3px 10px;
       }
-      .abrev { display: block; line-height: 1.25; }
-      .abrev--vis { color: var(--text-secondary); }
-      .real {
-        display: block; margin-top: 3px; font-weight: 700;
-        font-size: 11px; color: var(--text-primary);
-      }
-      .real.apl { color: var(--warning-text); font-weight: 500; }
+      .chip-total strong { color: var(--accent-text); font-variant-numeric: tabular-nums; }
+      .chip-total--yo { border-color: var(--accent-text); color: var(--accent-text); }
 
-      .col-jugador {
-        position: sticky; left: 0; z-index: 1; text-align: left;
-        background: var(--surface-2); padding-right: 10px;
-        font-weight: 600; max-width: 96px; overflow: hidden; text-overflow: ellipsis;
+      .partidos { display: flex; flex-direction: column; gap: 12px; }
+      .match {
+        border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+        background: var(--surface-1);
       }
-      .col-total { font-weight: 700; color: var(--accent-text); }
-      .fila-yo .col-jugador { color: var(--accent-text); }
-      tbody tr { border-bottom: 1px solid var(--border); }
-      tbody tr:last-child { border-bottom: none; }
+      .match-head {
+        display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+        gap: 8px; padding: 10px 12px; background: var(--surface-2);
+        border-bottom: 1px solid var(--border);
+      }
+      .lado { display: flex; align-items: center; gap: 8px; min-width: 0; }
+      .lado--der { justify-content: flex-end; }
+      .eq {
+        font-size: 13px; font-weight: 600; color: var(--text-primary);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .centro { text-align: center; white-space: nowrap; }
+      .marcador { font-size: 17px; font-weight: 800; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+      .estado { font-size: 12px; color: var(--text-muted); }
+      .estado.apl { color: var(--warning-text); }
 
-      .celda {
-        display: inline-block; padding: 3px 7px; border-radius: 6px;
-        background: var(--surface-1); color: var(--text-secondary);
+      .picks { display: flex; flex-direction: column; }
+      .pick {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        padding: 7px 12px; font-size: 13px;
       }
-      .celda--5 { background: var(--success-bg); color: var(--success-text); font-weight: 700; }
-      .celda--3 { background: var(--accent-bg); color: var(--accent-text); font-weight: 600; }
-      .celda--0 { opacity: 0.45; }
-      .celda--vacio { opacity: 0.3; }
+      .pick + .pick { border-top: 1px solid var(--border); }
+      .pick--yo { background: color-mix(in srgb, var(--accent-fill) 8%, transparent); }
+      .pick-alias {
+        color: var(--text-secondary); min-width: 0;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .pick--yo .pick-alias { color: var(--accent-text); font-weight: 600; }
+      .pick-marca {
+        flex-shrink: 0; padding: 2px 9px; border-radius: 6px; font-weight: 600;
+        background: var(--surface-2); color: var(--text-secondary);
+        font-variant-numeric: tabular-nums;
+      }
+      .pick-marca--5 { background: var(--success-bg); color: var(--success-text); font-weight: 700; }
+      .pick-marca--3 { background: var(--accent-bg); color: var(--accent-text); }
+      .pick-marca--0 { opacity: 0.5; }
+      .pick-marca--vacio { opacity: 0.3; }
     `,
-    ],
+  ],
 })
 export class CartonesJornadaComponent {
-    readonly jornada = input.required<Jornada>();
-    readonly quinielas = input.required<Quiniela[]>();
-    readonly miUid = input<string | null>(null);
+  readonly jornada = input.required<Jornada>();
+  readonly quinielas = input.required<Quiniela[]>();
+  readonly miUid = input<string | null>(null);
 
-    /**
-     * Puntos a mostrar de un cartón: el oficial si la jornada ya se resolvió,
-     * o la previa (resultados parciales) mientras sigue en curso.
-     */
-    puntosCarton(c: Quiniela): number {
-        return c.puntos ?? c.puntosPrevia ?? 0;
+  /**
+   * Puntos a mostrar de un cartón: el oficial si la jornada ya se resolvió,
+   * o la previa (resultados parciales) mientras sigue en curso.
+   */
+  puntosCarton(c: Quiniela): number {
+    return c.puntos ?? c.puntosPrevia ?? 0;
+  }
+
+  readonly cartones = computed(() =>
+    [...this.quinielas()].sort((a, b) => {
+      const pa = this.puntosCarton(a);
+      const pb = this.puntosCarton(b);
+      if (pa !== pb) return pb - pa;
+      return a.alias.localeCompare(b.alias, 'es');
+    }),
+  );
+
+  /** Cuánto vale un pronóstico contra el resultado real. */
+  acierto(partido: PartidoJornada, marcador: { local: number; visitante: number }): number {
+    if (!partido.resultado || partido.resultado === 'pospuesto') return 0;
+
+    if (
+      typeof partido.golesLocal === 'number' &&
+      typeof partido.golesVisitante === 'number' &&
+      marcador.local === partido.golesLocal &&
+      marcador.visitante === partido.golesVisitante
+    ) {
+      return PUNTOS_EXACTO;
     }
 
-    readonly cartones = computed(() =>
-        [...this.quinielas()].sort((a, b) => {
-            const pa = this.puntosCarton(a);
-            const pb = this.puntosCarton(b);
-            if (pa !== pb) return pb - pa;
-            return a.alias.localeCompare(b.alias, 'es');
-        }),
-    );
-
-    /** Cuánto vale un pronóstico contra el resultado real. */
-    acierto(partido: PartidoJornada, marcador: { local: number; visitante: number }): number {
-        if (!partido.resultado || partido.resultado === 'pospuesto') return 0;
-
-        if (
-            typeof partido.golesLocal === 'number' &&
-            typeof partido.golesVisitante === 'number' &&
-            marcador.local === partido.golesLocal &&
-            marcador.visitante === partido.golesVisitante
-        ) {
-            return PUNTOS_EXACTO;
-        }
-
-        const mio =
-            marcador.local > marcador.visitante
-                ? 'local'
-                : marcador.local < marcador.visitante
-                    ? 'visitante'
-                    : 'empate';
-        return mio === partido.resultado ? PUNTOS_RESULTADO : 0;
-    }
-
-    /** Nombre corto para que quepa en el tablero. */
-    abreviar(nombre: string): string {
-        return nombre.length <= 4 ? nombre : nombre.slice(0, 4);
-    }
+    const mio =
+      marcador.local > marcador.visitante
+        ? 'local'
+        : marcador.local < marcador.visitante
+          ? 'visitante'
+          : 'empate';
+    return mio === partido.resultado ? PUNTOS_RESULTADO : 0;
+  }
 }
