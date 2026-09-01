@@ -188,6 +188,20 @@ export class CompeticionesService {
     }
 
     /**
+     * Fuerza la descarga de la tabla de posiciones oficial (TheSportsDB) y la
+     * cachea en la competición. La tabla también se refresca sola al resolver
+     * cada jornada; esto sirve para el arranque o una actualización a demanda.
+     */
+    async refrescarTabla(competicionId: string): Promise<{ filas: number }> {
+        const fn = httpsCallable<{ competicionId: string }, { ok: boolean; filas: number }>(
+            this.fns,
+            'refrescarTablaApi',
+        );
+        const res = await fn({ competicionId });
+        return res.data;
+    }
+
+    /**
      * Publica el resultado oficial y lo aplica a todos los torneos
      * que estén jugando esa jornada.
      */

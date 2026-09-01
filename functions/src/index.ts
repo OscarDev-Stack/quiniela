@@ -133,6 +133,95 @@ async function eventosRondaSportsDb(
     return data.events ?? [];
 }
 
+/** Una fila de la tabla de posiciones tal como la devuelve TheSportsDB. */
+interface StandingSportsDb {
+    intRank?: string;
+    strTeam?: string;
+    intPlayed?: string;
+    intWin?: string;
+    intDraw?: string;
+    intLoss?: string;
+    intGoalsFor?: string;
+    intGoalsAgainst?: string;
+    intGoalDifference?: string;
+    intPoints?: string;
+    strForm?: string;
+    strDescription?: string;
+}
+
+/** Fila de tabla ya normalizada, como la guardamos en Firestore. */
+interface FilaTablaLiga {
+    posicion: number;
+    equipo: string; // nombre oficial (normalizado)
+    jugados: number;
+    ganados: number;
+    empatados: number;
+    perdidos: number;
+    golesFavor: number;
+    golesContra: number;
+    diferencia: number;
+    puntos: number;
+    /* Racha reciente tipo "WDWLD" (más reciente al final). */
+    forma: string;
+    /* Zona: "Playoffs", "Relegation"... viene de la API. Vacío si no trae. */
+    zona: string;
+}
+
+/**
+ * Trae la tabla de posiciones de una liga/temporada de TheSportsDB y la
+ * devuelve normalizada. Los nombres de equipo pasan por nombreOficialEquipo
+ * para que calcen con los escudos del catálogo. Devuelve [] si no hay datos.
+ */
+async function tablaLigaSportsDb(ligaId: number, temporada: string): Promise<FilaTablaLiga[]> {
+    const url =
+        `${SPORTSDB_BASE}/lookuptable.php?l=${ligaId}&s=${encodeURIComponent(temporada)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+        throw new HttpsError('internal', `TheSportsDB respondió ${res.status}.`);
+    }
+    const data = (await res.json()) as { table?: StandingSportsDb[] | null };
+    const filas = data.table ?? [];
+
+    return filas.map((f, i) => ({
+        posicion: Number(f.intRank ?? i + 1),
+        equipo: nombreOficialEquipo(f.strTeam ?? ''),
+        jugados: Number(f.intPlayed ?? 0),
+        ganados: Number(f.intWin ?? 0),
+        empatados: Number(f.intDraw ?? 0),
+        perdidos: Number(f.intLoss ?? 0),
+        golesFavor: Number(f.intGoalsFor ?? 0),
+        golesContra: Number(f.intGoalsAgainst ?? 0),
+        diferencia: Number(f.intGoalDifference ?? 0),
+        puntos: Number(f.intPoints ?? 0),
+        forma: String(f.strForm ?? ''),
+        zona: String(f.strDescription ?? ''),
+    }));
+}
+
+/**
+ * Refresca la tabla de posiciones de una competición vinculada a la API y la
+ * guarda en su documento (`tabla` + `tablaActualizada`). No lanza si la
+ * competición no está vinculada o la API no trae datos: simplemente no hace
+ * nada. Devuelve cuántas filas quedaron guardadas.
+ */
+async function refrescarTablaCompeticion(
+    compRef: FirebaseFirestore.DocumentReference,
+    comp: Record<string, unknown>,
+): Promise<number> {
+    const ligaId = Number(comp['apiLigaId'] ?? 0);
+    const temporada = String(comp['apiTemporada'] ?? '');
+    if (!ligaId || !temporada) return 0;
+
+    const tabla = await tablaLigaSportsDb(ligaId, temporada);
+    if (tabla.length === 0) return 0;
+
+    await compRef.set(
+        { tabla, tablaActualizada: FieldValue.serverTimestamp() },
+        { merge: true },
+    );
+    return tabla.length;
+}
+
 /** Convierte el resultado de la API (marcador) al formato de la jornada. */
 function resultadoDesdeMarcador(
     gl: number | null,
@@ -1740,6 +1829,42 @@ export const traerResultadosApi = onCall(opcionesCall, async (req) => {
 });
 
 /* ============================================================
+   TheSportsDB — refrescar la tabla de posiciones (manual)
+   El admin/gestor fuerza la descarga de la tabla oficial. Se
+   refresca sola al resolver cada jornada; esto cubre el arranque
+   (torneo recién creado) o una actualización a demanda.
+   ============================================================ */
+export const refrescarTablaApi = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const competicionId = String(req.data?.competicionId ?? '');
+    if (!competicionId) throw new HttpsError('invalid-argument', 'Falta la competición.');
+
+    const compRef = db.doc(`competiciones/${competicionId}`);
+    const [adminSnap, compSnap] = await Promise.all([db.doc(`admins/${uid}`).get(), compRef.get()]);
+    if (!compSnap.exists) throw new HttpsError('not-found', 'La competición no existe.');
+
+    const comp = compSnap.data() as Record<string, unknown>;
+    const gestores = (comp['gestores'] as string[]) ?? [];
+    if (!adminSnap.exists && !gestores.includes(uid)) {
+        throw new HttpsError('permission-denied', 'No gestionas esta competición.');
+    }
+    if (!comp['apiLigaId'] || !comp['apiTemporada']) {
+        throw new HttpsError(
+            'failed-precondition',
+            'Esta competición no tiene configurada la liga y temporada de la API.',
+        );
+    }
+
+    const filas = await refrescarTablaCompeticion(compRef, comp);
+    if (filas === 0) {
+        throw new HttpsError('not-found', 'La API no devolvió tabla para esta liga/temporada.');
+    }
+    return { ok: true, filas };
+});
+
+/* ============================================================
    Resolver una jornada de la competición
    Un solo resultado oficial que se aplica a TODOS los torneos
    que estén jugando esa jornada. Evita que dos torneos de la
@@ -2046,6 +2171,15 @@ export const resolverJornadaCompeticion = onCall(
 
         await jornadaRef.update({ estado: 'resuelta' });
         if (premiados.length > 0) await actualizarRanking(premiados);
+
+        // Acaban de jugarse partidos: es el mejor momento para refrescar la
+        // tabla oficial de la liga (si la competición está vinculada a la API).
+        // Un fallo aquí no debe romper la resolución de la jornada.
+        try {
+            await refrescarTablaCompeticion(compRef, compSnap.data() as Record<string, unknown>);
+        } catch (e) {
+            logger.warn(`No se pudo refrescar la tabla de ${competicionId}.`, e);
+        }
 
         return {
             ok: true,

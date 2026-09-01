@@ -58,7 +58,7 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
             @switch (m.status) {
               @case ('abierto') { <span class="badge badge--open">Abierto</span> }
               @case ('cierra-pronto') { <span class="badge badge--soon">Cierra pronto</span> }
-              @case ('en-juego') { <span class="badge badge--live"><i class="ti ti-player-play"></i> En juego</span> }
+              @case ('en-juego') { <span class="badge badge--live"><span class="live-dot" aria-hidden="true"></span> En juego</span> }
               @case ('cerrado') { <span class="badge badge--done">Finalizado</span> }
             }
           </div>
@@ -74,6 +74,10 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
               <app-escudo [equipo]="m.awayTeam" [size]="26" />
             </span>
           </div>
+
+          @if (fechaHora(m); as fh) {
+            <div class="fecha-partido"><i class="ti ti-calendar-event"></i> {{ fh }}</div>
+          }
 
           @if (aceptaPronosticos(m)) {
             <div class="meta">
@@ -187,7 +191,24 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
       }
       .badge--open { color: var(--success-text); background: var(--success-bg); }
       .badge--soon { color: var(--warning-text); background: var(--warning-bg); }
-      .badge--live { color: #fff; background: #d63b3b; }
+      .badge--live {
+        color: #fff; background: #d63b3b;
+        display: inline-flex; align-items: center; gap: 6px;
+      }
+      /* Punto blanco que late para reforzar el "en vivo". */
+      .live-dot {
+        width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+        background: #fff; box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
+        animation: latido-vivo 1.4s ease-out infinite;
+      }
+      @keyframes latido-vivo {
+        0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
+        70% { box-shadow: 0 0 0 6px rgba(255, 255, 255, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .live-dot { animation: none; }
+      }
       .badge--done { color: var(--text-muted); background: var(--surface-2); }
 
       /* Indicador visual de estado en la orilla de la tarjeta. */
@@ -206,6 +227,12 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
       }
       .team--right { justify-content: flex-end; }
       .vs { font-size: 13px; color: var(--text-muted); }
+
+      .fecha-partido {
+        display: flex; align-items: center; justify-content: center; gap: 5px;
+        font-size: 12px; color: var(--text-muted); margin: -6px 0 12px;
+        text-transform: capitalize;
+      }
 
       .meta { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
       .closes { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 5px; }
@@ -332,6 +359,19 @@ export class PartidosListComponent {
 
   restante(p: Partido): string {
     return textoRestante(p, this.ahora());
+  }
+
+  /** Fecha y hora del partido en zona MX, ej. "sáb 6 sep · 19:00". Null si no hay. */
+  fechaHora(p: Partido): string | null {
+    const f = fechaCierre(p);
+    if (!f) return null;
+    const fecha = f.toLocaleDateString('es-MX', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    });
+    const hora = f.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    return `${fecha} · ${hora}`;
   }
 
   /** Solo si sigue abierto y su hora de cierre aún no llega. */

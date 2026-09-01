@@ -28,7 +28,7 @@ import { Partido } from '../../core/models/partido.model';
       }
 
       @for (p of pronosticos(); track p.id) {
-        <div class="row">
+        <div class="row" [class.row--ok]="p.estado === 'ganado'" [class.row--ko]="p.estado === 'perdido'">
           <div class="row-main">
             <div class="row-title">{{ p.partidoLabel }}</div>
             <div class="row-sub">
@@ -37,6 +37,11 @@ import { Partido } from '../../core/models/partido.model';
               }
               {{ equipoElegido(p) }} · x{{ p.multiplicador }} ({{ p.apuesta | number }} pts)
             </div>
+            @if (resultadoReal(p); as real) {
+              <div class="row-real">
+                Resultado: <strong>{{ real }}</strong>
+              </div>
+            }
           </div>
 
           <div class="row-right">
@@ -71,11 +76,17 @@ import { Partido } from '../../core/models/partido.model';
       .row {
         display: flex; align-items: center; gap: 12px;
         background: var(--surface-2); border: 1px solid var(--border);
+        border-left: 3px solid var(--border);
         border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;
       }
-      .row-main { flex: 1; }
+      /* Borde izquierdo verde/rojo según el resultado del pronóstico. */
+      .row--ok { border-left-color: var(--success-text); }
+      .row--ko { border-left-color: var(--danger-text); }
+      .row-main { flex: 1; min-width: 0; }
       .row-title { font-size: 14px; font-weight: 600; }
       .row-sub { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+      .row-real { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+      .row-real strong { color: var(--text-primary); }
       .row-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 
       .tag {
@@ -139,6 +150,27 @@ export class MisPronosticosComponent {
     for (const p of this.partidos()) m.set(p.id, p.grupoId ?? null);
     return m;
   });
+
+  /** Mapa partidoId → Partido, para leer el resultado oficial y sus equipos. */
+  private readonly partidoPorId = computed(() => {
+    const m = new Map<string, Partido>();
+    for (const p of this.partidos()) m.set(p.id, p);
+    return m;
+  });
+
+  /**
+   * Resultado oficial del partido en texto (equipo ganador o "Empate"),
+   * o null si el partido aún no tiene resultado. Sirve para mostrar contra
+   * qué se comparó el pronóstico.
+   */
+  resultadoReal(p: Pronostico): string | null {
+    const m = this.partidoPorId().get(p.partidoId);
+    const r = m?.resultadoOficial;
+    if (!m || !r) return null;
+    if (r === 'local' || r === 'pasa-local') return m.homeTeam;
+    if (r === 'visitante' || r === 'pasa-visitante') return m.awayTeam;
+    return 'Empate';
+  }
 
   /** Pronósticos del contexto activo (Global o el grupo elegido). */
   readonly pronosticos = computed(() => {

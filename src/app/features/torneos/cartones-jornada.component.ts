@@ -19,7 +19,12 @@ const PUNTOS_RESULTADO = 3;
     <section class="panel">
       <div class="panel-head">
         <h3>Cartones de la jornada {{ jornada().numero }}</h3>
-        <span class="leyenda">Exacto 5 · Resultado 3</span>
+      </div>
+
+      <div class="leyenda">
+        <span class="leyenda-item"><span class="muestra muestra--5"></span> Exacto · 5 pts</span>
+        <span class="leyenda-item"><span class="muestra muestra--3"></span> Resultado · 3 pts</span>
+        <span class="leyenda-item"><span class="muestra muestra--0"></span> Sin acierto</span>
       </div>
 
       <p class="ayuda">Ya cerró el plazo, así que todos los pronósticos quedan a la vista.</p>
@@ -86,7 +91,18 @@ const PUNTOS_RESULTADO = 3;
         gap: 8px; margin-bottom: 8px;
       }
       h3 { font-size: 15px; font-weight: 600; margin: 0; }
-      .leyenda { font-size: 11px; color: var(--text-muted); }
+      .leyenda {
+        display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 10px;
+        font-size: 11px; color: var(--text-muted);
+      }
+      .leyenda-item { display: inline-flex; align-items: center; gap: 6px; }
+      .muestra {
+        width: 12px; height: 12px; border-radius: 4px; flex-shrink: 0;
+        background: var(--surface-1);
+      }
+      .muestra--5 { background: var(--success-bg); border: 1px solid var(--success-text); }
+      .muestra--3 { background: var(--accent-bg); border: 1px solid var(--accent-text); }
+      .muestra--0 { background: var(--surface-1); border: 1px solid var(--border); opacity: 0.6; }
       .ayuda { font-size: 12px; color: var(--text-secondary); margin: 0 0 12px; }
 
       .tablero { overflow-x: auto; margin: 0 -4px; -webkit-overflow-scrolling: touch; }

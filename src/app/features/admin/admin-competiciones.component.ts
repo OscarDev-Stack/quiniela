@@ -163,7 +163,18 @@ import { ToastService } from '../../shared/toast.service';
                 </select>
               </label>
             </div>
-            <button class="btn sm" (click)="guardarApi(c)">Guardar conexión</button>
+            <div class="acciones">
+              <button class="btn sm" (click)="guardarApi(c)">Guardar conexión</button>
+              @if (c.apiLigaId) {
+                <button class="btn sm" [disabled]="refrescandoTabla()" (click)="refrescarTabla(c)">
+                  <i class="ti ti-table"></i>
+                  {{ refrescandoTabla() ? 'Actualizando…' : 'Actualizar tabla de posiciones' }}
+                </button>
+              }
+            </div>
+            @if (c.apiLigaId && c.tabla?.length) {
+              <p class="nota">Tabla cargada: {{ c.tabla?.length }} equipos. Se actualiza sola al resolver cada jornada.</p>
+            }
           }
         </div>
 
@@ -505,6 +516,8 @@ export class AdminCompeticionesComponent {
   readonly resolviendo = signal(false);
   /** True mientras se consulta la API (traer jornada o resultados). */
   readonly trayendo = signal(false);
+  /** True mientras se refresca la tabla de posiciones desde la API. */
+  readonly refrescandoTabla = signal(false);
   nombre = '';
 
   /* --- Conexión con la API (TheSportsDB) --- */
@@ -570,8 +583,20 @@ export class AdminCompeticionesComponent {
     try {
       const r = await this.service.traerJornadaApi(c.id, bor.numero);
       bor.filas = r.partidos.map((p) => ({ local: p.local, visitante: p.visitante }));
+      let cierrePrellenado = '';
       if (r.primeraHora) {
         bor.cierra = this.isoALocalInput(r.primeraHora);
+        // Hora legible del cierre YA con el margen aplicado (hora MX), para
+        // avisarle al admin qué quedó. Reusamos el mismo valor del input.
+        const d = new Date(bor.cierra);
+        if (!isNaN(d.getTime())) {
+          cierrePrellenado = d.toLocaleString('es-MX', {
+            day: 'numeric',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+        }
       }
 
       // Los selects solo muestran equipos del catálogo de la competición. Si la
@@ -593,6 +618,9 @@ export class AdminCompeticionesComponent {
 
       this.avisar(
         `${r.partidos.length} partido(s) traídos de la API.` +
+          (cierrePrellenado
+            ? ` Cierre sugerido: ${cierrePrellenado} (5 min antes del primer partido).`
+            : '') +
           (nuevos.length > 0 ? ` Se agregaron ${nuevos.length} equipo(s) al catálogo.` : '') +
           ' Revisa y guarda.',
       );
@@ -600,6 +628,19 @@ export class AdminCompeticionesComponent {
       this.toast.error((e as Error)?.message ?? 'No se pudo traer la jornada.');
     } finally {
       this.trayendo.set(false);
+    }
+  }
+
+  /** Fuerza la descarga de la tabla de posiciones oficial de la liga. */
+  async refrescarTabla(c: Competicion): Promise<void> {
+    this.refrescandoTabla.set(true);
+    try {
+      const r = await this.service.refrescarTabla(c.id);
+      this.avisar(`Tabla actualizada: ${r.filas} equipos.`);
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudo actualizar la tabla.');
+    } finally {
+      this.refrescandoTabla.set(false);
     }
   }
 
@@ -619,12 +660,32 @@ export class AdminCompeticionesComponent {
     }
   }
 
-  /** Convierte un ISO UTC a formato datetime-local en la hora del navegador. */
+  /** Minutos que el cierre se adelanta respecto al primer partido. */
+  private static readonly MARGEN_CIERRE_MIN = 5;
+
+  /**
+   * Convierte el ISO UTC del primer partido (viene de la API) al valor de un
+   * input datetime-local, SIEMPRE en hora de México (no depende de la zona
+   * del navegador del admin), y adelantado MARGEN_CIERRE_MIN minutos para que
+   * el pronóstico cierre antes del pitido inicial.
+   */
   private isoALocalInput(iso: string): string {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return '';
-    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-    return local.toISOString().slice(0, 16);
+
+    // Adelantamos el cierre unos minutos respecto al inicio del partido.
+    const conMargen = new Date(d.getTime() - AdminCompeticionesComponent.MARGEN_CIERRE_MIN * 60000);
+
+    // Formateamos en hora de México sin importar dónde esté el admin. Con
+    // en-CA obtenemos YYYY-MM-DD, y luego la hora en formato 24h.
+    const fecha = conMargen.toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
+    const hora = conMargen.toLocaleTimeString('en-GB', {
+      timeZone: 'America/Mexico_City',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    return `${fecha}T${hora}`;
   }
 
   borrador: Record<

@@ -14,6 +14,7 @@ import {
     PuntajeBracket,
     Llave,
     PartidoLlave,
+    nombreRonda,
     rondasDe,
 } from '../models/bracket.model';
 
@@ -405,6 +406,156 @@ export function calificarPronostico(
     }
 
     return { total, aciertosPorRonda, marcadoresAcertados };
+}
+
+/**
+ * Un renglón del desglose: por qué el jugador ganó (o no) puntos en una
+ * elección concreta. Sirve para explicar el puntaje de forma transparente.
+ */
+export interface ItemDesglose {
+    /* Ronda (0 = primera). */
+    ronda: number;
+    /* Nombre legible de la ronda: 'Cuartos de final', 'Final'… */
+    nombreRonda: string;
+    /* Equipo que el jugador puso a avanzar en esa ronda. */
+    equipo: string;
+    /* Qué tipo de acierto/fallo es este renglón. */
+    tipo: 'avance' | 'campeon' | 'finalista' | 'marcador-exacto' | 'marcador-resultado' | 'fallo';
+    /* Puntos que sumó este renglón (0 si fue fallo). */
+    puntos: number;
+}
+
+/**
+ * Desglose completo y ETIQUETADO del pronóstico: además del total y los
+ * contadores, devuelve la lista de renglones que explican de dónde salió
+ * cada punto. Lógica pura, 100% cliente: se arma con el cuadro real ya
+ * jugado + las elecciones del jugador. No hace falta nada del backend.
+ *
+ * Nota: el total aquí se calcula de la misma forma que calificarPronostico
+ * (y que el backend), sumando renglón por renglón.
+ */
+export function detalleDePronostico(
+    llavesReales: Llave[],
+    avances: Record<string, string>,
+    marcadores: Record<string, { local: number; visitante: number }> | undefined,
+    puntaje: PuntajeBracket,
+): { total: number; items: ItemDesglose[]; marcadoresAcertados: number } {
+    const totalRondas = Math.max(...llavesReales.map((l) => l.ronda)) + 1;
+    const items: ItemDesglose[] = [];
+    let total = 0;
+    let marcadoresAcertados = 0;
+
+    // Ganadores reales por ronda (por equipo, no por posición de llave).
+    const realesPorRonda: Array<Set<string>> = [];
+    for (let r = 0; r < totalRondas; r++) {
+        const set = new Set<string>();
+        for (const l of llavesReales) {
+            if (l.ronda === r && l.ganador) set.add(l.ganador.nombre);
+        }
+        realesPorRonda.push(set);
+    }
+
+    // Lo que el jugador puso a avanzar por ronda (equipos, sin repetir).
+    const misPorRonda: Array<Set<string>> = [];
+    for (let r = 0; r < totalRondas; r++) {
+        const set = new Set<string>();
+        for (const l of llavesReales) {
+            if (l.ronda === r && avances[l.id]) set.add(avances[l.id]);
+        }
+        misPorRonda.push(set);
+    }
+
+    for (let r = 0; r < totalRondas; r++) {
+        const reales = realesPorRonda[r];
+        if (reales.size === 0) continue; // ronda aún sin resolver: no la mostramos
+
+        const esFinal = r === totalRondas - 1;
+        const esSemis = r === totalRondas - 2;
+        const nombre = nombreRonda(r, totalRondas);
+
+        for (const equipo of misPorRonda[r]) {
+            if (!reales.has(equipo)) {
+                // El equipo que puse a avanzar no llegó: renglón de fallo (0 pts).
+                items.push({ ronda: r, nombreRonda: nombre, equipo, tipo: 'fallo', puntos: 0 });
+                continue;
+            }
+
+            const pts = puntaje.avanzaPorRonda[r] ?? 0;
+            total += pts;
+            items.push({ ronda: r, nombreRonda: nombre, equipo, tipo: 'avance', puntos: pts });
+
+            if (esFinal) {
+                total += puntaje.campeon;
+                items.push({
+                    ronda: r,
+                    nombreRonda: nombre,
+                    equipo,
+                    tipo: 'campeon',
+                    puntos: puntaje.campeon,
+                });
+            } else if (esSemis) {
+                total += puntaje.finalista;
+                items.push({
+                    ronda: r,
+                    nombreRonda: nombre,
+                    equipo,
+                    tipo: 'finalista',
+                    puntos: puntaje.finalista,
+                });
+            }
+        }
+    }
+
+    // Bonos de marcador, si el jugador los llenó.
+    if (marcadores) {
+        for (const llave of llavesReales) {
+            if (!llave.ganador) continue;
+            const miMarc = marcadores[llave.id];
+            if (!miMarc) continue;
+            const real = globalDeLlave(llave);
+            if (!real) continue;
+
+            const nombre = nombreRonda(llave.ronda, totalRondas);
+            const equipo = avances[llave.id] ?? llave.ganador.nombre;
+
+            if (miMarc.local === real.local && miMarc.visitante === real.visitante) {
+                total += puntaje.marcadorExacto;
+                marcadoresAcertados++;
+                items.push({
+                    ronda: llave.ronda,
+                    nombreRonda: nombre,
+                    equipo,
+                    tipo: 'marcador-exacto',
+                    puntos: puntaje.marcadorExacto,
+                });
+            } else {
+                const miGana =
+                    miMarc.local > miMarc.visitante
+                        ? 'local'
+                        : miMarc.local < miMarc.visitante
+                            ? 'visitante'
+                            : 'empate';
+                const realGana =
+                    real.local > real.visitante
+                        ? 'local'
+                        : real.local < real.visitante
+                            ? 'visitante'
+                            : 'empate';
+                if (miGana === realGana) {
+                    total += puntaje.marcadorResultado;
+                    items.push({
+                        ronda: llave.ronda,
+                        nombreRonda: nombre,
+                        equipo,
+                        tipo: 'marcador-resultado',
+                        puntos: puntaje.marcadorResultado,
+                    });
+                }
+            }
+        }
+    }
+
+    return { total, items, marcadoresAcertados };
 }
 
 /**

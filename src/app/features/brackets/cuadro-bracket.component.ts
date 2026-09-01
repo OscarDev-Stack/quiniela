@@ -27,22 +27,38 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
           <div class="llaves">
             @for (l of llavesDe(r); track l.id) {
               <div class="llave" [class.llave--resuelta]="!!l.ganador">
-                <div class="lado" [class.lado--gana]="esGanador(l, l.local?.nombre)">
+                <div
+                  class="lado"
+                  [class.lado--gana]="esGanador(l, l.local?.nombre)"
+                  [class.lado--acierto]="marcaMia(l, l.local?.nombre) === 'acierto'"
+                  [class.lado--fallo]="marcaMia(l, l.local?.nombre) === 'fallo'"
+                >
                   @if (l.local) {
                     <span class="siembra">{{ l.local.siembra }}</span>
                     <app-escudo [equipo]="l.local.nombre" [size]="18" />
                     <span class="equipo">{{ l.local.nombre }}</span>
+                    @if (elegiEste(l, l.local.nombre)) {
+                      <span class="mi-pick" title="Tu pronóstico"><i class="ti ti-user-check"></i></span>
+                    }
                   } @else {
                     <span class="equipo por-definir">Por definir</span>
                   }
                   <span class="goles">{{ golLocal(l) }}</span>
                 </div>
 
-                <div class="lado" [class.lado--gana]="esGanador(l, l.visitante?.nombre)">
+                <div
+                  class="lado"
+                  [class.lado--gana]="esGanador(l, l.visitante?.nombre)"
+                  [class.lado--acierto]="marcaMia(l, l.visitante?.nombre) === 'acierto'"
+                  [class.lado--fallo]="marcaMia(l, l.visitante?.nombre) === 'fallo'"
+                >
                   @if (l.visitante) {
                     <span class="siembra">{{ l.visitante.siembra }}</span>
                     <app-escudo [equipo]="l.visitante.nombre" [size]="18" />
                     <span class="equipo">{{ l.visitante.nombre }}</span>
+                    @if (elegiEste(l, l.visitante.nombre)) {
+                      <span class="mi-pick" title="Tu pronóstico"><i class="ti ti-user-check"></i></span>
+                    }
                   } @else {
                     <span class="equipo por-definir">Por definir</span>
                   }
@@ -130,6 +146,26 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         font-weight: 700;
         color: var(--text-primary);
       }
+      /*
+       * Resaltado del pronóstico propio: verde si acerté (mi elegido fue
+       * el ganador real de esa llave), rojo tenue si fallé. Un borde
+       * izquierdo marca el lado sin pelear con el resaltado del ganador.
+       */
+      .lado--acierto {
+        box-shadow: inset 3px 0 0 0 var(--success-text);
+      }
+      .lado--fallo {
+        box-shadow: inset 3px 0 0 0 var(--danger-text);
+      }
+      .mi-pick {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+      .lado--acierto .mi-pick { color: var(--success-text); }
+      .lado--fallo .mi-pick { color: var(--danger-text); }
 
       .siembra {
         flex-shrink: 0;
@@ -175,6 +211,12 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
 })
 export class CuadroBracketComponent {
   readonly bracket = input.required<Bracket>();
+  /**
+   * Elecciones del jugador (idLlave → nombre del equipo). Opcional: si se
+   * pasa, el cuadro resalta en verde/rojo los aciertos y fallos del jugador.
+   * Solo se marca en llaves que ya tienen ganador real.
+   */
+  readonly misAvances = input<Record<string, string> | null>(null);
 
   readonly totalRondas = computed(() => rondasDe(this.bracket().config.equipos));
   readonly rondas = computed(() => Array.from({ length: this.totalRondas() }, (_, i) => i));
@@ -191,6 +233,23 @@ export class CuadroBracketComponent {
 
   esGanador(l: Llave, nombre?: string): boolean {
     return !!nombre && l.ganador?.nombre === nombre;
+  }
+
+  /** ¿El jugador eligió este equipo como ganador de esta llave? */
+  elegiEste(l: Llave, nombre?: string): boolean {
+    const av = this.misAvances();
+    return !!nombre && !!av && av[l.id] === nombre;
+  }
+
+  /**
+   * Marca del pronóstico propio para un lado de la llave:
+   *  · 'acierto' si lo elegí y fue el ganador real,
+   *  · 'fallo' si lo elegí y NO fue el ganador (la llave ya resuelta),
+   *  · null si no lo elegí o la llave aún no tiene ganador.
+   */
+  marcaMia(l: Llave, nombre?: string): 'acierto' | 'fallo' | null {
+    if (!this.elegiEste(l, nombre) || !l.ganador) return null;
+    return l.ganador.nombre === nombre ? 'acierto' : 'fallo';
   }
 
   golLocal(l: Llave): string {

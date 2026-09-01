@@ -14,6 +14,7 @@ import { ToastService } from '../../shared/toast.service';
 import { ConfirmarService } from '../../shared/confirmar.service';
 import { PronosticoBracketComponent } from './pronostico-bracket.component';
 import { TablaBracketComponent } from './tabla-bracket.component';
+import { DesgloseBracketComponent } from './desglose-bracket.component';
 import { NavComponent } from '../../shared/nav.component';
 import { CargandoComponent } from '../../shared/cargando.component';
 import { CelebracionVictoriaComponent } from '../../shared/celebracion-victoria.component';
@@ -36,6 +37,7 @@ import { Bracket } from '../../core/models/bracket.model';
     EscudoComponent,
     PronosticoBracketComponent,
     TablaBracketComponent,
+    DesgloseBracketComponent,
     NavComponent,
     CargandoComponent,
     CelebracionVictoriaComponent,
@@ -72,7 +74,13 @@ import { Bracket } from '../../core/models/bracket.model';
 
         <section class="panel">
           <h2>Cuadro</h2>
-          <app-cuadro-bracket [bracket]="b" />
+          <app-cuadro-bracket [bracket]="b" [misAvances]="avancesParaCuadro()" />
+          @if (avancesParaCuadro()) {
+            <div class="leyenda-cuadro">
+              <span class="leyenda-item"><span class="punto punto--ok"></span> Acertaste</span>
+              <span class="leyenda-item"><span class="punto punto--mal"></span> Fallaste</span>
+            </div>
+          }
         </section>
 
         @if (b.estado === 'en-curso' || b.estado === 'finalizado') {
@@ -148,6 +156,14 @@ import { Bracket } from '../../core/models/bracket.model';
             <app-pronostico-bracket [bracket]="b" />
           </section>
 
+          <!-- Desglose: de dónde salieron mis puntos (solo cuando ya cerró). -->
+          @if ((b.estado === 'en-curso' || b.estado === 'finalizado') && miPron()) {
+            <section class="panel">
+              <h2>Tus puntos, explicados</h2>
+              <app-desglose-bracket [bracket]="b" [pronostico]="miPron()" />
+            </section>
+          }
+
           <!-- Ya dentro: las reglas quedan al final, colapsadas. -->
           <section class="panel">
             <button class="colapso" (click)="verReglas.set(!verReglas())">
@@ -213,6 +229,14 @@ import { Bracket } from '../../core/models/bracket.model';
       }
       .panel h2 { font-size: 15px; font-weight: 600; margin: 0 0 12px; }
       .cargando { font-size: 14px; color: var(--text-muted); }
+      .leyenda-cuadro {
+        display: flex; gap: 16px; margin-top: 10px;
+        font-size: 11px; color: var(--text-muted);
+      }
+      .leyenda-item { display: inline-flex; align-items: center; gap: 6px; }
+      .punto { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+      .punto--ok { background: var(--success-text); }
+      .punto--mal { background: var(--danger-text); }
       .switch {
         display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
         cursor: pointer;
@@ -375,7 +399,7 @@ export class BracketDetalleComponent {
     { initialValue: [] },
   );
 
-  private readonly miPron = toSignal(
+  readonly miPron = toSignal(
     toObservable(this.miUid).pipe(
       switchMap((uid) =>
         uid
@@ -388,6 +412,19 @@ export class BracketDetalleComponent {
 
   /** Se pone en true cuando ya sabemos si hay pronóstico (evita parpadeo). */
   private readonly pronCargado = signal(false);
+
+  /**
+   * Mis elecciones para resaltar el cuadro, SOLO en modo pronóstico y cuando
+   * ya cerró (en-curso/finalizado). Antes del cierre no se resalta para no
+   * competir con el flujo de captura. Null = no resaltar.
+   */
+  readonly avancesParaCuadro = computed<Record<string, string> | null>(() => {
+    const b = this.bracket();
+    if (!b || b.modo === 'duenos') return null;
+    if (b.estado !== 'en-curso' && b.estado !== 'finalizado') return null;
+    const av = this.miPron()?.avances;
+    return av && Object.keys(av).length > 0 ? av : null;
+  });
 
   /**
    * ¿Ya tenemos todo para mostrar sin saltos? Necesitamos el bracket, y

@@ -14,6 +14,7 @@ import { ReglasTorneoComponent } from './reglas-torneo.component';
 import { PartidosJornadaComponent } from './partidos-jornada.component';
 import { TablaPosicionesComponent } from './tabla-posiciones.component';
 import { CartonesJornadaComponent } from './cartones-jornada.component';
+import { TablaLigaComponent } from './tabla-liga.component';
 import { CelebracionVictoriaComponent } from '../../shared/celebracion-victoria.component';
 import { TorneosService } from '../../core/services/torneos.service';
 import {
@@ -36,6 +37,7 @@ import { StatsService } from '../../shared/stats.service';
     PartidosJornadaComponent,
     TablaPosicionesComponent,
     CartonesJornadaComponent,
+    TablaLigaComponent,
     CargandoComponent,
     EscudoComponent,
     CelebracionVictoriaComponent,
@@ -538,6 +540,15 @@ import { StatsService } from '../../shared/stats.service';
             </div>
           }
         </section>
+        }
+
+        @if (mostrarTablaLiga() && competicion(); as comp) {
+          <details class="panel reglas-panel">
+            <summary><i class="ti ti-table"></i> Tabla de la liga</summary>
+            <div class="tabla-liga-cuerpo">
+              <app-tabla-liga [competicion]="comp" />
+            </div>
+          </details>
         }
 
         <details class="panel reglas-panel">
@@ -1200,13 +1211,23 @@ export class TorneoDetalleComponent {
 
   readonly usados = computed(() => [...(this.yo()?.equiposUsados ?? [])].sort());
 
-  /** Catálogo de equipos de la competición. */
-  private readonly competicion = toSignal(
+  /** Catálogo de equipos de la competición (y su tabla de posiciones cacheada). */
+  readonly competicion = toSignal(
     toObservable(computed(() => this.torneo()?.competicionId)).pipe(
       switchMap((id) => (id ? this.competiciones.competicion(id) : of(null))),
     ),
     { initialValue: null },
   );
+
+  /**
+   * Mostramos la tabla de la liga solo si la competición está vinculada a la
+   * API (tiene apiLigaId) y ya hay filas cacheadas. Si es una liga manual, no
+   * aparece nada.
+   */
+  readonly mostrarTablaLiga = computed(() => {
+    const c = this.competicion();
+    return !!c?.apiLigaId && (c?.tabla?.length ?? 0) > 0;
+  });
 
   /** Equipos comprometidos: los ya resueltos más los que están en juego. */
   readonly comprometidos = computed(() => {
