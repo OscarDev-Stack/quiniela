@@ -235,16 +235,37 @@ export class CuadroBracketComponent {
     return !!nombre && l.ganador?.nombre === nombre;
   }
 
-  /** ¿El jugador eligió este equipo como ganador de esta llave? */
-  elegiEste(l: Llave, nombre?: string): boolean {
+  /**
+   * Equipos que el jugador puso a avanzar en cada ronda, tomados de sus
+   * elecciones. Se resuelve POR EQUIPO Y RONDA (no por posición de llave),
+   * igual que la calificación de puntos: así el resaltado coincide con los
+   * puntos y funciona también en la Final, aunque el reordenamiento del
+   * cuadro real y el del pronóstico dejen a los equipos en llaves distintas.
+   */
+  private readonly misPorRonda = computed<Map<number, Set<string>>>(() => {
     const av = this.misAvances();
-    return !!nombre && !!av && av[l.id] === nombre;
+    const mapa = new Map<number, Set<string>>();
+    if (!av) return mapa;
+    // ronda de cada llave real, por id, para ubicar cada elección.
+    const rondaPorId = new Map(this.bracket().llaves.map((l) => [l.id, l.ronda]));
+    for (const [idLlave, equipo] of Object.entries(av)) {
+      const ronda = rondaPorId.get(idLlave);
+      if (ronda === undefined) continue;
+      if (!mapa.has(ronda)) mapa.set(ronda, new Set());
+      mapa.get(ronda)!.add(equipo);
+    }
+    return mapa;
+  });
+
+  /** ¿El jugador puso a este equipo a avanzar en la ronda de esta llave? */
+  elegiEste(l: Llave, nombre?: string): boolean {
+    return !!nombre && (this.misPorRonda().get(l.ronda)?.has(nombre) ?? false);
   }
 
   /**
    * Marca del pronóstico propio para un lado de la llave:
-   *  · 'acierto' si lo elegí y fue el ganador real,
-   *  · 'fallo' si lo elegí y NO fue el ganador (la llave ya resuelta),
+   *  · 'acierto' si lo elegí para avanzar y de verdad avanzó (fue el ganador),
+   *  · 'fallo' si lo elegí para avanzar y NO avanzó (la llave ya resuelta),
    *  · null si no lo elegí o la llave aún no tiene ganador.
    */
   marcaMia(l: Llave, nombre?: string): 'acierto' | 'fallo' | null {

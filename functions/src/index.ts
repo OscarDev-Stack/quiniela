@@ -287,9 +287,9 @@ interface PartidoApi {
     id: number;
     utcDate: string;
     status: string;
-    homeTeam: { name: string; shortName?: string };
-    awayTeam: { name: string; shortName?: string };
-    score: { fullTime: { home: number | null; away: number | null } };
+    homeTeam: { id?: number; name: string; shortName?: string };
+    awayTeam: { id?: number; name: string; shortName?: string };
+    score: { winner?: string | null; fullTime: { home: number | null; away: number | null } };
     competition?: { name: string };
 }
 
@@ -1327,10 +1327,69 @@ export const buscarFixtures = onCall({ ...opcionesCall, secrets: [footballDataKe
             fecha: p.utcDate,
             homeTeam: p.homeTeam.shortName || p.homeTeam.name,
             awayTeam: p.awayTeam.shortName || p.awayTeam.name,
+            homeTeamId: p.homeTeam.id ?? null,
+            awayTeamId: p.awayTeam.id ?? null,
             competition: p.competition?.name ?? competicion,
         })),
     };
 });
+
+/**
+ * Forma reciente (ultimos partidos terminados) de un equipo de football-data,
+ * como texto tipo "WWDLW" (mas reciente al final). Devuelve '' si no hay datos
+ * o el recurso no esta disponible en el plan; nunca lanza, para no romper la
+ * creacion del partido por un extra informativo.
+ */
+async function formaEquipoFootballData(teamId: number, key: string): Promise<string> {
+    if (!teamId) return '';
+    try {
+        const res = await fetch(
+            `${API_BASE}/teams/${teamId}/matches?status=FINISHED&limit=5`,
+            { headers: { 'X-Auth-Token': (key ?? '').trim() } },
+        );
+        if (!res.ok) return '';
+        const data = (await res.json()) as { matches?: PartidoApi[] };
+        const partidos = (data.matches ?? []).slice(-5);
+
+        return partidos
+            .map((m) => {
+                const w = m.score?.winner;
+                if (w === 'DRAW') return 'D';
+                const gano = w === 'HOME_TEAM' ? m.homeTeam.id : w === 'AWAY_TEAM' ? m.awayTeam.id : null;
+                if (gano == null) return '';
+                return gano === teamId ? 'W' : 'L';
+            })
+            .join('');
+    } catch {
+        return '';
+    }
+}
+
+/* ============================================================
+   Forma reciente de dos equipos (football-data)
+   El admin la pide UNA vez al crear el partido; se guarda en el
+   doc y no se vuelve a consultar. Solo informativa.
+   ============================================================ */
+export const formaEquiposApi = onCall(
+    { ...opcionesCall, secrets: [footballDataKey] },
+    async (req) => {
+        const uid = req.auth?.uid;
+        if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+        const adminSnap = await db.doc(`admins/${uid}`).get();
+        if (!adminSnap.exists) throw new HttpsError('permission-denied', 'Solo un administrador.');
+
+        const homeId = Math.floor(Number(req.data?.homeTeamId ?? 0));
+        const awayId = Math.floor(Number(req.data?.awayTeamId ?? 0));
+        const key = footballDataKey.value();
+
+        const [formaLocal, formaVisitante] = await Promise.all([
+            formaEquipoFootballData(homeId, key),
+            formaEquipoFootballData(awayId, key),
+        ]);
+
+        return { ok: true, formaLocal, formaVisitante };
+    },
+);
 
 /* ============================================================
    Revisar resultados en la API

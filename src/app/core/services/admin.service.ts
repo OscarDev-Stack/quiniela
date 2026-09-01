@@ -166,12 +166,31 @@ export class AdminService {
                     fecha: string;
                     homeTeam: string;
                     awayTeam: string;
+                    homeTeamId: number | null;
+                    awayTeamId: number | null;
                     competition: string;
                 }>;
             }
         >(this.fns, 'buscarFixtures');
         const res = await fn({ competicion, desde, hasta });
         return res.data.partidos;
+    }
+
+    /**
+     * Trae la forma reciente (últimos 5) de dos equipos de football-data. Se
+     * llama UNA vez al crear el partido para guardarla; no cambia después.
+     */
+    async formaEquipos(
+        homeTeamId: number | null,
+        awayTeamId: number | null,
+    ): Promise<{ formaLocal: string; formaVisitante: string }> {
+        if (!homeTeamId && !awayTeamId) return { formaLocal: '', formaVisitante: '' };
+        const fn = httpsCallable<
+            { homeTeamId: number | null; awayTeamId: number | null },
+            { ok: boolean; formaLocal: string; formaVisitante: string }
+        >(this.fns, 'formaEquiposApi');
+        const res = await fn({ homeTeamId, awayTeamId });
+        return { formaLocal: res.data.formaLocal, formaVisitante: res.data.formaVisitante };
     }
 
     /** Reconstruye las bolsas desde los pronósticos reales. */

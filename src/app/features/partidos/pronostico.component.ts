@@ -41,6 +41,28 @@ interface Opcion {
             <span class="team">{{ p.awayTeam }}</span>
           </div>
 
+          @if (p.formaLocal || p.formaVisitante) {
+            <div class="forma">
+              <div class="forma-lado">
+                <span class="forma-eq">{{ p.homeTeam }}</span>
+                <span class="racha">
+                  @for (r of formaDe(p.formaLocal); track $index) {
+                    <span class="punto" [class]="'punto--' + r"></span>
+                  }
+                </span>
+              </div>
+              <div class="forma-lado forma-lado--der">
+                <span class="racha">
+                  @for (r of formaDe(p.formaVisitante); track $index) {
+                    <span class="punto" [class]="'punto--' + r"></span>
+                  }
+                </span>
+                <span class="forma-eq">{{ p.awayTeam }}</span>
+              </div>
+            </div>
+            <div class="forma-nota">Forma reciente (últimos partidos)</div>
+          }
+
           @if (error()) {
             <div class="error">{{ error() }}</div>
           }
@@ -111,6 +133,23 @@ interface Opcion {
       .team { font-size: 18px; font-weight: 600; }
       .vs { font-size: 13px; color: var(--text-muted); }
 
+      .forma {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 12px; margin: -6px 0 4px;
+      }
+      .forma-lado { display: flex; align-items: center; gap: 8px; min-width: 0; }
+      .forma-lado--der { justify-content: flex-end; }
+      .forma-eq {
+        font-size: 11px; color: var(--text-muted);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px;
+      }
+      .racha { display: inline-flex; gap: 3px; }
+      .punto { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--surface-1); }
+      .punto--W { background: var(--success-text); }
+      .punto--D { background: var(--text-muted); }
+      .punto--L { background: var(--danger-text); }
+      .forma-nota { font-size: 10px; color: var(--text-muted); text-align: center; margin-bottom: 16px; }
+
       .error {
         background: var(--danger-bg); color: var(--danger-text);
         font-size: 13px; padding: 10px 12px; border-radius: var(--radius); margin-bottom: 14px;
@@ -170,6 +209,16 @@ export class PronosticoComponent {
   readonly multiplicadores = Array.from({ length: MULTIPLICADOR_MAX }, (_, i) => i + 1);
 
   private readonly id = this.route.snapshot.paramMap.get('id')!;
+
+  /** Convierte la forma "WWDLW" en un arreglo de W/D/L para pintar puntitos. */
+  formaDe(forma: string | undefined): string[] {
+    if (!forma) return [];
+    return forma
+      .toUpperCase()
+      .split('')
+      .filter((c) => c === 'W' || c === 'D' || c === 'L')
+      .slice(-5);
+  }
 
   readonly cargando = signal(true);
   private readonly inicioCarga = Date.now();

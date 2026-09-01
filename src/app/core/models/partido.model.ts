@@ -39,6 +39,10 @@ export interface Partido {
     resultadoOficial?: string;
     /* Vínculo con el partido real de API-Football. */
     apiFixtureId?: number;
+    /* Forma reciente (últimos 5) de cada equipo, tipo "WWDLW". Se captura una
+       sola vez al crear el partido desde la API; informativa, no cambia. */
+    formaLocal?: string;
+    formaVisitante?: string;
     /* Resultado precargado por la API, a la espera de confirmación. */
     resultadoPropuesto?: string;
     marcadorPropuesto?: string;

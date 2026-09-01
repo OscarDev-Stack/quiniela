@@ -56,6 +56,11 @@ import { NavComponent } from '../../shared/nav.component';
           <label class="field">
             <span>Jornadas que dura</span>
             <input type="number" min="1" max="20" [(ngModel)]="form.jornadas" />
+            <small class="pista">
+              Empezando en la jornada {{ form.jornadaInicial || 1 }}, terminará en la
+              <strong>jornada {{ jornadaFinal() }}</strong>.
+              Ajusta la duración para que llegue hasta donde quieras que acabe la liga.
+            </small>
           </label>
         } @else {
           <label class="field">
@@ -109,6 +114,12 @@ import { NavComponent } from '../../shared/nav.component';
         <label class="field">
           <span>Jornada de inicio</span>
           <input type="number" min="1" [(ngModel)]="form.jornadaInicial" />
+          @if (form.modo === 'quiniela') {
+            <small class="pista">
+              El torneo tomará {{ form.jornadas || 1 }} jornada(s) desde aquí y terminará en la
+              <strong>jornada {{ jornadaFinal() }}</strong>.
+            </small>
+          }
         </label>
         <label class="field">
           <span>Cierre de inscripciones</span>
@@ -344,6 +355,17 @@ export class CrearTorneoComponent {
       this.form.grupoId = this.grupoUrl;
       this.grupoBloqueado.set(true);
     }
+  }
+
+  /**
+   * Jornada en la que TERMINARÁ el torneo según inicio + duración. Es un
+   * cálculo exacto (inicio + duración − 1) que no depende de conocer cuántas
+   * jornadas tiene la liga, así que sirve para cualquier competición.
+   */
+  jornadaFinal(): number {
+    const inicio = Math.max(1, Math.floor(Number(this.form.jornadaInicial) || 1));
+    const dura = Math.max(1, Math.floor(Number(this.form.jornadas) || 1));
+    return inicio + dura - 1;
   }
 
   /** Resumen de las reglas de supervivencia según lo elegido. */

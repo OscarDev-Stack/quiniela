@@ -318,7 +318,15 @@ export class CrearPartidoComponent {
     .slice(0, 16);
 
   readonly encontrados = signal<
-    Array<{ apiFixtureId: number; fecha: string; homeTeam: string; awayTeam: string; competition: string }>
+    Array<{
+      apiFixtureId: number;
+      fecha: string;
+      homeTeam: string;
+      awayTeam: string;
+      homeTeamId: number | null;
+      awayTeamId: number | null;
+      competition: string;
+    }>
   >([]);
 
   busqueda = {
@@ -373,6 +381,8 @@ export class CrearPartidoComponent {
     fecha: string;
     homeTeam: string;
     awayTeam: string;
+    homeTeamId?: number | null;
+    awayTeamId?: number | null;
     competition: string;
   }): Promise<void> {
     const inicio = new Date(f.fecha);
@@ -392,6 +402,18 @@ export class CrearPartidoComponent {
         apiFixtureId: f.apiFixtureId,
       });
     } else {
+      // Forma reciente de cada equipo: se captura una sola vez aquí y se
+      // guarda en el doc. Si la API no la trae, quedan vacías y no se muestran.
+      let formaLocal = '';
+      let formaVisitante = '';
+      try {
+        const forma = await this.admin.formaEquipos(f.homeTeamId ?? null, f.awayTeamId ?? null);
+        formaLocal = forma.formaLocal;
+        formaVisitante = forma.formaVisitante;
+      } catch {
+        // La forma es un extra informativo: si falla, el partido se crea igual.
+      }
+
       await this.admin.crearPartido({
         competition: f.competition,
         homeTeam: nombreOficial(f.homeTeam),
@@ -400,6 +422,8 @@ export class CrearPartidoComponent {
         status: 'abierto',
         closesAt: Timestamp.fromDate(inicio),
         apiFixtureId: f.apiFixtureId,
+        ...(formaLocal ? { formaLocal } : {}),
+        ...(formaVisitante ? { formaVisitante } : {}),
         grupoId: null,
       });
     }

@@ -47,14 +47,31 @@ CAPA GRATUITA de las dos APIs.
 6. Deteccion automatica de partido aplazado/reprogramado. Ya leemos
    `strPostponed`/`status`. Avisar al admin (Telegram/push) cuando la API
    marca un aplazamiento en una jornada abierta, en vez de descubrirlo tarde.
-7. Autocompletar equipos al crear liga. TheSportsDB tiene
-   `lookup_all_teams.php?id={liga}` con todos los equipos y su nombre oficial.
-   Boton "importar equipos de la liga" que ademas alimente el normalizador.
-   Prepara el terreno para cubrir mas ligas.
-8. Head-to-head / forma reciente como dato informativo. football-data gratis
-   tiene `/matches/{id}/head2head` y el historial. Mostrar "ultimos 5" o el
-   h2h en la pantalla de pronostico. Es 1 request por partido -> requiere
-   cache.
+7. [DESCARTADO] Autocompletar equipos al crear liga. Ya esta cubierto en la
+   practica: al "Traer jornada de la API" el catalogo se autocompleta con los
+   equipos nuevos que trae la jornada. Un boton de importacion masiva aporta
+   poco. (Nota: el endpoint correcto para listar equipos de una liga es
+   `search_all_teams.php?l={nombre-liga}`, NO `lookup_all_teams.php?id=`.)
+8. [EN CURSO - solo forma reciente] Forma reciente en la pantalla de pronostico
+   (SOLO partidos creados desde football-data, con apiFixtureId). Al CREAR el
+   partido se captura UNA sola vez la forma (ultimos 5: W/D/L) de cada equipo y
+   se guarda en el doc (formaLocal/formaVisitante). Como no cambia, se muestra
+   sin requests recurrentes; la seccion se oculta si el partido no trae el dato.
+   El head-to-head se DESCARTO por ahora: en football-data varios subrecursos
+   son TIER_THREE (pago) y no se pudo confirmar sin la key; alto riesgo de
+   trabajo perdido.
+
+   NOTA IMPORTANTE de cobertura: football-data NO cubre Liga MX (esa va por
+   TheSportsDB). Por eso la forma solo aparecera en partidos de ligas que
+   football-data si cubre y que se creen por su buscador.
+
+13. [PENDIENTE - decision aparte, mas grande] Integrar TheSportsDB al flujo de
+    "crear partido" (buscador de fixtures), igual que football-data hoy, para
+    poder crear partidos de Liga MX (y demas ligas de TheSportsDB) por API. Dos
+    caminos a decidir: (a) sumar TheSportsDB como segunda fuente del buscador,
+    o (b) reemplazar football-data por TheSportsDB. Implica: buscador por
+    liga/fecha con TheSportsDB, guardar su id de evento, y adaptar la captura
+    de resultados/forma a esa fuente.
 
 ## Cosas de las APIs que NO aprovechamos (y estan gratis)
 
@@ -66,9 +83,10 @@ CAPA GRATUITA de las dos APIs.
    admin en admin-competiciones. El front lee de cache, nunca de la API.
 10. Goleadores (`/competitions/{id}/scorers`, gratis). Un "pichichi" de la
     liga como contenido atractivo, cero riesgo.
-11. Colores de equipo (`strColour1`/`strColour2`). Los escudos ya estan
-    resueltos (punto 1, HECHO). Quedan los colores por equipo, que podrian
-    usarse para acentos en tarjetas/cuadro. Opcional.
+11. [DESCARTADO] Colores de equipo (`strColour1`/`strColour2`). Mucho esfuerzo
+    (colores a mano para cientos de equipos, o cobertura parcial via API que es
+    por-liga) para poco valor: los escudos ya dan el color de facto y hay
+    riesgo de contraste/accesibilidad. Se descarto.
 12. [DESCARTADO] `strThumb`/`strBanner` del evento. Cobertura pobre en Liga MX
     con la key gratuita; se descarto.
 
