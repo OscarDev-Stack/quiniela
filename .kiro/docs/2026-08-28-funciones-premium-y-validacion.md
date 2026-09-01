@@ -5,6 +5,22 @@
 Resumen del trabajo hecho al pasar TheSportsDB a PREMIUM y ampliar su uso.
 La key vive en el secret `SPORTSDB_KEY` (configurado en dev; FALTA en prod).
 
+## IMPORTANTE: migración a la API V2 de TheSportsDB
+
+La key PREMIUM NO funciona con los endpoints V1 (`*.php` con la key en la URL)
+— dan 404. Premium usa la API V2: base `https://www.thesportsdb.com/api/v2/json/`
+y la key va en el header `X-API-KEY`. Se migraron todos los llamados con el
+helper `fetchSportsDbV2(ruta, key)`. Rutas V2 usadas (raíz JSON entre paréntesis):
+- Jornada por ronda: `schedule/league/{id}/{temporada}` (schedule[]), se filtra por intRound
+- Próximos partidos: `schedule/next/league/{id}` (schedule[])
+- Evento por id: `lookup/event/{idEvent}` (lookup[])
+- Equipos de la liga: `list/teams/{id}` (list[])
+- Tabla de posiciones: `lookup/table/{id}/{temporada}` (table[]) — devuelve los
+  18 equipos completos (V1 con key gratuita truncaba a 5)
+Los nombres de campos internos (idEvent, strHomeTeam, intRound, intHomeScore,
+strForm, strStatus...) son iguales que en V1; solo cambió la raíz y la auth.
+La V1 se retira a futuro, así que esta migración también deja el terreno listo.
+
 ## Funciones nuevas de Cloud Functions
 
 ### Callables (onCall)

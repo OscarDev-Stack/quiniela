@@ -99,9 +99,19 @@ const sportsDbKey = defineSecret('SPORTSDB_KEY');
 
 const API_BASE = 'https://api.football-data.org/v4';
 
-/** URL base de TheSportsDB para una key dada. */
-const sportsDbBase = (key: string): string =>
-    `https://www.thesportsdb.com/api/v1/json/${(key ?? '').trim() || '123'}`;
+/**
+ * Llama a la API V2 de TheSportsDB (premium). La key va en el header
+ * 'X-API-KEY'. Devuelve el JSON crudo, o lanza si la respuesta no es OK.
+ * V2 es la que soporta la key premium (la V1 quedó limitada al tier gratuito).
+ */
+async function fetchSportsDbV2<T>(ruta: string, key: string): Promise<T> {
+    const url = `https://www.thesportsdb.com/api/v2/json/${ruta}`;
+    const res = await fetch(url, { headers: { 'X-API-KEY': (key ?? '').trim() } });
+    if (!res.ok) {
+        throw new HttpsError('internal', `TheSportsDB V2 respondió ${res.status}.`);
+    }
+    return (await res.json()) as T;
+}
 
 /** Un evento (partido) de TheSportsDB, con los campos que usamos. */
 interface EventoSportsDb {
@@ -156,14 +166,14 @@ async function eventosRondaSportsDb(
     temporada: string,
     key: string,
 ): Promise<EventoSportsDb[]> {
-    const url =
-        `${sportsDbBase(key)}/eventsround.php?id=${ligaId}&r=${ronda}&s=${encodeURIComponent(temporada)}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-        throw new HttpsError('internal', `TheSportsDB respondió ${res.status}.`);
-    }
-    const data = (await res.json()) as { events?: EventoSportsDb[] | null };
-    return data.events ?? [];
+    // V2 devuelve el calendario COMPLETO de la temporada (raíz `schedule`);
+    // filtramos por la ronda pedida. Los campos internos son los mismos que V1.
+    const data = await fetchSportsDbV2<{ schedule?: EventoSportsDb[] | null }>(
+        `schedule/league/${ligaId}/${encodeURIComponent(temporada)}`,
+        key,
+    );
+    const todos = data.schedule ?? [];
+    return todos.filter((e) => Number(e.intRound) === ronda);
 }
 
 /** Una fila de la tabla de posiciones tal como la devuelve TheSportsDB. */
@@ -210,13 +220,13 @@ async function tablaLigaSportsDb(
     temporada: string,
     key: string,
 ): Promise<FilaTablaLiga[]> {
-    const url =
-        `${sportsDbBase(key)}/lookuptable.php?l=${ligaId}&s=${encodeURIComponent(temporada)}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-        throw new HttpsError('internal', `TheSportsDB respondió ${res.status}.`);
-    }
-    const data = (await res.json()) as { table?: StandingSportsDb[] | null };
+    // NOTA: confirmar la ruta V2 exacta de la tabla. La estimación es
+    // `lookup/table/{id}/{temporada}` con raíz `table`. Si la prueba en
+    // Postman revela otra ruta/raíz, ajustar aquí.
+    const data = await fetchSportsDbV2<{ table?: StandingSportsDb[] | null }>(
+        `lookup/table/${ligaId}/${encodeURIComponent(temporada)}`,
+        key,
+    );
     const filas = data.table ?? [];
 
     return filas.map((f, i) => ({
@@ -1406,13 +1416,11 @@ async function eventosProximosLigaSportsDb(
     ligaId: number,
     key: string,
 ): Promise<EventoSportsDb[]> {
-    const url = `${sportsDbBase(key)}/eventsnextleague.php?id=${ligaId}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-        throw new HttpsError('internal', `TheSportsDB respondió ${res.status}.`);
-    }
-    const data = (await res.json()) as { events?: EventoSportsDb[] | null };
-    return data.events ?? [];
+    const data = await fetchSportsDbV2<{ schedule?: EventoSportsDb[] | null }>(
+        `schedule/next/league/${ligaId}`,
+        key,
+    );
+    return data.schedule ?? [];
 }
 
 /* ============================================================
@@ -1626,10 +1634,11 @@ export const revisarResultados = onSchedule(
  */
 async function lookupEventoSportsDb(idEvent: string, key: string): Promise<EventoSportsDb | null> {
     try {
-        const res = await fetch(`${sportsDbBase(key)}/lookupevent.php?id=${idEvent}`);
-        if (!res.ok) return null;
-        const data = (await res.json()) as { events?: EventoSportsDb[] | null };
-        return data.events?.[0] ?? null;
+        const data = await fetchSportsDbV2<{ lookup?: EventoSportsDb[] | null }>(
+            `lookup/event/${idEvent}`,
+            key,
+        );
+        return data.lookup?.[0] ?? null;
     } catch {
         return null;
     }
@@ -2148,7 +2157,11 @@ export const traerJornadaApi = onCall({ ...opcionesCall, secrets: [sportsDbKey] 
 
     const dela = await eventosRondaSportsDb(ligaId, numeroJornada, temporada, sportsDbKey.value());
     if (dela.length === 0) {
-        throw new HttpsError('not-found', `La API no tiene partidos para la jornada ${numeroJornada}.`);
+        throw new HttpsError(
+            'not-found',
+            `La API no tiene la jornada ${numeroJornada} para la temporada ${temporada}. ` +
+                'Verifica que la temporada configurada sea la correcta y que esa jornada exista.',
+        );
     }
 
     // Partidos con equipos normalizados; ordenados por hora. Guardamos el
@@ -2297,12 +2310,12 @@ export const importarEquiposApi = onCall({ ...opcionesCall, secrets: [sportsDbKe
         );
     }
 
-    // Traemos los equipos de la liga por su nombre oficial en TheSportsDB.
-    const url = `${sportsDbBase(sportsDbKey.value())}/search_all_teams.php?l=${encodeURIComponent(cfg.nombreApi)}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new HttpsError('internal', `TheSportsDB respondió ${res.status}.`);
-    const data = (await res.json()) as { teams?: Array<{ strTeam?: string }> | null };
-    const equiposApi = (data.teams ?? [])
+    // Traemos los equipos de la liga por su id (V2, raíz `list`).
+    const data = await fetchSportsDbV2<{ list?: Array<{ strTeam?: string }> | null }>(
+        `list/teams/${cfg.id}`,
+        sportsDbKey.value(),
+    );
+    const equiposApi = (data.list ?? [])
         .map((t) => nombreOficialEquipo(t.strTeam ?? ''))
         .filter((n) => !!n);
 
