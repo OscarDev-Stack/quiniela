@@ -57,6 +57,11 @@ const PUNTOS_RESULTADO = 3;
                     <span class="marcador">{{ p.golesLocal }} - {{ p.golesVisitante }}</span>
                   } @else if (p.resultado === 'pospuesto') {
                     <span class="estado apl">Aplazado</span>
+                  } @else if (tieneVivo(p)) {
+                    <span class="marcador marcador--vivo">{{ p.vivoLocal }} - {{ p.vivoVisitante }}</span>
+                    @if (p.vivoMinuto) {
+                      <span class="minuto-vivo"><span class="live-dot" aria-hidden="true"></span> {{ minutoTexto(p.vivoMinuto) }}</span>
+                    }
                   } @else {
                     <span class="estado">vs</span>
                   }
@@ -135,8 +140,24 @@ const PUNTOS_RESULTADO = 3;
         font-size: 13px; font-weight: 600; color: var(--text-primary);
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
-      .centro { text-align: center; white-space: nowrap; }
+      .centro { text-align: center; white-space: nowrap; display: flex; flex-direction: column; align-items: center; gap: 1px; }
       .marcador { font-size: 17px; font-weight: 800; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+      .marcador--vivo { color: #d63b3b; }
+      .minuto-vivo {
+        display: inline-flex; align-items: center; gap: 4px;
+        font-size: 10px; font-weight: 700; color: #d63b3b;
+      }
+      .minuto-vivo .live-dot {
+        width: 6px; height: 6px; border-radius: 50%; background: #d63b3b;
+        box-shadow: 0 0 0 0 rgba(214, 59, 59, 0.6);
+        animation: latido-carton 1.4s ease-out infinite;
+      }
+      @keyframes latido-carton {
+        0% { box-shadow: 0 0 0 0 rgba(214, 59, 59, 0.6); }
+        70% { box-shadow: 0 0 0 5px rgba(214, 59, 59, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(214, 59, 59, 0); }
+      }
+      @media (prefers-reduced-motion: reduce) { .minuto-vivo .live-dot { animation: none; } }
       .estado { font-size: 12px; color: var(--text-muted); }
       .estado.apl { color: var(--warning-text); }
 
@@ -185,6 +206,16 @@ export class CartonesJornadaComponent {
       return a.alias.localeCompare(b.alias, 'es');
     }),
   );
+
+  /** ¿El partido tiene marcador en vivo para mostrar? */
+  tieneVivo(p: PartidoJornada): boolean {
+    return typeof p.vivoLocal === 'number' && typeof p.vivoVisitante === 'number';
+  }
+
+  /** "63" → "63'"; los estados ("HT"…) se muestran tal cual. */
+  minutoTexto(min: string): string {
+    return /^\d+$/.test(min) ? `${min}'` : min;
+  }
 
   /** Cuánto vale un pronóstico contra el resultado real. */
   acierto(partido: PartidoJornada, marcador: { local: number; visitante: number }): number {

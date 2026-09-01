@@ -1684,38 +1684,89 @@ export const revisarResultadosSportsDb = onSchedule(
    juego con apiEventId, para mostrarlo en las tarjetas. Es solo
    informativo: no liquida ni depende de esto nada crítico.
    ============================================================ */
+/**
+ * Extrae el marcador en vivo de un evento de TheSportsDB, o null si no hay
+ * datos utilizables. El minuto sale de strProgress ("63") o del estado ("HT").
+ */
+function vivoDeEvento(
+    ev: EventoSportsDb,
+): { vivoLocal: number; vivoVisitante: number; vivoMinuto: string } | null {
+    const local = Number(ev.intHomeScore ?? NaN);
+    const visitante = Number(ev.intAwayScore ?? NaN);
+    const minuto = String(ev.strProgress ?? '').trim() || String(ev.strStatus ?? '').trim();
+    if (!Number.isFinite(local) && !Number.isFinite(visitante)) return null;
+    return {
+        vivoLocal: Number.isFinite(local) ? local : 0,
+        vivoVisitante: Number.isFinite(visitante) ? visitante : 0,
+        vivoMinuto: minuto,
+    };
+}
+
 export const actualizarMarcadoresEnVivo = onSchedule(
     { schedule: cada(3), timeZone: 'America/Mexico_City', secrets: [sportsDbKey] },
     async () => {
-        const snap = await db.collection('partidos').where('status', '==', 'en-juego').get();
-        if (snap.empty) return;
+        const key = sportsDbKey.value();
 
-        // Solo partidos vivos de TheSportsDB que aún no se liquidaron.
+        // ── 1) Partidos sueltos en juego (colección `partidos`) ──
+        const snap = await db.collection('partidos').where('status', '==', 'en-juego').get();
         const candidatos = snap.docs.filter((d) => {
             const p = d.data();
             return !p['liquidado'] && !!p['apiEventId'];
         });
-        if (candidatos.length === 0) return;
-
-        const key = sportsDbKey.value();
 
         for (const d of candidatos) {
             const ev = await lookupEventoSportsDb(String(d.data()['apiEventId']), key);
             if (!ev) continue;
+            const vivo = vivoDeEvento(ev);
+            if (!vivo) continue;
+            const cambios: Record<string, unknown> = { vivoLocal: vivo.vivoLocal, vivoVisitante: vivo.vivoVisitante };
+            if (vivo.vivoMinuto) cambios['vivoMinuto'] = vivo.vivoMinuto;
+            await d.ref.update(cambios).catch(() => undefined);
+        }
 
-            const local = Number(ev.intHomeScore ?? NaN);
-            const visitante = Number(ev.intAwayScore ?? NaN);
-            // strProgress trae el minuto ("63") en partidos en curso; si no,
-            // usamos el estado (ej. "HT" medio tiempo). Puede venir vacío.
-            const minuto = String(ev.strProgress ?? '').trim() || String(ev.strStatus ?? '').trim();
+        // ── 2) Jornadas de quiniela abiertas cuyo primer partido ya empezó ──
+        // Actualiza el vivo de cada partido de la jornada que tenga apiEventId.
+        const comps = await db.collection('competiciones').where('apiLigaId', '>', 0).get();
+        const ahora = Date.now();
 
-            const cambios: Record<string, unknown> = {};
-            if (Number.isFinite(local)) cambios['vivoLocal'] = local;
-            if (Number.isFinite(visitante)) cambios['vivoVisitante'] = visitante;
-            if (minuto) cambios['vivoMinuto'] = minuto;
+        for (const compDoc of comps.docs) {
+            const jornadas = await compDoc.ref
+                .collection('jornadas')
+                .where('estado', '==', 'abierta')
+                .get();
 
-            if (Object.keys(cambios).length > 0) {
-                await d.ref.update(cambios).catch(() => undefined);
+            for (const jDoc of jornadas.docs) {
+                const j = jDoc.data() as {
+                    cierraAt?: Timestamp;
+                    partidos: Array<Record<string, unknown>>;
+                };
+                // cierraAt = hora del primer partido; antes de eso no hay vivo.
+                const arranca = j.cierraAt?.toMillis() ?? 0;
+                if (!arranca || arranca > ahora) continue;
+
+                const partidos = j.partidos ?? [];
+                let hayCambios = false;
+
+                for (const p of partidos) {
+                    const idEvento = String(p['apiEventId'] ?? '');
+                    if (!idEvento) continue;
+                    // Si ya tiene resultado final capturado, no seguimos actualizando el vivo.
+                    if (p['resultado'] && p['resultado'] !== 'pospuesto') continue;
+
+                    const ev = await lookupEventoSportsDb(idEvento, key);
+                    if (!ev) continue;
+                    const vivo = vivoDeEvento(ev);
+                    if (!vivo) continue;
+
+                    p['vivoLocal'] = vivo.vivoLocal;
+                    p['vivoVisitante'] = vivo.vivoVisitante;
+                    if (vivo.vivoMinuto) p['vivoMinuto'] = vivo.vivoMinuto;
+                    hayCambios = true;
+                }
+
+                if (hayCambios) {
+                    await jDoc.ref.update({ partidos }).catch(() => undefined);
+                }
             }
         }
     },
