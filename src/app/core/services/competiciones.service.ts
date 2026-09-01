@@ -202,6 +202,20 @@ export class CompeticionesService {
     }
 
     /**
+     * Importa todos los equipos de la liga configurada y los fusiona con el
+     * catálogo de la competición. Evita tener que traer una jornada solo para
+     * poblar equipos.
+     */
+    async importarEquipos(competicionId: string): Promise<{ total: number; agregados: number }> {
+        const fn = httpsCallable<
+            { competicionId: string },
+            { ok: boolean; total: number; agregados: number }
+        >(this.fns, 'importarEquiposApi');
+        const res = await fn({ competicionId });
+        return res.data;
+    }
+
+    /**
      * Publica el resultado oficial y lo aplica a todos los torneos
      * que estén jugando esa jornada.
      */

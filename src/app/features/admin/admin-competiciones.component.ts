@@ -163,15 +163,25 @@ import { ToastService } from '../../shared/toast.service';
                 </select>
               </label>
             </div>
-            <div class="acciones">
-              <button class="btn sm" (click)="guardarApi(c)">Guardar conexión</button>
-              @if (c.apiLigaId) {
-                <button class="btn sm" [disabled]="refrescandoTabla()" (click)="refrescarTabla(c)">
+            @if (!c.apiLigaId) {
+              <!-- Sin conexión: solo el botón azul de guardar. -->
+              <div class="acciones">
+                <button class="btn sm btn--primary" (click)="guardarApi(c)">Guardar conexión</button>
+              </div>
+            } @else {
+              <!-- Conectada: se puede reconfigurar y quedan dos acciones uniformes. -->
+              <div class="acciones-api">
+                <button class="btn-api" [disabled]="importandoEquipos()" (click)="importarEquipos(c)">
+                  <i class="ti ti-users-plus"></i>
+                  {{ importandoEquipos() ? 'Importando…' : 'Importar equipos de la liga' }}
+                </button>
+                <button class="btn-api" [disabled]="refrescandoTabla()" (click)="refrescarTabla(c)">
                   <i class="ti ti-table"></i>
                   {{ refrescandoTabla() ? 'Actualizando…' : 'Actualizar tabla de posiciones' }}
                 </button>
-              }
-            </div>
+              </div>
+              <button class="reconectar" (click)="guardarApi(c)">Cambiar liga o temporada</button>
+            }
             @if (c.apiLigaId && c.tabla?.length) {
               @if (tablaIncompleta(c)) {
                 <p class="nota nota--alerta">
@@ -503,6 +513,28 @@ import { ToastService } from '../../shared/toast.service';
       }
       .acciones { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 
+      /* Dos acciones uniformes de la API (equipos + tabla), mismo tamaño. */
+      .acciones-api {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;
+      }
+      .btn-api {
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        padding: 10px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+        border: 1px solid var(--border-strong); border-radius: var(--radius);
+        background: var(--surface-1); color: var(--text-primary);
+        text-align: center; line-height: 1.2;
+      }
+      .btn-api:hover { background: var(--surface-2); }
+      .btn-api:disabled { opacity: 0.6; cursor: default; }
+      .btn-api i { font-size: 15px; flex-shrink: 0; }
+      @media (max-width: 420px) { .acciones-api { grid-template-columns: 1fr; } }
+      /* Enlace discreto para reconfigurar la liga/temporada ya conectada. */
+      .reconectar {
+        margin-top: 8px; background: none; border: none; cursor: pointer; padding: 4px 0;
+        font-size: 12px; color: var(--text-muted); text-decoration: underline;
+      }
+      .reconectar:hover { color: var(--text-secondary); }
+
       .btn { padding: 9px 16px; cursor: pointer; border: 1px solid var(--border-strong);
         border-radius: var(--radius); background: transparent; font-size: 14px; }
       .btn.sm { padding: 7px 13px; font-size: 13px; }
@@ -532,6 +564,8 @@ export class AdminCompeticionesComponent {
   readonly trayendo = signal(false);
   /** True mientras se refresca la tabla de posiciones desde la API. */
   readonly refrescandoTabla = signal(false);
+  /** True mientras se importan los equipos de la liga. */
+  readonly importandoEquipos = signal(false);
   nombre = '';
 
   /* --- Conexión con la API (TheSportsDB) --- */
@@ -678,6 +712,23 @@ export class AdminCompeticionesComponent {
       this.toast.error((e as Error)?.message ?? 'No se pudo actualizar la tabla.');
     } finally {
       this.refrescandoTabla.set(false);
+    }
+  }
+
+  /** Importa todos los equipos de la liga y los fusiona con el catálogo. */
+  async importarEquipos(c: Competicion): Promise<void> {
+    this.importandoEquipos.set(true);
+    try {
+      const r = await this.service.importarEquipos(c.id);
+      this.avisar(
+        r.agregados > 0
+          ? `${r.agregados} equipo(s) agregados (${r.total} en total).`
+          : `El catálogo ya estaba completo (${r.total} equipos).`,
+      );
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudieron importar los equipos.');
+    } finally {
+      this.importandoEquipos.set(false);
     }
   }
 

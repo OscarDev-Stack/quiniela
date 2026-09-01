@@ -126,17 +126,22 @@ interface EventoSportsDb {
  * nombre visible. Cubrimos las mismas que football-data (menos Brasileirão) y
  * agregamos Liga MX.
  */
-const LIGAS_SPORTSDB: Record<string, { id: number; nombre: string }> = {
-    LIGAMX: { id: 4350, nombre: 'Liga MX' },
-    CL: { id: 4480, nombre: 'Champions League' },
-    PL: { id: 4328, nombre: 'Premier League' },
-    PD: { id: 4335, nombre: 'LaLiga' },
-    SA: { id: 4332, nombre: 'Serie A' },
-    BL1: { id: 4331, nombre: 'Bundesliga' },
-    FL1: { id: 4334, nombre: 'Ligue 1' },
+const LIGAS_SPORTSDB: Record<string, { id: number; nombre: string; nombreApi: string }> = {
+    LIGAMX: { id: 4350, nombre: 'Liga MX', nombreApi: 'Mexican Primera League' },
+    CL: { id: 4480, nombre: 'Champions League', nombreApi: 'UEFA Champions League' },
+    PL: { id: 4328, nombre: 'Premier League', nombreApi: 'English Premier League' },
+    PD: { id: 4335, nombre: 'LaLiga', nombreApi: 'Spanish La Liga' },
+    SA: { id: 4332, nombre: 'Serie A', nombreApi: 'Italian Serie A' },
+    BL1: { id: 4331, nombre: 'Bundesliga', nombreApi: 'German Bundesliga' },
+    FL1: { id: 4334, nombre: 'Ligue 1', nombreApi: 'French Ligue 1' },
     // EC (Eurocopa): torneo de selecciones inactivo la mayor parte del tiempo;
     // se deja fuera hasta poder confirmar su id cuando haya edición en curso.
 };
+
+/** Busca la config de una liga por su id de TheSportsDB. */
+function ligaPorId(ligaId: number): { id: number; nombre: string; nombreApi: string } | null {
+    return Object.values(LIGAS_SPORTSDB).find((l) => l.id === ligaId) ?? null;
+}
 
 /**
  * Trae los partidos de UNA jornada (ronda) de una liga de TheSportsDB.
@@ -2258,6 +2263,61 @@ export const refrescarTablaApi = onCall({ ...opcionesCall, secrets: [sportsDbKey
         throw new HttpsError('not-found', 'La API no devolvió tabla para esta liga/temporada.');
     }
     return { ok: true, filas };
+});
+
+/* ============================================================
+   TheSportsDB — importar los equipos de la liga
+   Trae todos los equipos de la liga configurada (search_all_teams)
+   y los FUSIONA con el catálogo de la competición, sin duplicar.
+   Así el admin no necesita traer una jornada solo para tener equipos.
+   ============================================================ */
+export const importarEquiposApi = onCall({ ...opcionesCall, secrets: [sportsDbKey] }, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const competicionId = String(req.data?.competicionId ?? '');
+    if (!competicionId) throw new HttpsError('invalid-argument', 'Falta la competición.');
+
+    const compRef = db.doc(`competiciones/${competicionId}`);
+    const [adminSnap, compSnap] = await Promise.all([db.doc(`admins/${uid}`).get(), compRef.get()]);
+    if (!compSnap.exists) throw new HttpsError('not-found', 'La competición no existe.');
+
+    const comp = compSnap.data() as Record<string, unknown>;
+    const gestores = (comp['gestores'] as string[]) ?? [];
+    if (!adminSnap.exists && !gestores.includes(uid)) {
+        throw new HttpsError('permission-denied', 'No gestionas esta competición.');
+    }
+
+    const ligaId = Number(comp['apiLigaId'] ?? 0);
+    const cfg = ligaPorId(ligaId);
+    if (!cfg) {
+        throw new HttpsError(
+            'failed-precondition',
+            'Esta competición no tiene una liga de la API soportada.',
+        );
+    }
+
+    // Traemos los equipos de la liga por su nombre oficial en TheSportsDB.
+    const url = `${sportsDbBase(sportsDbKey.value())}/search_all_teams.php?l=${encodeURIComponent(cfg.nombreApi)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new HttpsError('internal', `TheSportsDB respondió ${res.status}.`);
+    const data = (await res.json()) as { teams?: Array<{ strTeam?: string }> | null };
+    const equiposApi = (data.teams ?? [])
+        .map((t) => nombreOficialEquipo(t.strTeam ?? ''))
+        .filter((n) => !!n);
+
+    if (equiposApi.length === 0) {
+        throw new HttpsError('not-found', 'La API no devolvió equipos para esta liga.');
+    }
+
+    // Fusionamos con lo que ya había, sin duplicar y ordenado.
+    const actuales = (comp['equipos'] as string[] | undefined) ?? [];
+    const antes = actuales.length;
+    const fusion = [...new Set([...actuales, ...equiposApi])].sort((a, b) => a.localeCompare(b, 'es'));
+
+    await compRef.update({ equipos: fusion });
+
+    return { ok: true, total: fusion.length, agregados: fusion.length - antes };
 });
 
 /* ============================================================
