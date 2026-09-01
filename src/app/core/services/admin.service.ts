@@ -57,8 +57,12 @@ export class AdminService {
             if (!esAdmin) return of([0, 0] as [number, number]);
             return combineLatest([this.getPartidos(), this.getUsers()]).pipe(
                 map(([partidos, usuarios]): [number, number] => [
-                    partidos.filter((p) => !p.liquidado && (!!p.resultadoPropuesto || !!p.alertaApi))
-                        .length,
+                    partidos.filter(
+                        (p) =>
+                            !p.liquidado &&
+                            p.status !== 'cerrado' &&
+                            (!!p.resultadoPropuesto || !!p.alertaApi),
+                    ).length,
                     usuarios.filter((u) => !u.validada).length,
                 ]),
             );
@@ -90,7 +94,10 @@ export class AdminService {
                       map(
                           (partidos) =>
                               partidos.filter(
-                                  (p) => !p.liquidado && (!!p.resultadoPropuesto || !!p.alertaApi),
+                                  (p) =>
+                                      !p.liquidado &&
+                                      p.status !== 'cerrado' &&
+                                      (!!p.resultadoPropuesto || !!p.alertaApi),
                               ).length,
                       ),
                   )

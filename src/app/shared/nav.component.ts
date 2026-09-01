@@ -100,7 +100,6 @@ import { StatsService } from './stats.service';
 
       <a routerLink="/torneos" routerLinkActive="on">
         <i class="ti ti-tournament"></i><span>Torneos</span>
-        @if (pendientesTorneos() > 0) { <span class="tab-badge"></span> }
       </a>
       <a routerLink="/perfil" routerLinkActive="on">
         <i class="ti ti-user"></i><span>Perfil</span>
@@ -284,8 +283,6 @@ export class NavComponent {
   readonly usuariosPendientes = toSignal(this.admin.usuariosPendientes$, { initialValue: 0 });
   /** Solo partidos con resultado por confirmar: badge de "Partidos". */
   readonly partidosPendientes = toSignal(this.admin.partidosPendientes$, { initialValue: 0 });
-  /** Torneos donde falta elegir equipo. */
-  readonly pendientesTorneos = toSignal(this.torneos.pendientes$, { initialValue: 0 });
   /** La pestaña de torneos solo aparece si participo en alguno. */
   private readonly misTorneos = toSignal(this.torneos.misTorneos$, { initialValue: [] });
   readonly tengoTorneos = computed(() => this.misTorneos().length > 0);

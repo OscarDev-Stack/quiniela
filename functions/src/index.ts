@@ -687,6 +687,10 @@ async function ejecutarLiquidacion(
             status: 'cerrado',
             liquidado: true,
             liquidadoAt: FieldValue.serverTimestamp(),
+            // Al quedar liquidado ya no hay nada pendiente: limpiamos avisos.
+            alertaApi: FieldValue.delete(),
+            resultadoPropuesto: FieldValue.delete(),
+            marcadorPropuesto: FieldValue.delete(),
         });
         return { ok: true, participantes: 0, ganadores: 0, bolsa: 0, sobrante: 0 };
     }
@@ -847,6 +851,10 @@ async function ejecutarLiquidacion(
         liquidado: true,
         liquidadoAt: FieldValue.serverTimestamp(),
         poolTotal: bolsa,
+        // Al quedar liquidado ya no hay nada pendiente: limpiamos avisos.
+        alertaApi: FieldValue.delete(),
+        resultadoPropuesto: FieldValue.delete(),
+        marcadorPropuesto: FieldValue.delete(),
     });
 
     // Si el partido es de un grupo, actualiza la tabla (ranking) de ese grupo:
