@@ -31,7 +31,7 @@ import { Bracket } from '../../core/models/bracket.model';
       }
 
       @for (t of visibles(); track t.id) {
-        <article class="card" [class.card--quin]="t.modo === 'quiniela'" [class.card--surv]="t.modo !== 'quiniela'" (click)="abrir(t)">
+        <article class="card" [class.card--quin]="t.modo === 'quiniela'" [class.card--surv]="t.modo !== 'quiniela'" [class.card--terminado]="finalizado(t.estado)" (click)="abrir(t)">
           <div class="top">
             <span class="competicion">{{ t.competicionNombre }}</span>
             @switch (t.estado) {
@@ -71,7 +71,7 @@ import { Bracket } from '../../core/models/bracket.model';
       @if (bracketsVisibles().length > 0) {
         <h3 class="seccion">Eliminatorias</h3>
         @for (b of bracketsVisibles(); track b.id) {
-          <article class="card card--bracket" (click)="abrirBracket(b)">
+          <article class="card card--bracket" [class.card--terminado]="finalizado(b.estado)" (click)="abrirBracket(b)">
             <div class="top">
               <span class="competicion">Eliminatoria</span>
               @switch (b.estado) {
@@ -127,6 +127,15 @@ import { Bracket } from '../../core/models/bracket.model';
       .card--bracket { border-left: 4px solid var(--tipo-elim-fill); }
       .card--surv { border-left: 4px solid var(--tipo-surv-fill); }
       .card--quin { border-left: 4px solid var(--tipo-quin-fill); }
+
+      /* Terminados: atenuados y con el acento en gris, para distinguirlos de
+         un vistazo de los que siguen activos. */
+      .card--terminado {
+        opacity: 0.6;
+        background: var(--surface-1);
+        border-left-color: var(--border-strong);
+      }
+      .card--terminado:hover { opacity: 0.85; }
     `,
   ],
 })
@@ -158,18 +167,36 @@ export class TorneosListComponent {
     }
   });
 
+  /**
+   * Orden por estado: primero lo que está EN JUEGO, luego lo abierto a
+   * inscripción, y al final lo finalizado. Así de un vistazo se ve qué está
+   * activo sin que los terminados estorben.
+   */
+  private rangoEstado(estado: string): number {
+    if (estado === 'en-curso') return 0;
+    if (estado === 'inscripcion') return 1;
+    return 2; // finalizado y cualquier otro
+  }
+
   readonly visibles = computed(() => {
     const ctx = this.contexto.grupoId(); // null = Global
     return [...this.torneos()]
       .filter((t) => (t.grupoId ?? null) === ctx)
-      .sort((a, b) => a.estado.localeCompare(b.estado));
+      .sort((a, b) => this.rangoEstado(a.estado) - this.rangoEstado(b.estado));
   });
 
-  /** Brackets del contexto activo (Global o el grupo elegido). */
+  /** Brackets del contexto activo (Global o el grupo elegido), mismo orden. */
   readonly bracketsVisibles = computed(() => {
     const ctx = this.contexto.grupoId();
-    return this.brackets().filter((b) => (b.grupoId ?? null) === ctx);
+    return this.brackets()
+      .filter((b) => (b.grupoId ?? null) === ctx)
+      .sort((a, b) => this.rangoEstado(a.estado) - this.rangoEstado(b.estado));
   });
+
+  /** ¿Está finalizado? Para atenuarlo visualmente. */
+  finalizado(estado: string): boolean {
+    return estado === 'finalizado';
+  }
 
   abrir(t: Torneo): void {
     this.router.navigate(['/torneos', t.id]);
