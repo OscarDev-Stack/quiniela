@@ -944,21 +944,15 @@ export const cerrarPartidos = onSchedule(cada(5), async () => {
    Devuelve su apuesta a cada participante y marca el partido
    como cancelado. Idempotente: no devuelve dos veces.
    ============================================================ */
-export const cancelarPartido = onCall(opcionesCall, async (req) => {
-    const uid = req.auth?.uid;
-    if (!uid) {
-        throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
-    }
-    const adminSnap = await db.doc(`admins/${uid}`).get();
-    if (!adminSnap.exists) {
-        throw new HttpsError('permission-denied', 'Solo un administrador puede cancelar.');
-    }
-
-    const partidoId = String(req.data?.partidoId ?? '');
-    if (!partidoId) {
-        throw new HttpsError('invalid-argument', 'Falta el partido.');
-    }
-
+/**
+ * Cancela un partido y devuelve su apuesta a cada participante. Idempotente:
+ * no devuelve dos veces. Núcleo reutilizable, sin validación de permisos, para
+ * que la use tanto cancelarPartido (admin) como la liquidación automática
+ * cuando un partido que no admite empate termina empatado.
+ */
+async function ejecutarCancelacion(
+    partidoId: string,
+): Promise<{ ok: boolean; devoluciones: number; puntosDevueltos: number }> {
     const partRef = db.doc(`partidos/${partidoId}`);
     const partSnap = await partRef.get();
     if (!partSnap.exists) {
@@ -970,7 +964,8 @@ export const cancelarPartido = onCall(opcionesCall, async (req) => {
         throw new HttpsError('failed-precondition', 'Este partido ya fue liquidado.');
     }
     if (partido['status'] === 'cancelado') {
-        throw new HttpsError('failed-precondition', 'Este partido ya está cancelado.');
+        // Ya cancelado: idempotente, no hacemos nada.
+        return { ok: true, devoluciones: 0, puntosDevueltos: 0 };
     }
 
     const pronSnap = await db
@@ -1041,9 +1036,31 @@ export const cancelarPartido = onCall(opcionesCall, async (req) => {
         status: 'cancelado',
         poolTotal: 0,
         canceladoAt: FieldValue.serverTimestamp(),
+        // Ya cancelado: no queda nada pendiente, limpiamos avisos de la API.
+        alertaApi: FieldValue.delete(),
+        resultadoPropuesto: FieldValue.delete(),
+        marcadorPropuesto: FieldValue.delete(),
     });
 
     return { ok: true, devoluciones: pronosticos.length, puntosDevueltos: devuelto };
+}
+
+export const cancelarPartido = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) {
+        throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+    }
+    const adminSnap = await db.doc(`admins/${uid}`).get();
+    if (!adminSnap.exists) {
+        throw new HttpsError('permission-denied', 'Solo un administrador puede cancelar.');
+    }
+
+    const partidoId = String(req.data?.partidoId ?? '');
+    if (!partidoId) {
+        throw new HttpsError('invalid-argument', 'Falta el partido.');
+    }
+
+    return ejecutarCancelacion(partidoId);
 });
 
 /* Regenera todo el ranking de una vez (útil la primera vez). */
@@ -1552,22 +1569,31 @@ export const revisarResultados = onSchedule(
             const visitante = Number(api.score.fullTime.away ?? 0);
             const tipo = String(p['type'] ?? '1x2');
 
+            const empate = local === visitante;
+
+            // Empate en un partido que no admite empate (1-2 o quien-pasa): NO
+            // decidimos por nuestra cuenta. Puede que de verdad no haya ganador
+            // (partido de liga) o que alguien haya avanzado por penales/global
+            // (eliminatoria). Es dinero real, así que lo revisa el admin: él
+            // cancela y devuelve, o liquida eligiendo al ganador que avanzó.
+            if (empate && tipo !== '1x2') {
+                await d.ref.update({
+                    alertaApi:
+                        'Empataron y este partido no admite empate. Revísalo: cancela para ' +
+                        'devolver, o define al ganador si avanzó por penales/global.',
+                });
+                continue;
+            }
+
             let resultado: string;
             if (tipo === 'quien-pasa') {
-                resultado = local >= visitante ? 'pasa-local' : 'pasa-visitante';
+                resultado = local > visitante ? 'pasa-local' : 'pasa-visitante';
             } else if (local > visitante) {
                 resultado = 'local';
             } else if (visitante > local) {
                 resultado = 'visitante';
             } else {
-                resultado = tipo === '1x2' ? 'empate' : '';
-            }
-
-            if (!resultado) {
-                await d.ref.update({
-                    alertaApi: 'Terminó en empate y este partido no admite empate. Revísalo.',
-                });
-                continue;
+                resultado = 'empate';
             }
 
             // La API confirmó el resultado final: liquidamos solos, sin esperar
@@ -1650,22 +1676,29 @@ export const revisarResultadosSportsDb = onSchedule(
             if (!Number.isFinite(local) || !Number.isFinite(visitante)) continue;
 
             const tipo = String(p['type'] ?? '1x2');
+            const empate = local === visitante;
+
+            // Empate en un partido que no admite empate (1-2 o quien-pasa): lo
+            // revisa el admin (puede no haber ganador, o haber avanzado alguien
+            // por penales/global). Es dinero real; no decidimos por él.
+            if (empate && tipo !== '1x2') {
+                await d.ref.update({
+                    alertaApi:
+                        'Empataron y este partido no admite empate. Revísalo: cancela para ' +
+                        'devolver, o define al ganador si avanzó por penales/global.',
+                });
+                continue;
+            }
+
             let resultado: string;
             if (tipo === 'quien-pasa') {
-                resultado = local >= visitante ? 'pasa-local' : 'pasa-visitante';
+                resultado = local > visitante ? 'pasa-local' : 'pasa-visitante';
             } else if (local > visitante) {
                 resultado = 'local';
             } else if (visitante > local) {
                 resultado = 'visitante';
             } else {
-                resultado = tipo === '1x2' ? 'empate' : '';
-            }
-
-            if (!resultado) {
-                await d.ref.update({
-                    alertaApi: 'Terminó en empate y este partido no admite empate. Revísalo.',
-                });
-                continue;
+                resultado = 'empate';
             }
 
             // La API confirmó el final: liquidamos solos. Si falla, queda para
