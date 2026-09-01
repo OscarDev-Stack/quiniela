@@ -15,8 +15,11 @@ helper `fetchSportsDbV2(ruta, key)`. Rutas V2 usadas (raíz JSON entre paréntes
 - Próximos partidos: `schedule/next/league/{id}` (schedule[])
 - Evento por id: `lookup/event/{idEvent}` (lookup[])
 - Equipos de la liga: `list/teams/{id}` (list[])
-- Tabla de posiciones: `lookup/table/{id}/{temporada}` (table[]) — devuelve los
-  18 equipos completos (V1 con key gratuita truncaba a 5)
+- Tabla de posiciones: SIGUE EN V1 — `lookuptable.php?l={id}&s={temporada}`
+  (table[]). Este endpoint SÍ funciona en V1 con la key premium y devuelve los
+  18 equipos completos (con key gratuita truncaba a 5). NO existe en V2
+  (lookup/table da "Invalid ID passed"). OJO: no todos los endpoints premium
+  van por V2; la tabla es de los que se quedan en V1.
 Los nombres de campos internos (idEvent, strHomeTeam, intRound, intHomeScore,
 strForm, strStatus...) son iguales que en V1; solo cambió la raíz y la auth.
 La V1 se retira a futuro, así que esta migración también deja el terreno listo.

@@ -100,9 +100,18 @@ const sportsDbKey = defineSecret('SPORTSDB_KEY');
 const API_BASE = 'https://api.football-data.org/v4';
 
 /**
+ * URL base de TheSportsDB V1 para una key dada. Ojo: NO todos los endpoints
+ * V1 funcionan con la key premium (varios dan 404 y hay que usar V2). Pero
+ * algunos, como lookuptable.php, SÍ funcionan en V1 con la key premium y
+ * devuelven los datos completos, así que ahí seguimos usando V1.
+ */
+const sportsDbBase = (key: string): string =>
+    `https://www.thesportsdb.com/api/v1/json/${(key ?? '').trim() || '123'}`;
+
+/**
  * Llama a la API V2 de TheSportsDB (premium). La key va en el header
  * 'X-API-KEY'. Devuelve el JSON crudo, o lanza si la respuesta no es OK.
- * V2 es la que soporta la key premium (la V1 quedó limitada al tier gratuito).
+ * V2 es la que soporta la key premium para los endpoints de calendario/eventos.
  */
 async function fetchSportsDbV2<T>(ruta: string, key: string): Promise<T> {
     const url = `https://www.thesportsdb.com/api/v2/json/${ruta}`;
@@ -220,13 +229,16 @@ async function tablaLigaSportsDb(
     temporada: string,
     key: string,
 ): Promise<FilaTablaLiga[]> {
-    // NOTA: confirmar la ruta V2 exacta de la tabla. La estimación es
-    // `lookup/table/{id}/{temporada}` con raíz `table`. Si la prueba en
-    // Postman revela otra ruta/raíz, ajustar aquí.
-    const data = await fetchSportsDbV2<{ table?: StandingSportsDb[] | null }>(
-        `lookup/table/${ligaId}/${encodeURIComponent(temporada)}`,
-        key,
-    );
+    // La tabla SÍ funciona en V1 con la key premium (devuelve los equipos
+    // completos), así que aquí seguimos usando V1 — a diferencia de los
+    // endpoints de calendario/eventos, que en V1 premium dan 404 y usan V2.
+    const url =
+        `${sportsDbBase(key)}/lookuptable.php?l=${ligaId}&s=${encodeURIComponent(temporada)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+        throw new HttpsError('internal', `TheSportsDB respondió ${res.status}.`);
+    }
+    const data = (await res.json()) as { table?: StandingSportsDb[] | null };
     const filas = data.table ?? [];
 
     return filas.map((f, i) => ({
