@@ -92,12 +92,16 @@ const telegramWebhookSecret = defineSecret('TELEGRAM_WEBHOOK_SECRET');
 /** Secret Key de Cloudflare Turnstile. Se configura con:
  *  firebase functions:secrets:set TURNSTILE_SECRET_KEY */
 const turnstileSecret = defineSecret('TURNSTILE_SECRET_KEY');
+/** Key de TheSportsDB (premium). Se configura con:
+ *  firebase functions:secrets:set SPORTSDB_KEY
+ *  Debe declararse en cada función que consulte TheSportsDB. */
+const sportsDbKey = defineSecret('SPORTSDB_KEY');
 
 const API_BASE = 'https://api.football-data.org/v4';
 
-/** TheSportsDB: liga mexicana y resultados. Key gratuita '123' por ahora. */
-const SPORTSDB_KEY = '123';
-const SPORTSDB_BASE = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}`;
+/** URL base de TheSportsDB para una key dada. */
+const sportsDbBase = (key: string): string =>
+    `https://www.thesportsdb.com/api/v1/json/${(key ?? '').trim() || '123'}`;
 
 /** Un evento (partido) de TheSportsDB, con los campos que usamos. */
 interface EventoSportsDb {
@@ -122,9 +126,10 @@ async function eventosRondaSportsDb(
     ligaId: number,
     ronda: number,
     temporada: string,
+    key: string,
 ): Promise<EventoSportsDb[]> {
     const url =
-        `${SPORTSDB_BASE}/eventsround.php?id=${ligaId}&r=${ronda}&s=${encodeURIComponent(temporada)}`;
+        `${sportsDbBase(key)}/eventsround.php?id=${ligaId}&r=${ronda}&s=${encodeURIComponent(temporada)}`;
     const res = await fetch(url);
     if (!res.ok) {
         throw new HttpsError('internal', `TheSportsDB respondió ${res.status}.`);
@@ -172,9 +177,13 @@ interface FilaTablaLiga {
  * devuelve normalizada. Los nombres de equipo pasan por nombreOficialEquipo
  * para que calcen con los escudos del catálogo. Devuelve [] si no hay datos.
  */
-async function tablaLigaSportsDb(ligaId: number, temporada: string): Promise<FilaTablaLiga[]> {
+async function tablaLigaSportsDb(
+    ligaId: number,
+    temporada: string,
+    key: string,
+): Promise<FilaTablaLiga[]> {
     const url =
-        `${SPORTSDB_BASE}/lookuptable.php?l=${ligaId}&s=${encodeURIComponent(temporada)}`;
+        `${sportsDbBase(key)}/lookuptable.php?l=${ligaId}&s=${encodeURIComponent(temporada)}`;
     const res = await fetch(url);
     if (!res.ok) {
         throw new HttpsError('internal', `TheSportsDB respondió ${res.status}.`);
@@ -207,12 +216,13 @@ async function tablaLigaSportsDb(ligaId: number, temporada: string): Promise<Fil
 async function refrescarTablaCompeticion(
     compRef: FirebaseFirestore.DocumentReference,
     comp: Record<string, unknown>,
+    key: string,
 ): Promise<number> {
     const ligaId = Number(comp['apiLigaId'] ?? 0);
     const temporada = String(comp['apiTemporada'] ?? '');
     if (!ligaId || !temporada) return 0;
 
-    const tabla = await tablaLigaSportsDb(ligaId, temporada);
+    const tabla = await tablaLigaSportsDb(ligaId, temporada, key);
     if (tabla.length === 0) return 0;
 
     await compRef.set(
@@ -1779,7 +1789,7 @@ export const guardarPick = onCall(opcionesCall, async (req) => {
    primer partido. NO guarda nada: el admin revisa y guarda con el
    flujo normal. Publicar sigue siendo manual.
    ============================================================ */
-export const traerJornadaApi = onCall(opcionesCall, async (req) => {
+export const traerJornadaApi = onCall({ ...opcionesCall, secrets: [sportsDbKey] }, async (req) => {
     const uid = req.auth?.uid;
     if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
 
@@ -1810,7 +1820,7 @@ export const traerJornadaApi = onCall(opcionesCall, async (req) => {
         );
     }
 
-    const dela = await eventosRondaSportsDb(ligaId, numeroJornada, temporada);
+    const dela = await eventosRondaSportsDb(ligaId, numeroJornada, temporada, sportsDbKey.value());
     if (dela.length === 0) {
         throw new HttpsError('not-found', `La API no tiene partidos para la jornada ${numeroJornada}.`);
     }
@@ -1841,7 +1851,7 @@ export const traerJornadaApi = onCall(opcionesCall, async (req) => {
    normalizado) y devuelve el marcador de los que ya terminaron. NO
    publica: el admin captura/confirma y publica manualmente.
    ============================================================ */
-export const traerResultadosApi = onCall(opcionesCall, async (req) => {
+export const traerResultadosApi = onCall({ ...opcionesCall, secrets: [sportsDbKey] }, async (req) => {
     const uid = req.auth?.uid;
     if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
 
@@ -1881,7 +1891,7 @@ export const traerResultadosApi = onCall(opcionesCall, async (req) => {
         partidos: Array<{ local: string; visitante: string }>;
     };
 
-    const dela = await eventosRondaSportsDb(ligaId, jornada.numero, temporada);
+    const dela = await eventosRondaSportsDb(ligaId, jornada.numero, temporada, sportsDbKey.value());
     const { conResultado, partidos } = cruzarResultadosJornada(jornada.partidos, dela);
 
     return { ok: true, numero: jornada.numero, conResultado, partidos };
@@ -1893,7 +1903,7 @@ export const traerResultadosApi = onCall(opcionesCall, async (req) => {
    refresca sola al resolver cada jornada; esto cubre el arranque
    (torneo recién creado) o una actualización a demanda.
    ============================================================ */
-export const refrescarTablaApi = onCall(opcionesCall, async (req) => {
+export const refrescarTablaApi = onCall({ ...opcionesCall, secrets: [sportsDbKey] }, async (req) => {
     const uid = req.auth?.uid;
     if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
 
@@ -1916,7 +1926,7 @@ export const refrescarTablaApi = onCall(opcionesCall, async (req) => {
         );
     }
 
-    const filas = await refrescarTablaCompeticion(compRef, comp);
+    const filas = await refrescarTablaCompeticion(compRef, comp, sportsDbKey.value());
     if (filas === 0) {
         throw new HttpsError('not-found', 'La API no devolvió tabla para esta liga/temporada.');
     }
@@ -1930,7 +1940,7 @@ export const refrescarTablaApi = onCall(opcionesCall, async (req) => {
    misma liga terminen con marcadores distintos.
    ============================================================ */
 export const resolverJornadaCompeticion = onCall(
-    { ...opcionesCall, secrets: [telegramToken] },
+    { ...opcionesCall, secrets: [telegramToken, sportsDbKey] },
     async (req) => {
         const uid = req.auth?.uid;
         if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
@@ -2235,7 +2245,11 @@ export const resolverJornadaCompeticion = onCall(
         // tabla oficial de la liga (si la competición está vinculada a la API).
         // Un fallo aquí no debe romper la resolución de la jornada.
         try {
-            await refrescarTablaCompeticion(compRef, compSnap.data() as Record<string, unknown>);
+            await refrescarTablaCompeticion(
+                compRef,
+                compSnap.data() as Record<string, unknown>,
+                sportsDbKey.value(),
+            );
         } catch (e) {
             logger.warn(`No se pudo refrescar la tabla de ${competicionId}.`, e);
         }
@@ -3551,7 +3565,7 @@ export const solicitarReinicio = onCall(
    equivalente de "Traer resultados de la API", pero automático.
    ============================================================ */
 export const revisarJornadas = onSchedule(
-    { schedule: cada(30), timeZone: 'America/Mexico_City' },
+    { schedule: cada(30), timeZone: 'America/Mexico_City', secrets: [sportsDbKey] },
     async () => {
         // Competiciones con conexión a la API configurada.
         const comps = await db.collection('competiciones').where('apiLigaId', '>', 0).get();
@@ -3588,7 +3602,7 @@ export const revisarJornadas = onSchedule(
 
                 let eventos;
                 try {
-                    eventos = await eventosRondaSportsDb(ligaId, j.numero, temporada);
+                    eventos = await eventosRondaSportsDb(ligaId, j.numero, temporada, sportsDbKey.value());
                 } catch (e) {
                     logger.warn(`No se pudo consultar la jornada ${j.numero} de ${compDoc.id}.`, e);
                     continue;
