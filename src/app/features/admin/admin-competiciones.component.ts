@@ -969,6 +969,15 @@ export class AdminCompeticionesComponent {
 
   async guardar(c: Competicion, j: Jornada): Promise<void> {
     await this.service.guardarResultados(c.id, j.id, j.partidos);
+    // Recalcula la previa de las quinielas con lo capturado hasta ahora, para
+    // que los jugadores vean sus puntos parciales (incluidos los empates que
+    // se acaban de capturar) sin esperar a que se publique la jornada. Si
+    // falla, no bloquea: los resultados ya quedaron guardados.
+    try {
+      await this.service.previsualizarQuiniela(c.id, j.id);
+    } catch {
+      // La previa es un extra; si falla, los resultados ya están guardados.
+    }
     this.avisar('Resultados guardados.');
   }
 

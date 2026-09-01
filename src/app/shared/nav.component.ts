@@ -9,6 +9,7 @@ import { UserService } from '../core/services/user.service';
 import { AdminService } from '../core/services/admin.service';
 import { TorneosService } from '../core/services/torneos.service';
 import { ConfirmarService } from './confirmar.service';
+import { StatsService } from './stats.service';
 
 @Component({
   selector: 'app-nav',
@@ -260,6 +261,7 @@ export class NavComponent {
   private readonly router = inject(Router);
   private readonly location = inject(Location);
   private readonly confirmar = inject(ConfirmarService);
+  private readonly stats = inject(StatsService);
 
   /** Muestra flecha de regreso en vez del logo. */
   readonly back = input(false);
@@ -321,6 +323,7 @@ export class NavComponent {
     });
     if (!ok) return;
 
+    this.stats.evento('logout', { origen: 'nav' });
     await this.auth.logout();
     this.router.navigate(['/login']);
   }

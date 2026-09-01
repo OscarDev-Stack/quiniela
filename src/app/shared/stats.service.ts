@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Analytics, logEvent } from '@angular/fire/analytics';
+import { Analytics, logEvent, setUserProperties } from '@angular/fire/analytics';
 
 /**
  * Registra eventos de uso en Firebase Analytics. Los datos son agregados
@@ -20,6 +20,22 @@ export class StatsService {
     evento(nombre: string, datos: Record<string, string | number | boolean> = {}): void {
         try {
             logEvent(this.analytics, nombre, datos);
+        } catch {
+            // Analytics no disponible: no pasa nada, seguimos.
+        }
+    }
+
+    /**
+     * Marca propiedades categóricas del usuario (rol, validado, etc.) para
+     * poder segmentar los reportes de Analytics. NO se guarda PII (nada de
+     * correos ni alias reales), solo categorías. Igual que evento(), ignora
+     * cualquier fallo en silencio.
+     *
+     * Uso: this.stats.propiedades({ rol: 'jugador', validado: 'si' });
+     */
+    propiedades(props: Record<string, string>): void {
+        try {
+            setUserProperties(this.analytics, props);
         } catch {
             // Analytics no disponible: no pasa nada, seguimos.
         }

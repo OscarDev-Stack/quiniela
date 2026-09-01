@@ -10,6 +10,7 @@ import { Competicion } from '../../core/models/competicion.model';
 import { CompeticionesService } from '../../core/services/competiciones.service';
 import { GruposService } from '../../core/services/grupos.service';
 import { ToastService } from '../../shared/toast.service';
+import { StatsService } from '../../shared/stats.service';
 import { NavComponent } from '../../shared/nav.component';
 
 /**
@@ -309,6 +310,7 @@ export class CrearTorneoComponent {
   private readonly competicionesSrv = inject(CompeticionesService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+  private readonly stats = inject(StatsService);
 
   /** Grupos donde soy admin (puedo crearles torneos). */
   readonly misGrupos = toSignal(this.gruposSrv.misGrupos(), { initialValue: [] as Grupo[] });
@@ -392,6 +394,10 @@ export class CrearTorneoComponent {
         vidaCubre: this.form.vidaCubre,
         permiteRevivir: this.form.modo === 'supervivencia' && this.form.permiteRevivir,
         grupoId: this.form.grupoId || null,
+      });
+      this.stats.evento('torneo_creado', {
+        modo: this.form.modo,
+        es_grupo: this.form.grupoId ? 'si' : 'no',
       });
       this.toast.exito('Torneo creado. Comparte el enlace de invitación.');
       // Volver: al grupo si vino de un grupo, o a la gestión de torneos.

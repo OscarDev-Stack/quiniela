@@ -27,6 +27,7 @@ import { Jornada, fechaJornada, equiposDeJornada } from '../../core/models/compe
 import { CompeticionesService } from '../../core/services/competiciones.service';
 import { ConfirmarService } from '../../shared/confirmar.service';
 import { ToastService } from '../../shared/toast.service';
+import { StatsService } from '../../shared/stats.service';
 
 @Component({
   selector: 'app-torneo-detalle',
@@ -795,6 +796,7 @@ export class TorneoDetalleComponent {
   private readonly competiciones = inject(CompeticionesService);
   private readonly confirmar = inject(ConfirmarService);
   private readonly toast = inject(ToastService);
+  private readonly stats = inject(StatsService);
 
   private readonly id = this.route.snapshot.paramMap.get('id')!;
 
@@ -804,6 +806,9 @@ export class TorneoDetalleComponent {
   // Marcamos el primer dato real de cada fuente que arma la vista.
   private readonly listoTorneo = signal(false);
   private readonly listoParticipantes = signal(false);
+  // Los cartones de la jornada llegan encadenados (torneo → jornada → cartones);
+  // marcamos cuando ya resolvimos su primer estado (con datos o vacío).
+  private readonly cartonesListos = signal(false);
 
   readonly torneo = toSignal(
     this.service.torneo(this.id).pipe(tap(() => this.listoTorneo.set(true))),
@@ -828,10 +833,14 @@ export class TorneoDetalleComponent {
    * Apaga el loading cuando el torneo y sus participantes ya llegaron. La
    * jornada depende del torneo (switchMap encadenado) y se resuelve enseguida;
    * no la exigimos para no dejar el spinner colgado si un torneo no tiene
-   * jornada aún.
+   * jornada aún. Los cartones ajenos también se cargan encadenados; solo los
+   * exigimos cuando esa sección va a mostrarse (quiniela con jornada revelada),
+   * evitando el parpadeo de "Nadie envió pronósticos" antes de que lleguen.
    */
   private readonly apagar = effect(() => {
-    if (this.listoTorneo() && this.listoParticipantes()) {
+    const base = this.listoTorneo() && this.listoParticipantes();
+    const esperaCartones = this.esQuiniela() && this.revelarQuinielas();
+    if (base && (!esperaCartones || this.cartonesListos())) {
       apagarCargando(this.cargando, this.inicioCarga);
     }
   });
@@ -929,15 +938,18 @@ export class TorneoDetalleComponent {
         subCartones = null;
         jornadaCartones = -1;
         this.quinielasSignal.set([]);
+        // No hay cartones que esperar en este estado: liberamos el loading.
+        this.cartonesListos.set(true);
         return;
       }
       if (numero === jornadaCartones) return;
 
       jornadaCartones = numero;
       subCartones?.unsubscribe();
-      subCartones = this.service
-        .quinielasJornada(this.id, numero)
-        .subscribe((lista) => this.quinielasSignal.set(lista));
+      subCartones = this.service.quinielasJornada(this.id, numero).subscribe((lista) => {
+        this.quinielasSignal.set(lista);
+        this.cartonesListos.set(true);
+      });
     });
 
     inject(DestroyRef).onDestroy(() => {
@@ -1177,6 +1189,7 @@ export class TorneoDetalleComponent {
           visitante: Number(m.visitante),
         })),
       );
+      this.stats.evento('quiniela_guardada', { partidos: j.partidos.length });
       this.toast.exito('Pronósticos guardados.');
     } catch (e: unknown) {
       this.toast.error((e as Error)?.message ?? 'No se pudieron guardar.');

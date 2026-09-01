@@ -9,6 +9,7 @@ import { NotificacionesBotonComponent } from './notificaciones-boton.component';
 import { CargandoComponent } from '../../shared/cargando.component';
 import { apagarCargando } from '../../shared/cargando.util';
 import { ToastService } from '../../shared/toast.service';
+import { StatsService } from '../../shared/stats.service';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { of, switchMap, tap } from 'rxjs';
 import { Auth, user } from '@angular/fire/auth';
@@ -423,6 +424,7 @@ export class PerfilComponent {
 
   private readonly confirmar = inject(ConfirmarService);
   private readonly toast = inject(ToastService);
+  private readonly stats = inject(StatsService);
 
   /** uid del perfil que se muestra: el de la ruta, o el mío. */
   private readonly uidRuta = this.route.snapshot.paramMap.get('uid');
@@ -491,6 +493,8 @@ export class PerfilComponent {
     this.guardandoAlias.set(true);
     try {
       await this.perfil.cambiarAlias(nuevo);
+      this.stats.evento('alias_cambiado');
+      this.stats.evento('perfil_editado', { campo: 'alias' });
       this.toast.exito('Nombre actualizado.');
       this.editandoAlias.set(false);
     } catch (e: unknown) {
@@ -627,6 +631,7 @@ export class PerfilComponent {
     });
     if (!ok) return;
 
+    this.stats.evento('logout', { origen: 'perfil' });
     await this.authService.logout();
     this.router.navigate(['/login']);
   }

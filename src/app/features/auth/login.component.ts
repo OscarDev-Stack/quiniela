@@ -1,9 +1,10 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { Firestore, doc, getDoc, setDoc, serverTimestamp } from '@angular/fire/firestore';
 import { AuthCredential } from '@angular/fire/auth';
 import { AuthService } from '../../core/services/auth.service';
+import { StatsService } from '../../shared/stats.service';
 import { APP_VERSION } from '../../core/version';
 
 @Component({
@@ -279,11 +280,17 @@ import { APP_VERSION } from '../../core/version';
     `,
   ],
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly db = inject(Firestore);
+  private readonly stats = inject(StatsService);
   readonly version = APP_VERSION;
+
+  ngOnInit(): void {
+    // Traza del embudo: cuánta gente llega a la pantalla de acceso.
+    this.stats.evento('login_visto');
+  }
 
   email = '';
   password = '';
@@ -302,12 +309,15 @@ export class LoginComponent {
     try {
       const cred = await this.auth.login(this.email, this.password);
       if (cred?.user) {
+        this.stats.evento('sesion_iniciada', { metodo: 'correo' });
         await this.entrar();
       } else {
         this.error.set('No se pudo iniciar la sesión. Intenta de nuevo.');
       }
     } catch (e: unknown) {
-      this.error.set(this.mapError((e as { code?: string })?.code));
+      const code = (e as { code?: string })?.code;
+      this.stats.evento('login_fallido', { metodo: 'correo', motivo: code ?? 'desconocido' });
+      this.error.set(this.mapError(code));
     } finally {
       this.loading.set(false);
     }
@@ -340,9 +350,11 @@ export class LoginComponent {
           this.passwordVincular = '';
           this.mostrarVinculo.set(true);
         } else {
+          this.stats.evento('login_fallido', { metodo: 'google', motivo: code ?? 'desconocido' });
           this.error.set(this.mapErrorGoogle(code));
         }
       } else {
+        this.stats.evento('login_fallido', { metodo: 'google', motivo: code ?? 'desconocido' });
         this.error.set(this.mapErrorGoogle(code));
       }
     } finally {
@@ -404,7 +416,11 @@ export class LoginComponent {
         createdAt: serverTimestamp(),
       });
       await this.auth.avisarRegistro();
+      // Primera vez con Google: cuenta creada y a la espera de validación.
+      this.stats.evento('cuenta_creada', { metodo: 'google' });
+      this.stats.evento('registro_pendiente_validacion', { metodo: 'google' });
     }
+    this.stats.evento('sesion_iniciada', { metodo: 'google' });
     await this.entrar();
   }
 
