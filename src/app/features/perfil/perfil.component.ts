@@ -191,56 +191,61 @@ import { APP_VERSION } from '../../core/version';
       }
 
       @if (esMio() && validada()) {
-        <section class="panel">
+        <!-- Un solo panel de Notificaciones con los dos canales adentro. -->
+        <section class="panel panel--notif">
           <div class="panel-head">
             <h3><i class="ti ti-bell"></i> Notificaciones</h3>
           </div>
-          <app-notificaciones-boton [pushActivo]="me()?.pushActivo === true" />
-        </section>
+          <p class="notif-intro">
+            Elige por dónde recibir los avisos de tus jornadas, resultados y torneos.
+          </p>
 
-        <section class="panel">
-          <div class="panel-head">
-            <h3><i class="ti ti-brand-telegram"></i> Avisos por Telegram</h3>
-            @if (conectado()) {
-              <span class="marca-ok"><i class="ti ti-circle-check"></i> Conectado</span>
-            }
+          <!-- Canal 1: este dispositivo (push) -->
+          <div class="canal">
+            <app-notificaciones-boton [pushActivo]="me()?.pushActivo === true" />
           </div>
 
-          @if (conectado()) {
-            <label class="switch">
-              <span class="switch-texto">Quiero recibir avisos de mis torneos</span>
-              <input
-                type="checkbox"
-                class="switch-input"
-                [ngModel]="activo"
-                (ngModelChange)="alternarAvisos($event)"
-              />
-              <span class="switch-pista" aria-hidden="true"></span>
-            </label>
+          <!-- Canal 2: Telegram -->
+          <div class="canal canal--tg">
+            <div class="fila">
+              <div class="txt">
+                <span class="tit"><i class="ti ti-brand-telegram"></i> Telegram</span>
+                <small class="pista">
+                  @if (conectado()) {
+                    Recibes los avisos en tu chat de Telegram.
+                  } @else {
+                    Conéctalo con un toque y recibe los avisos en tu chat, sin copiar códigos.
+                  }
+                </small>
+              </div>
 
-            <p class="ayuda-tg">
-              También puedes escribir <strong>/stop</strong> en el chat del bot para
-              dejar de recibirlos.
-            </p>
-          } @else {
-            <p class="ayuda-tg">
-              <strong>No pierdas un torneo por olvido.</strong>
-              Te aviso en cuanto abra la jornada, mientras todavía hay tiempo de elegir,
-              y te mando los resultados apenas salen.
-            </p>
-            <p class="ayuda-tg ayuda-tg--chica">
-              Se conecta con un toque. No tienes que copiar ningún número.
-            </p>
+              @if (conectado()) {
+                <label class="switch">
+                  <input
+                    type="checkbox"
+                    class="switch-input"
+                    [ngModel]="activo"
+                    (ngModelChange)="alternarAvisos($event)"
+                  />
+                  <span class="switch-pista" aria-hidden="true"></span>
+                </label>
+              } @else {
+                <button class="btn-tg" [disabled]="guardandoTg()" (click)="conectar()">
+                  <i class="ti ti-brand-telegram"></i>
+                  {{ guardandoTg() ? 'Preparando…' : 'Conectar' }}
+                </button>
+              }
+            </div>
 
-            <button class="btn btn--principal" [disabled]="guardandoTg()" (click)="conectar()">
-              <i class="ti ti-brand-telegram"></i>
-              {{ guardandoTg() ? 'Preparando…' : 'Conectar Telegram' }}
-            </button>
-          }
-
-          @if (mensajeTg()) {
-            <p class="aviso-tg" [class.aviso-tg--error]="errorTg()">{{ mensajeTg() }}</p>
-          }
+            @if (conectado()) {
+              <p class="ayuda-tg ayuda-tg--chica">
+                Escribe <strong>/stop</strong> en el chat del bot para dejar de recibirlos.
+              </p>
+            }
+            @if (mensajeTg()) {
+              <p class="aviso-tg" [class.aviso-tg--error]="errorTg()">{{ mensajeTg() }}</p>
+            }
+          </div>
         </section>
       }
 
@@ -254,6 +259,7 @@ import { APP_VERSION } from '../../core/version';
 
       <button class="version" (click)="verNovedades()">
         v{{ version }} · Ver novedades
+        <span class="marca-agua">Fut by AutomatePower</span>
       </button>
     </div>
   `,
@@ -337,12 +343,32 @@ import { APP_VERSION } from '../../core/version';
       .trofeo-premio { font-size: 14px; font-weight: 600; color: var(--success-text); }
       .ayuda-tg { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; line-height: 1.5; }
       .ayuda-tg strong { color: var(--text-primary); }
-      .ayuda-tg--chica { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+      .ayuda-tg--chica { font-size: 12px; color: var(--text-muted); margin: 8px 0 0; }
+
+      /* Panel de notificaciones con los dos canales como filas separadas. */
+      .notif-intro { font-size: 12px; color: var(--text-secondary); margin: 0 0 4px; line-height: 1.45; }
+      .canal { padding: 14px 0; border-top: 1px solid var(--border); }
+      .canal:first-of-type { border-top: none; }
+      .canal .fila {
+        display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      }
+      .canal .txt { min-width: 0; }
+      .canal .tit { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; }
+      .canal .pista { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 3px; line-height: 1.4; }
+      .btn-tg {
+        flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
+        padding: 9px 15px; border-radius: var(--radius); cursor: pointer;
+        border: none; background: var(--accent-fill); color: #fff; font-weight: 600; font-size: 13px;
+      }
+      .btn-tg:hover { filter: brightness(1.06); }
+      .btn-tg:disabled { opacity: 0.6; cursor: default; }
       .switch {
         display: flex; align-items: center; justify-content: space-between; gap: 14px;
         margin-bottom: 16px; font-size: 14px; cursor: pointer;
       }
       .switch-texto { flex: 1; }
+      /* Dentro de un canal, el switch es solo el interruptor a la derecha. */
+      .canal .switch { margin-bottom: 0; flex-shrink: 0; }
 
       /* El interruptor real está oculto; se dibuja la pista y el botón. */
       .switch-input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -405,6 +431,11 @@ import { APP_VERSION } from '../../core/version';
         background: transparent; border: none; padding: 8px;
       }
       .version:hover { opacity: 1; color: var(--accent-text); }
+      .marca-agua {
+        display: block; margin-top: 3px;
+        font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+        color: var(--text-muted); opacity: 0.7;
+      }
     `,
   ],
 })
