@@ -27,6 +27,34 @@ export interface Novedad {
 
 export const NOVEDADES: Novedad[] = [
     {
+        version: '2.3.0',
+        fecha: 'Septiembre 2026',
+        resumen: 'Rediseñamos las notificaciones: ahora tú eliges qué avisos recibir.',
+        puntos: [
+            {
+                icono: 'ti-bell-cog',
+                titulo: 'Notificaciones a tu medida',
+                detalle:
+                    'Rediseñamos el panel de avisos de tu perfil. Ahora eliges qué recibir: tus torneos, ' +
+                    'el resumen de oportunidades o los resultados de tus pronósticos. Solo lo que te importa.',
+            },
+            {
+                icono: 'ti-calendar-event',
+                titulo: 'Resumen del día',
+                detalle:
+                    'Un solo aviso al día junta los torneos públicos y partidos por cerrar de tu grupo o ' +
+                    'globales. Sin llenarte de notificaciones: todo en un mensaje.',
+            },
+            {
+                icono: 'ti-ballpen',
+                titulo: 'Avisos de tus pronósticos',
+                detalle:
+                    'Cuando se liquida un partido que pronosticaste, te avisamos si le atinaste, ' +
+                    'cuánto ganaste o si te devolvimos tu apuesta.',
+            },
+        ],
+    },
+    {
         version: '2.2.0',
         fecha: 'Septiembre 2026',
         resumen: 'Grupos privados, eliminatorias y tu saldo con su historial a un toque.',
