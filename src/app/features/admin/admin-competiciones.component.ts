@@ -535,9 +535,15 @@ export class AdminCompeticionesComponent {
   nombre = '';
 
   /* --- Conexión con la API (TheSportsDB) --- */
-  /** Ligas soportadas por la API. Agregar aquí para habilitar más. */
+  /** Ligas soportadas por la API. Mismos ids que el buscador de partidos. */
   readonly ligasApi: Array<{ id: number; nombre: string }> = [
     { id: 4350, nombre: 'Liga MX' },
+    { id: 4480, nombre: 'Champions League' },
+    { id: 4328, nombre: 'Premier League' },
+    { id: 4335, nombre: 'LaLiga' },
+    { id: 4332, nombre: 'Serie A' },
+    { id: 4331, nombre: 'Bundesliga' },
+    { id: 4334, nombre: 'Ligue 1' },
   ];
   /** Temporadas elegibles (formato de la API). La más reciente primero. */
   readonly temporadasApi: string[] = ['2026-2027', '2025-2026', '2024-2025'];
