@@ -28,7 +28,7 @@ import { Partido } from '../../core/models/partido.model';
       }
 
       @for (p of pronosticos(); track p.id) {
-        <div class="row" [class.row--ok]="p.estado === 'ganado'" [class.row--ko]="p.estado === 'perdido'">
+        <div class="row" [class.row--ok]="p.estado === 'ganado'" [class.row--ko]="p.estado === 'perdido'" [class.row--cerrado]="cerrado(p.estado)">
           <div class="row-main">
             <div class="row-title">{{ p.partidoLabel }}</div>
             <div class="row-sub">
@@ -82,6 +82,9 @@ import { Partido } from '../../core/models/partido.model';
       /* Borde izquierdo verde/rojo según el resultado del pronóstico. */
       .row--ok { border-left-color: var(--success-text); }
       .row--ko { border-left-color: var(--danger-text); }
+      /* Cerrados: atenuados, igual que los torneos finalizados. */
+      .row--cerrado { opacity: 0.6; }
+      .row--cerrado:hover { opacity: 0.85; }
       .row-main { flex: 1; min-width: 0; }
       .row-title { font-size: 14px; font-weight: 600; }
       .row-sub { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
@@ -172,12 +175,28 @@ export class MisPronosticosComponent {
     return 'Empate';
   }
 
-  /** Pronósticos del contexto activo (Global o el grupo elegido). */
+  /**
+   * Pronósticos del contexto activo (Global o el grupo elegido), ordenados:
+   * los activos arriba y los ya cerrados (ganado/perdido/devuelto) al final,
+   * igual que la vista de torneos.
+   */
   readonly pronosticos = computed(() => {
     const ctx = this.contexto.grupoId();
     const mapa = this.grupoDePartido();
-    return this.pronosticosRaw().filter((p) => (mapa.get(p.partidoId) ?? null) === ctx);
+    return this.pronosticosRaw()
+      .filter((p) => (mapa.get(p.partidoId) ?? null) === ctx)
+      .sort((a, b) => this.rangoEstado(a.estado) - this.rangoEstado(b.estado));
   });
+
+  /** Activo primero (0), cerrados al final (1). */
+  private rangoEstado(estado: string): number {
+    return estado === 'activo' ? 0 : 1;
+  }
+
+  /** ¿El pronóstico ya está cerrado? Para atenuarlo visualmente. */
+  cerrado(estado: string): boolean {
+    return estado !== 'activo';
+  }
 
   /** IDs de los partidos que siguen aceptando pronósticos (abiertos). */
   private readonly abiertos = computed(
