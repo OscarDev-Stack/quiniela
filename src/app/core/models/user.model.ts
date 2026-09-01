@@ -39,6 +39,15 @@ export interface AppUser {
     pushActivo?: boolean;
     pushTokens?: string[];
 
+    /* Preferencias de categoría de notificaciones (qué tipos quiere recibir).
+       Es independiente del canal (push/Telegram). Defaults: inscritos ON,
+       oportunidades OFF, partidos ON. */
+    prefsNotif?: {
+        torneosInscritos?: boolean;
+        oportunidades?: boolean;
+        partidos?: boolean;
+    };
+
     /* Cuenta de puro administrador: no aparece en el ranking. */
     noParticipa?: boolean;
     /* Código temporal mientras se conecta Telegram. */

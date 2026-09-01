@@ -246,6 +246,56 @@ import { APP_VERSION } from '../../core/version';
               <p class="aviso-tg" [class.aviso-tg--error]="errorTg()">{{ mensajeTg() }}</p>
             }
           </div>
+
+          <!-- Categorías: qué tipo de avisos recibir. Solo tiene sentido si
+               hay algún canal activo (push o Telegram). -->
+          @if (algunCanalActivo()) {
+            <div class="canal canal--cat">
+              <p class="cat-titulo">¿Qué avisos quieres recibir?</p>
+
+              <label class="switch switch--cat">
+                <span class="txt">
+                  <span class="tit">Torneos donde participo</span>
+                  <small class="pista">Jornadas, resultados y premios de tus torneos y eliminatorias.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  class="switch-input"
+                  [ngModel]="catInscritos()"
+                  (ngModelChange)="alternarCategoria('torneosInscritos', $event)"
+                />
+                <span class="switch-pista" aria-hidden="true"></span>
+              </label>
+
+              <label class="switch switch--cat">
+                <span class="txt">
+                  <span class="tit">Oportunidades</span>
+                  <small class="pista">Torneos públicos y partidos por cerrar en tu grupo o global.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  class="switch-input"
+                  [ngModel]="catOportunidades()"
+                  (ngModelChange)="alternarCategoria('oportunidades', $event)"
+                />
+                <span class="switch-pista" aria-hidden="true"></span>
+              </label>
+
+              <label class="switch switch--cat">
+                <span class="txt">
+                  <span class="tit">Resultados de mis pronósticos</span>
+                  <small class="pista">Cuando se liquida un partido que pronosticaste.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  class="switch-input"
+                  [ngModel]="catPartidos()"
+                  (ngModelChange)="alternarCategoria('partidos', $event)"
+                />
+                <span class="switch-pista" aria-hidden="true"></span>
+              </label>
+            </div>
+          }
         </section>
       }
 
@@ -369,6 +419,14 @@ import { APP_VERSION } from '../../core/version';
       .switch-texto { flex: 1; }
       /* Dentro de un canal, el switch es solo el interruptor a la derecha. */
       .canal .switch { margin-bottom: 0; flex-shrink: 0; }
+
+      /* Categorías: título y switches con texto a la izquierda. */
+      .canal--cat { display: flex; flex-direction: column; gap: 14px; }
+      .cat-titulo { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+      .canal .switch--cat { margin-bottom: 0; flex-shrink: 1; width: 100%; }
+      .switch--cat .txt { flex: 1; display: flex; flex-direction: column; }
+      .switch--cat .tit { font-size: 14px; font-weight: 600; }
+      .switch--cat .pista { font-size: 12px; color: var(--text-secondary); margin-top: 3px; line-height: 1.4; }
 
       /* El interruptor real está oculto; se dibuja la pista y el botón. */
       .switch-input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -649,6 +707,57 @@ export class PerfilComponent {
       this.toast.exito(valor ? 'Avisos activados.' : 'Avisos en pausa.');
     } catch (e: unknown) {
       this.activo = !valor;
+      this.toast.error((e as Error)?.message ?? 'No se pudo guardar.');
+    }
+  }
+
+  /* --- Categorías de notificación --- */
+  /** ¿Tiene algún canal activo? Solo entonces mostramos las categorías. */
+  readonly algunCanalActivo = computed(
+    () => this.me()?.pushActivo === true || this.conectado(),
+  );
+
+  /**
+   * Override optimista mientras Firestore propaga el cambio, para que el
+   * switch reaccione al instante. Se limpia solo cuando llega el valor real.
+   */
+  private readonly prefsOverride = signal<Partial<{
+    torneosInscritos: boolean;
+    oportunidades: boolean;
+    partidos: boolean;
+  }>>({});
+
+  /** Lee una categoría con default y respetando el override optimista. */
+  private leerCat(cat: 'torneosInscritos' | 'oportunidades' | 'partidos', porDefecto: boolean): boolean {
+    const ov = this.prefsOverride()[cat];
+    if (ov !== undefined) return ov;
+    return this.me()?.prefsNotif?.[cat] ?? porDefecto;
+  }
+
+  readonly catInscritos = computed(() => this.leerCat('torneosInscritos', true));
+  readonly catOportunidades = computed(() => this.leerCat('oportunidades', false));
+  readonly catPartidos = computed(() => this.leerCat('partidos', true));
+
+  /** Cambia una categoría y guarda las tres en el servidor. */
+  async alternarCategoria(
+    cat: 'torneosInscritos' | 'oportunidades' | 'partidos',
+    valor: boolean,
+  ): Promise<void> {
+    // Optimista: reflejamos el toque de inmediato.
+    this.prefsOverride.update((p) => ({ ...p, [cat]: valor }));
+
+    const prefs = {
+      torneosInscritos: this.catInscritos(),
+      oportunidades: this.catOportunidades(),
+      partidos: this.catPartidos(),
+    };
+
+    try {
+      await this.perfil.guardarPrefsNotif(prefs);
+      this.toast.exito('Preferencias guardadas.');
+    } catch (e: unknown) {
+      // Revertimos el override de esa categoría.
+      this.prefsOverride.update((p) => ({ ...p, [cat]: !valor }));
       this.toast.error((e as Error)?.message ?? 'No se pudo guardar.');
     }
   }

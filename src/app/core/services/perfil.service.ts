@@ -101,6 +101,19 @@ export class PerfilService {
         return { prueba: res.data.prueba };
     }
 
+    /**
+     * Guarda las preferencias de categoría de notificaciones (qué tipos de
+     * aviso quiere recibir). Es independiente del canal (push/Telegram).
+     */
+    async guardarPrefsNotif(prefs: {
+        torneosInscritos: boolean;
+        oportunidades: boolean;
+        partidos: boolean;
+    }): Promise<void> {
+        const fn = httpsCallable<typeof prefs, { ok: boolean }>(this.fns, 'guardarPrefsNotif');
+        await fn(prefs);
+    }
+
     /** Pide que le reinicien el saldo. */
     async solicitarReinicio(): Promise<void> {
         const fn = httpsCallable<Record<string, never>, { ok: boolean }>(

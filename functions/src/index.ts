@@ -2459,6 +2459,7 @@ export const resolverJornadaCompeticion = onCall(
                     `<b>${String(torneo['nombre'] ?? 'Torneo')}</b>\n` +
                     `Jornada ${j.numero} calificada.\n\n${podio}\n\n` +
                     'Ya puedes ver los cartones de todos en la app.',
+                    'torneosInscritos',
                 );
 
                 const ultima = Number(torneo['jornadas'] ?? 0);
@@ -2558,6 +2559,7 @@ export const resolverJornadaCompeticion = onCall(
                     `😔 <b>${String(torneo['nombre'] ?? 'Torneo')}</b>\n` +
                     `Quedaste fuera en la jornada ${j.numero}. ${razon}\n\n` +
                     `Siguen ${vivos.size} en pie. Puedes ver cómo termina en la app.`,
+                    'torneosInscritos',
                 );
             }
             const bolsaBruta = Number(torneo['bolsa'] ?? 0);
@@ -2654,6 +2656,7 @@ export const resolverJornadaCompeticion = onCall(
                     `<b>${nombreTorneo}</b>\n` +
                     `¡Terminó el torneo! Ganó ${lista.map((g) => g.alias).join(', ')}.` +
                     (premio > 0 ? `\nPremio: ${premio} pts por cabeza.` : ''),
+                    'torneosInscritos',
                 );
             } else {
                 await torneoRef.update({ jornadaActual: j.numero + 1 });
@@ -2664,6 +2667,7 @@ export const resolverJornadaCompeticion = onCall(
                     `<b>${nombreTorneo}</b>\n` +
                     `Jornada ${j.numero} resuelta. Quedan ${sobreviven} en pie.\n` +
                     `Ya puedes elegir tu equipo para la jornada ${j.numero + 1}.`,
+                    'torneosInscritos',
                 );
             }
         }
@@ -3058,6 +3062,7 @@ export const cerrarInscripciones = onSchedule(
                 (esQuiniela
                     ? `Ya puedes capturar tus marcadores de la jornada ${jornada}.`
                     : `Ya puedes elegir tu equipo para la jornada ${jornada}.`),
+                'torneosInscritos',
             );
         }
     },
@@ -3643,7 +3648,33 @@ async function enviarPush(uid: string, tokens: string[], titulo: string, cuerpo:
 }
 
 /** Avisa a varios de una vez, saltando a quien no quiera recibir. */
-async function avisar(uids: string[], texto: string): Promise<number> {
+/** Categorías de notificación que el usuario puede activar/desactivar. */
+type CategoriaNotif = 'torneosInscritos' | 'oportunidades' | 'partidos';
+
+/** Defaults si el usuario aún no configuró sus categorías. */
+const DEFAULT_PREFS_NOTIF: Record<CategoriaNotif, boolean> = {
+    torneosInscritos: true,
+    oportunidades: false,
+    partidos: true,
+};
+
+/** ¿El usuario quiere recibir avisos de esta categoría? (con defaults). */
+function quiereCategoria(u: Record<string, unknown>, categoria?: CategoriaNotif): boolean {
+    if (!categoria) return true; // avisos sin categoría (admin/operativos): siempre
+    const prefs = (u['prefsNotif'] ?? {}) as Partial<Record<CategoriaNotif, boolean>>;
+    return prefs[categoria] ?? DEFAULT_PREFS_NOTIF[categoria];
+}
+
+/**
+ * Avisa a varios de una vez por push y/o Telegram, respetando el canal y la
+ * CATEGORÍA de cada usuario. Si no se pasa categoría, el aviso es operativo
+ * (p. ej. avisos a admin) y se envía siempre que tenga algún canal activo.
+ */
+async function avisar(
+    uids: string[],
+    texto: string,
+    categoria?: CategoriaNotif,
+): Promise<number> {
     if (uids.length === 0) return 0;
 
     const docs = await db.getAll(...uids.map((uid) => db.doc(`users/${uid}`)));
@@ -3652,6 +3683,9 @@ async function avisar(uids: string[], texto: string): Promise<number> {
     for (const doc of docs) {
         const u = doc.data() as Record<string, unknown> | undefined;
         if (!u) continue;
+
+        // Respeta la preferencia de categoría del usuario.
+        if (!quiereCategoria(u, categoria)) continue;
 
         const quiereTelegram = u['notificaciones'] === true;
         const quierePush = u['pushActivo'] === true;
@@ -3682,6 +3716,26 @@ async function avisar(uids: string[], texto: string): Promise<number> {
  * esto. Se maneja con dos campos en el usuario: pushActivo (el switch)
  * y pushTokens (los dispositivos donde recibir).
  */
+/**
+ * Guarda las preferencias de CATEGORÍA de notificaciones del usuario
+ * (qué tipos quiere recibir). Es independiente del canal (push/Telegram).
+ */
+export const guardarPrefsNotif = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const d = req.data ?? {};
+    // Solo guardamos las tres categorías conocidas, como booleanos.
+    const prefsNotif = {
+        torneosInscritos: d.torneosInscritos !== false, // default true
+        oportunidades: d.oportunidades === true, // default false
+        partidos: d.partidos !== false, // default true
+    };
+
+    await db.doc(`users/${uid}`).set({ prefsNotif }, { merge: true });
+    return { ok: true };
+});
+
 export const guardarPush = onCall(opcionesCall, async (req) => {
     const uid = req.auth?.uid;
     if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
@@ -4133,6 +4187,7 @@ export const recordarJornada = onSchedule(
                 (esQuiniela
                     ? 'Si no los mandas, esta jornada te quedas en ceros.'
                     : 'Si no eliges, quedas eliminado.'),
+                'torneosInscritos',
             );
 
             avisados += faltantes.length;
@@ -4243,6 +4298,7 @@ export const revivir = onCall(
             `❤️‍🔥 <b>${String((await torneoRef.get()).data()?.['nombre'] ?? 'Torneo')}</b>\n` +
             `Reviviste en la jornada ${resultado.jornada} por ${resultado.costo} pts.\n` +
             'Vuelves con las vidas que tenías al caer. ¡Elige con cuidado!',
+            'torneosInscritos',
         );
 
         return { ok: true, ...resultado };
@@ -4596,6 +4652,7 @@ export const asignarDuenoBracket = onCall({ ...opcionesCall, secrets: [telegramT
             `⚽ <b>${String(bd['nombre'] ?? 'Eliminatoria')}</b>\n` +
             `Te asignaron a <b>${equipo}</b>.\n` +
             (costo > 0 ? `Entra a la app para aceptar (cuesta ${costo} pts).` : 'Entra a la app para aceptar.'),
+            'torneosInscritos',
         );
     }
 
@@ -5131,6 +5188,7 @@ async function calificarDuenos(
             `🏆 <b>${String(b['nombre'] ?? 'Eliminatoria')}</b>\n` +
             `¡Tu equipo ${campeon} fue campeón!\n` +
             (bolsa > 0 ? `Ganaste ${bolsa} pts. ¡Felicidades!` : '¡Felicidades!'),
+            'torneosInscritos',
         );
     }
 
@@ -5253,6 +5311,7 @@ export const calificarBracket = onCall(
                     `🏆 <b>${String(b['nombre'] ?? 'Eliminatoria')}</b>\n` +
                     `Quedaste en ${i + 1}° lugar con ${jug.puntos} pts.\n` +
                     `Ganaste ${premio} pts. ¡Felicidades!`,
+                    'torneosInscritos',
                 );
             }
         }
@@ -5391,6 +5450,7 @@ async function cobrarDuenosPendientes(
                 `⚽ <b>${String(b['nombre'] ?? 'Eliminatoria')}</b>\n` +
                 `El torneo arrancó con tu equipo ${dn.equipo}.` +
                 (costo > 0 ? ` Se te cobró la entrada de ${costo} pts.` : ''),
+                'torneosInscritos',
             );
         } else {
             // Sin saldo: se libera el equipo y se saca de su lista.
@@ -5399,6 +5459,7 @@ async function cobrarDuenosPendientes(
                 [uid],
                 `⚠️ <b>${String(b['nombre'] ?? 'Eliminatoria')}</b>\n` +
                 `No tenías puntos para la entrada, así que quedaste fuera y ${dn.equipo} se liberó.`,
+                'torneosInscritos',
             );
         }
     }
