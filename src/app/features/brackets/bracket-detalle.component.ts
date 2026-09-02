@@ -72,29 +72,12 @@ import { Bracket } from '../../core/models/bracket.model';
           />
         }
 
-        <section class="panel">
-          <h2>Cuadro</h2>
-          <app-cuadro-bracket [bracket]="b" [misAvances]="avancesParaCuadro()" [pronosticos]="pronosticos()" />
-          @if (avancesParaCuadro()) {
-            <div class="leyenda-cuadro">
-              <span class="leyenda-item"><span class="punto punto--ok"></span> Acertaste</span>
-              <span class="leyenda-item"><span class="punto punto--mal"></span> Fallaste</span>
-            </div>
-          }
-        </section>
-
-        @if (b.estado === 'en-curso' || b.estado === 'finalizado') {
-          <section class="panel">
-            <h2>{{ b.estado === 'finalizado' ? 'Resultados' : 'Pronósticos de todos' }}</h2>
-            <app-tabla-bracket [pronosticos]="pronosticos()" [miUid]="miUid()" />
-          </section>
-        }
-
-        <!-- ── MODO DUEÑOS ── -->
+        <!-- ARRIBA DEL TODO: lo tuyo. Es lo primero que la gente quiere ver:
+             qué equipo le tocó (dueños) o qué pronosticó (pronóstico). -->
         @if (b.modo === 'duenos') {
           @if (miDueno(); as d) {
             @if (d.estado === 'invitado') {
-              <section class="panel panel--aviso">
+              <section class="panel panel--aviso panel--destacado">
                 <h2>Te tocó un equipo</h2>
                 <div class="tu-equipo">
                   <app-escudo [equipo]="d.equipo" [size]="88" />
@@ -116,17 +99,45 @@ import { Bracket } from '../../core/models/bracket.model';
                 </button>
               </section>
             } @else {
-              <section class="panel">
+              <section class="panel panel--destacado">
                 <h2>Tu equipo</h2>
                 <div class="tu-equipo">
                   <app-escudo [equipo]="d.equipo" [size]="88" />
                   <span class="tu-equipo-nom">{{ d.equipo }}</span>
                 </div>
-                <p class="aviso-txt">Ganas si {{ d.equipo }} es campeón. Sigue el cuadro de arriba.</p>
+                <p class="aviso-txt">Ganas si {{ d.equipo }} es campeón. Sigue el cuadro de abajo.</p>
               </section>
             }
           }
+        } @else {
+          @if (b.estado !== 'inscripcion' || acepto()) {
+            <section class="panel panel--destacado">
+              <h2>Tu pronóstico</h2>
+              <app-pronostico-bracket [bracket]="b" />
+            </section>
+          }
+        }
 
+        <section class="panel">
+          <h2>Cuadro</h2>
+          <app-cuadro-bracket [bracket]="b" [misAvances]="avancesParaCuadro()" [pronosticos]="pronosticos()" />
+          @if (avancesParaCuadro()) {
+            <div class="leyenda-cuadro">
+              <span class="leyenda-item"><span class="punto punto--ok"></span> Acertaste</span>
+              <span class="leyenda-item"><span class="punto punto--mal"></span> Fallaste</span>
+            </div>
+          }
+        </section>
+
+        @if (b.estado === 'en-curso' || b.estado === 'finalizado') {
+          <section class="panel">
+            <h2>{{ b.estado === 'finalizado' ? 'Resultados' : 'Pronósticos de todos' }}</h2>
+            <app-tabla-bracket [pronosticos]="pronosticos()" [miUid]="miUid()" />
+          </section>
+        }
+
+        <!-- ── MODO DUEÑOS ── -->
+        @if (b.modo === 'duenos') {
           <!-- Quién le tocó a quién (visible para todos) -->
           @if ((b.duenos ?? []).length > 0) {
             <section class="panel">
@@ -151,11 +162,6 @@ import { Bracket } from '../../core/models/bracket.model';
         } @else {
         <!-- ── MODO PRONÓSTICO (el de siempre) ── -->
         @if (b.estado !== 'inscripcion' || acepto()) {
-          <section class="panel">
-            <h2>Tu pronóstico</h2>
-            <app-pronostico-bracket [bracket]="b" />
-          </section>
-
           <!-- Desglose: de dónde salieron mis puntos (solo cuando ya cerró). -->
           @if ((b.estado === 'en-curso' || b.estado === 'finalizado') && miPron()) {
             <section class="panel">
@@ -228,6 +234,18 @@ import { Bracket } from '../../core/models/bracket.model';
         border-radius: 12px; padding: 16px; margin-bottom: 14px;
       }
       .panel h2 { font-size: 15px; font-weight: 600; margin: 0 0 12px; }
+      /* Panel personal (tu equipo / tu pronóstico), arriba y resaltado. */
+      .panel--destacado {
+        border-color: color-mix(in srgb, var(--accent-fill) 40%, var(--border));
+        background:
+          linear-gradient(180deg,
+            color-mix(in srgb, var(--surface-2) 90%, var(--accent-fill)) 0%,
+            var(--surface-2) 60%);
+      }
+      .panel--destacado > h2 {
+        display: flex; align-items: center; gap: 7px;
+        color: var(--accent-text);
+      }
       .cargando { font-size: 14px; color: var(--text-muted); }
       .leyenda-cuadro {
         display: flex; gap: 16px; margin-top: 10px;

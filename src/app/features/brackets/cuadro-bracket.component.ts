@@ -40,6 +40,10 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
 
       <!-- Una sola ronda a lo ancho. El track por ronda reinicia la animación. -->
       @for (r of [rondaActiva()]; track r) {
+        <div class="ronda-cabecera">
+          <span class="ronda-titulo">{{ nombre(r) }}</span>
+          <span class="ronda-conteo">{{ llavesDe(r).length }} {{ llavesDe(r).length === 1 ? 'llave' : 'llaves' }}</span>
+        </div>
         <div class="llaves">
           @for (l of llavesDe(r); track l.id) {
             <div class="llave" [class.llave--resuelta]="!!l.ganador">
@@ -54,6 +58,9 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
                   <span class="siembra">{{ l.local.siembra }}</span>
                   <app-escudo [equipo]="l.local.nombre" [size]="18" />
                   <span class="equipo">{{ l.local.nombre }}</span>
+                  @if (esGanador(l, l.local.nombre)) {
+                    <span class="trofeo" title="Avanzó"><i class="ti ti-trophy"></i></span>
+                  }
                   @if (elegiEste(l, l.local.nombre)) {
                     <span class="mi-pick" title="Tu pronóstico"><i class="ti ti-user-check"></i></span>
                   }
@@ -79,6 +86,8 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
                 </div>
               }
 
+              <span class="vs">VS</span>
+
               <!-- Lado visitante -->
               <div
                 class="lado"
@@ -90,6 +99,9 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
                   <span class="siembra">{{ l.visitante.siembra }}</span>
                   <app-escudo [equipo]="l.visitante.nombre" [size]="18" />
                   <span class="equipo">{{ l.visitante.nombre }}</span>
+                  @if (esGanador(l, l.visitante.nombre)) {
+                    <span class="trofeo" title="Avanzó"><i class="ti ti-trophy"></i></span>
+                  }
                   @if (elegiEste(l, l.visitante.nombre)) {
                     <span class="mi-pick" title="Tu pronóstico"><i class="ti ti-user-check"></i></span>
                   }
@@ -137,21 +149,23 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
       .cuadro {
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 16px;
         padding: 4px 0 12px;
       }
 
-      /* Tabs de ronda: se desplazan solos si no caben. */
+      /* Tabs de ronda: pastillas con scroll propio si no caben. */
       .rondas-tabs {
         display: flex;
         gap: 8px;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
-        padding-bottom: 2px;
+        padding: 2px;
+        scrollbar-width: none;
       }
+      .rondas-tabs::-webkit-scrollbar { display: none; }
       .tab {
         flex-shrink: 0;
-        padding: 7px 14px;
+        padding: 8px 16px;
         border-radius: 999px;
         border: 1px solid var(--border);
         background: var(--surface-1);
@@ -160,24 +174,51 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         font-weight: 700;
         letter-spacing: 0.02em;
         cursor: pointer;
-        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+        transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease,
+          color 0.15s ease, border-color 0.15s ease;
       }
+      .tab:hover { color: var(--text-primary); border-color: var(--border-strong); }
       .tab--activa {
-        background: var(--accent-fill);
+        background: linear-gradient(135deg,
+          var(--accent-fill),
+          color-mix(in srgb, var(--accent-fill) 70%, #7c4dff));
         color: #fff;
-        border-color: var(--accent-fill);
+        border-color: transparent;
+        box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--accent-fill) 80%, transparent);
+        transform: translateY(-1px);
       }
 
-      /* Llaves de la ronda activa, apiladas. La animación entra al cambiar
-         de ronda (el @for con track por ronda vuelve a montar el bloque). */
+      /* Cabecera de la ronda activa. */
+      .ronda-cabecera {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 2px 2px -4px;
+      }
+      .ronda-titulo {
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        color: var(--text-primary);
+      }
+      .ronda-conteo {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+      }
+
+      /* Llaves de la ronda activa. Animación al cambiar de ronda. */
       .llaves {
         display: flex;
         flex-direction: column;
-        gap: 12px;
-        animation: entra-ronda 0.24s ease;
+        gap: 14px;
+        animation: entra-ronda 0.26s cubic-bezier(0.22, 1, 0.36, 1);
       }
       @keyframes entra-ronda {
-        from { opacity: 0; transform: translateX(10px); }
+        from { opacity: 0; transform: translateX(14px); }
         to { opacity: 1; transform: translateX(0); }
       }
       @media (prefers-reduced-motion: reduce) {
@@ -186,65 +227,89 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
 
       .llave {
         position: relative;
-        background: var(--surface-2);
+        background:
+          linear-gradient(180deg,
+            color-mix(in srgb, var(--surface-2) 92%, var(--accent-fill)) 0%,
+            var(--surface-2) 42%);
         border: 1px solid var(--border);
-        border-radius: 10px;
+        border-radius: 14px;
         overflow: hidden;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+        transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
       }
+      .llave:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.5);
+      }
+      /* Resuelta: acento a la izquierda y borde teñido. */
       .llave--resuelta {
-        border-color: color-mix(in srgb, var(--accent-fill) 40%, var(--border));
+        border-color: color-mix(in srgb, var(--accent-fill) 45%, var(--border));
+      }
+      .llave--resuelta::before {
+        content: '';
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 3px;
+        background: linear-gradient(180deg, var(--accent-fill),
+          color-mix(in srgb, var(--accent-fill) 60%, #7c4dff));
       }
 
       .lado {
+        position: relative;
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 9px 10px;
-        font-size: 13px;
+        gap: 10px;
+        padding: 12px 12px;
+        font-size: 14px;
       }
-      .lado + .lado {
-        border-top: 1px solid var(--border);
-      }
+      /* Ganador: fondo resaltado, texto fuerte y escudo un pelín mayor. */
       .lado--gana {
-        background: color-mix(in srgb, var(--accent-fill) 12%, transparent);
+        background: linear-gradient(90deg,
+          color-mix(in srgb, var(--accent-fill) 16%, transparent),
+          transparent 85%);
       }
       .lado--gana .equipo {
-        font-weight: 700;
+        font-weight: 800;
         color: var(--text-primary);
       }
-      /*
-       * Resaltado del pronóstico propio: verde si acerté (mi elegido fue
-       * el ganador real de esa llave), rojo tenue si fallé. Un borde
-       * izquierdo marca el lado sin pelear con el resaltado del ganador.
-       */
-      .lado--acierto {
-        box-shadow: inset 3px 0 0 0 var(--success-text);
-      }
-      .lado--fallo {
-        box-shadow: inset 3px 0 0 0 var(--danger-text);
-      }
-      .mi-pick {
+      /* Perdedor (llave ya resuelta): atenuado para que resalte el que pasó. */
+      .llave--resuelta .lado:not(.lado--gana) .equipo { opacity: 0.55; }
+      .llave--resuelta .lado:not(.lado--gana) .siembra { opacity: 0.55; }
+
+      /* Resaltado del pronóstico propio: verde acierto / rojo fallo. */
+      .lado--acierto { box-shadow: inset 3px 0 0 0 var(--success-text); }
+      .lado--fallo { box-shadow: inset 3px 0 0 0 var(--danger-text); }
+
+      .mi-pick, .trofeo {
         flex-shrink: 0;
         display: inline-flex;
         align-items: center;
-        font-size: 12px;
+        font-size: 13px;
         color: var(--text-muted);
       }
+      .trofeo { color: #f1c40f; }
       .lado--acierto .mi-pick { color: var(--success-text); }
       .lado--fallo .mi-pick { color: var(--danger-text); }
 
+      /* Siembra: badge redondo con acento tenue. */
       .siembra {
         flex-shrink: 0;
-        width: 18px;
-        height: 18px;
-        border-radius: 4px;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 10px;
-        font-weight: 700;
-        background: var(--surface-1);
-        color: var(--text-muted);
+        font-size: 11px;
+        font-weight: 800;
+        background: color-mix(in srgb, var(--accent-fill) 14%, var(--surface-1));
+        color: var(--accent-text);
+        border: 1px solid color-mix(in srgb, var(--accent-fill) 25%, transparent);
+      }
+      .lado--gana .siembra {
+        background: var(--accent-fill);
+        color: #fff;
+        border-color: transparent;
       }
       .equipo {
         flex: 1;
@@ -258,18 +323,50 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         color: var(--text-muted);
         font-style: italic;
       }
+      /* Goles: badge circular con el marcador. */
       .goles {
         flex-shrink: 0;
-        font-weight: 700;
+        min-width: 26px;
+        height: 26px;
+        padding: 0 7px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
         font-variant-numeric: tabular-nums;
         color: var(--text-primary);
+        background: var(--surface-1);
+      }
+      .lado--gana .goles {
+        background: color-mix(in srgb, var(--accent-fill) 22%, var(--surface-1));
+        color: var(--accent-text);
+      }
+
+      /* Separador VS entre los dos lados: una fina línea con la etiqueta. */
+      .vs {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
+      }
+      .vs::before, .vs::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border);
       }
 
       .por {
         display: block;
         font-size: 10px;
+        font-weight: 600;
         color: var(--warning-text);
-        padding: 3px 10px 6px;
+        padding: 4px 12px 7px;
         background: color-mix(in srgb, var(--warning-text) 8%, transparent);
       }
 
@@ -279,43 +376,51 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         display: inline-flex;
         align-items: center;
         gap: 3px;
-        padding: 2px 7px;
+        padding: 3px 9px;
         border-radius: 999px;
         border: 1px solid var(--border);
         background: var(--surface-1);
         color: var(--text-muted);
         font-size: 11px;
-        font-weight: 700;
+        font-weight: 800;
         cursor: pointer;
+        transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
       }
       .detalle-btn .chev { font-size: 12px; }
-      .detalle-btn:hover { color: var(--text-secondary); }
+      .detalle-btn:hover {
+        color: var(--accent-text);
+        border-color: color-mix(in srgb, var(--accent-fill) 35%, var(--border));
+      }
 
       /* Panel colapsable: ancho fijo con scroll horizontal si hay muchos. */
       .detalle {
+        position: relative;
+        z-index: 1;
         border-top: 1px dashed var(--border);
-        background: var(--surface-1);
-        animation: entra-detalle 0.18s ease;
+        background: color-mix(in srgb, var(--accent-fill) 5%, var(--surface-1));
+        animation: entra-detalle 0.2s ease;
       }
       @keyframes entra-detalle {
-        from { opacity: 0; }
-        to { opacity: 1; }
+        from { opacity: 0; max-height: 0; }
+        to { opacity: 1; max-height: 80px; }
       }
       .detalle-fila {
         display: flex;
         gap: 6px;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
-        padding: 8px 10px;
+        padding: 9px 12px;
+        scrollbar-width: thin;
       }
       .chip-nom {
         flex-shrink: 0;
-        padding: 3px 9px;
+        padding: 4px 11px;
         border-radius: 999px;
         background: var(--surface-2);
         border: 1px solid var(--border);
         color: var(--text-secondary);
         font-size: 12px;
+        font-weight: 600;
         white-space: nowrap;
       }
       @media (prefers-reduced-motion: reduce) {
