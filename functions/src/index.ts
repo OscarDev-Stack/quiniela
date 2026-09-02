@@ -5643,7 +5643,7 @@ async function cobrarDuenosPendientes(
             if (costo <= 0) return true; // gratis: se queda dentro sin cobro.
             const snap = await tx.get(userRef);
             const puntos = Number((snap.data() as Record<string, unknown>)?.['puntos'] ?? 0);
-            if (puntos < costo) return false; // sin saldo: se le quita el equipo.
+            if (puntos - costo < TOPE_INFERIOR) return false; //sin saldo: se le quita el equipo.
             tx.update(userRef, {
                 puntos: FieldValue.increment(-costo),
                 totalGastado: FieldValue.increment(costo),
