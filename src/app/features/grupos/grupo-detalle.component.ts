@@ -9,7 +9,7 @@ import { CargandoComponent } from '../../shared/cargando.component';
 import { GruposService } from '../../core/services/grupos.service';
 import { UserService } from '../../core/services/user.service';
 import { ToastService } from '../../shared/toast.service';
-import { Grupo, MiembroGrupo, FilaTablaGrupo } from '../../core/models/grupo.model';
+import { Grupo, MiembroGrupo } from '../../core/models/grupo.model';
 
 @Component({
   selector: 'app-grupo-detalle',
@@ -59,23 +59,6 @@ import { Grupo, MiembroGrupo, FilaTablaGrupo } from '../../core/models/grupo.mod
                 <i class="ti ti-sitemap"></i> Eliminatoria
               </button>
             </div>
-          </div>
-        }
-
-        <!-- Tabla del grupo -->
-        @if (tabla().length > 0) {
-          <div class="seccion">Tabla del grupo</div>
-          <div class="tabla">
-            @for (f of tabla(); track f.uid; let i = $index) {
-              <div class="fila" [class.fila--yo]="f.uid === miUid()">
-                <span class="pos" [class.pos--1]="i === 0" [class.pos--2]="i === 1" [class.pos--3]="i === 2">
-                  {{ i + 1 }}
-                </span>
-                <span class="fila-alias">{{ f.uid === miUid() ? f.alias + ' (tú)' : f.alias }}</span>
-                <span class="fila-pct">{{ f.porcentaje }}%</span>
-                <span class="fila-ac">{{ f.aciertos }}/{{ f.resueltos }}</span>
-              </div>
-            }
           </div>
         }
 
@@ -209,23 +192,6 @@ import { Grupo, MiembroGrupo, FilaTablaGrupo } from '../../core/models/grupo.mod
         font-size: 12px; font-weight: 700; color: var(--text-secondary);
         text-transform: uppercase; letter-spacing: 0.5px; margin: 20px 0 10px;
       }
-      .tabla { display: flex; flex-direction: column; }
-      .fila {
-        display: flex; align-items: center; gap: 10px;
-        padding: 9px 6px; border-bottom: 1px solid var(--border);
-      }
-      .fila--yo { background: var(--accent-bg); border-radius: 8px; }
-      .pos {
-        width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 12px; font-weight: 700; background: var(--surface-1); color: var(--text-secondary);
-      }
-      .pos--1 { background: #f4d03f; color: #6b5300; }
-      .pos--2 { background: #c8ccd4; color: #3a3f47; }
-      .pos--3 { background: #d98e5f; color: #4a2a12; }
-      .fila-alias { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .fila-pct { font-size: 14px; font-weight: 700; }
-      .fila-ac { font-size: 12px; color: var(--text-muted); min-width: 46px; text-align: right; }
       .miembro {
         display: flex; align-items: center; gap: 10px;
         padding: 9px 4px; border-bottom: 1px solid var(--border);
@@ -287,12 +253,6 @@ export class GrupoDetalleComponent {
 
   readonly miembros = toSignal(this.gruposSrv.miembros(this.id), { initialValue: [] as MiembroGrupo[] });
   readonly otrosMiembros = computed(() => this.miembros().filter((m) => m.uid !== this.miUid()));
-
-  private readonly tablaRaw = toSignal(this.gruposSrv.tabla(this.id), { initialValue: [] as FilaTablaGrupo[] });
-  /** Tabla del grupo ordenada por % (y por aciertos como desempate). */
-  readonly tabla = computed(() =>
-    [...this.tablaRaw()].sort((a, b) => b.porcentaje - a.porcentaje || b.aciertos - a.aciertos),
-  );
 
   // Diálogos y búsqueda.
   readonly dialogo = signal<'ninguno' | 'agregar' | 'transferir'>('ninguno');
