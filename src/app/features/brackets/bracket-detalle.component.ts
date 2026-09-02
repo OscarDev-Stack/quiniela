@@ -74,7 +74,7 @@ import { Bracket } from '../../core/models/bracket.model';
 
         <section class="panel">
           <h2>Cuadro</h2>
-          <app-cuadro-bracket [bracket]="b" [misAvances]="avancesParaCuadro()" />
+          <app-cuadro-bracket [bracket]="b" [misAvances]="avancesParaCuadro()" [pronosticos]="pronosticos()" />
           @if (avancesParaCuadro()) {
             <div class="leyenda-cuadro">
               <span class="leyenda-item"><span class="punto punto--ok"></span> Acertaste</span>

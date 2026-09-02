@@ -1,78 +1,127 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, effect, input, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { EscudoComponent } from '../../shared/escudo.component';
 import {
   Bracket,
   Llave,
+  PronosticoBracket,
   nombreRonda,
   rondasDe,
 } from '../../core/models/bracket.model';
 import { globalDeLlave } from '../../core/services/bracket-cuadro';
 
 /**
- * Dibuja el cuadro de eliminatoria: una columna por ronda, las llaves
- * apiladas, y el marcador global de cada una cuando ya se capturó.
- * Solo pinta lo que recibe; no toca datos ni lógica.
+ * Dibuja el cuadro de eliminatoria con navegación por ronda: unos tabs
+ * arriba (Octavos, Cuartos, Semifinal, Final según el tamaño) y las llaves
+ * de la ronda elegida a lo ancho, con transición al cambiar. Cada equipo
+ * puede expandir un detalle: quién lo pronosticó (modo pronóstico) o su
+ * dueño (modo dueños). Solo pinta lo que recibe; no toca datos ni lógica.
  */
 @Component({
   selector: 'app-cuadro-bracket',
   standalone: true,
   imports: [CommonModule, EscudoComponent],
   template: `
-    <div class="cuadro" [style.--rondas]="totalRondas()">
-      @for (r of rondas(); track r) {
-        <div class="ronda">
-          <div class="ronda-nombre">{{ nombre(r) }}</div>
+    <div class="cuadro">
+      <!-- Tabs de ronda: Octavos · Cuartos · Semifinal · Final -->
+      <div class="rondas-tabs" role="tablist">
+        @for (r of rondas(); track r) {
+          <button
+            class="tab"
+            role="tab"
+            [class.tab--activa]="rondaActiva() === r"
+            [attr.aria-selected]="rondaActiva() === r"
+            (click)="irARonda(r)"
+          >
+            {{ nombreCorto(r) }}
+          </button>
+        }
+      </div>
 
-          <div class="llaves">
-            @for (l of llavesDe(r); track l.id) {
-              <div class="llave" [class.llave--resuelta]="!!l.ganador">
-                <div
-                  class="lado"
-                  [class.lado--gana]="esGanador(l, l.local?.nombre)"
-                  [class.lado--acierto]="marcaMia(l, l.local?.nombre) === 'acierto'"
-                  [class.lado--fallo]="marcaMia(l, l.local?.nombre) === 'fallo'"
-                >
-                  @if (l.local) {
-                    <span class="siembra">{{ l.local.siembra }}</span>
-                    <app-escudo [equipo]="l.local.nombre" [size]="18" />
-                    <span class="equipo">{{ l.local.nombre }}</span>
-                    @if (elegiEste(l, l.local.nombre)) {
-                      <span class="mi-pick" title="Tu pronóstico"><i class="ti ti-user-check"></i></span>
-                    }
-                  } @else {
-                    <span class="equipo por-definir">Por definir</span>
+      <!-- Una sola ronda a lo ancho. El track por ronda reinicia la animación. -->
+      @for (r of [rondaActiva()]; track r) {
+        <div class="llaves">
+          @for (l of llavesDe(r); track l.id) {
+            <div class="llave" [class.llave--resuelta]="!!l.ganador">
+              <!-- Lado local -->
+              <div
+                class="lado"
+                [class.lado--gana]="esGanador(l, l.local?.nombre)"
+                [class.lado--acierto]="marcaMia(l, l.local?.nombre) === 'acierto'"
+                [class.lado--fallo]="marcaMia(l, l.local?.nombre) === 'fallo'"
+              >
+                @if (l.local) {
+                  <span class="siembra">{{ l.local.siembra }}</span>
+                  <app-escudo [equipo]="l.local.nombre" [size]="18" />
+                  <span class="equipo">{{ l.local.nombre }}</span>
+                  @if (elegiEste(l, l.local.nombre)) {
+                    <span class="mi-pick" title="Tu pronóstico"><i class="ti ti-user-check"></i></span>
                   }
-                  <span class="goles">{{ golLocal(l) }}</span>
-                </div>
-
-                <div
-                  class="lado"
-                  [class.lado--gana]="esGanador(l, l.visitante?.nombre)"
-                  [class.lado--acierto]="marcaMia(l, l.visitante?.nombre) === 'acierto'"
-                  [class.lado--fallo]="marcaMia(l, l.visitante?.nombre) === 'fallo'"
-                >
-                  @if (l.visitante) {
-                    <span class="siembra">{{ l.visitante.siembra }}</span>
-                    <app-escudo [equipo]="l.visitante.nombre" [size]="18" />
-                    <span class="equipo">{{ l.visitante.nombre }}</span>
-                    @if (elegiEste(l, l.visitante.nombre)) {
-                      <span class="mi-pick" title="Tu pronóstico"><i class="ti ti-user-check"></i></span>
-                    }
-                  } @else {
-                    <span class="equipo por-definir">Por definir</span>
+                  @if (contarDetalle(l, l.local.nombre); as n) {
+                    <button class="detalle-btn" (click)="alternarDetalle(l.id + '-L')" [attr.aria-expanded]="abierto(l.id + '-L')">
+                      <i class="ti ti-users"></i> {{ n }}
+                      <i class="ti chev" [class.ti-chevron-down]="!abierto(l.id + '-L')" [class.ti-chevron-up]="abierto(l.id + '-L')"></i>
+                    </button>
                   }
-                  <span class="goles">{{ golVisitante(l) }}</span>
-                </div>
-
-                @if (l.resueltoPor && l.resueltoPor !== 'global') {
-                  <span class="por">
-                    {{ l.resueltoPor === 'penales' ? 'Penales' : 'Mejor posicionado' }}
-                  </span>
+                } @else {
+                  <span class="equipo por-definir">Por definir</span>
                 }
+                <span class="goles">{{ golLocal(l) }}</span>
               </div>
-            }
-          </div>
+
+              @if (abierto(l.id + '-L') && l.local) {
+                <div class="detalle">
+                  <div class="detalle-fila">
+                    @for (nom of detalleDe(l, l.local.nombre); track nom) {
+                      <span class="chip-nom">{{ nom }}</span>
+                    }
+                  </div>
+                </div>
+              }
+
+              <!-- Lado visitante -->
+              <div
+                class="lado"
+                [class.lado--gana]="esGanador(l, l.visitante?.nombre)"
+                [class.lado--acierto]="marcaMia(l, l.visitante?.nombre) === 'acierto'"
+                [class.lado--fallo]="marcaMia(l, l.visitante?.nombre) === 'fallo'"
+              >
+                @if (l.visitante) {
+                  <span class="siembra">{{ l.visitante.siembra }}</span>
+                  <app-escudo [equipo]="l.visitante.nombre" [size]="18" />
+                  <span class="equipo">{{ l.visitante.nombre }}</span>
+                  @if (elegiEste(l, l.visitante.nombre)) {
+                    <span class="mi-pick" title="Tu pronóstico"><i class="ti ti-user-check"></i></span>
+                  }
+                  @if (contarDetalle(l, l.visitante.nombre); as n) {
+                    <button class="detalle-btn" (click)="alternarDetalle(l.id + '-V')" [attr.aria-expanded]="abierto(l.id + '-V')">
+                      <i class="ti ti-users"></i> {{ n }}
+                      <i class="ti chev" [class.ti-chevron-down]="!abierto(l.id + '-V')" [class.ti-chevron-up]="abierto(l.id + '-V')"></i>
+                    </button>
+                  }
+                } @else {
+                  <span class="equipo por-definir">Por definir</span>
+                }
+                <span class="goles">{{ golVisitante(l) }}</span>
+              </div>
+
+              @if (abierto(l.id + '-V') && l.visitante) {
+                <div class="detalle">
+                  <div class="detalle-fila">
+                    @for (nom of detalleDe(l, l.visitante.nombre); track nom) {
+                      <span class="chip-nom">{{ nom }}</span>
+                    }
+                  </div>
+                </div>
+              }
+
+              @if (l.resueltoPor && l.resueltoPor !== 'global') {
+                <span class="por">
+                  {{ l.resueltoPor === 'penales' ? 'Penales' : 'Mejor posicionado' }}
+                </span>
+              }
+            </div>
+          }
         </div>
       }
     </div>
@@ -87,35 +136,52 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
        */
       .cuadro {
         display: flex;
-        gap: 20px;
-        overflow-x: auto;
-        padding: 4px 2px 12px;
-        -webkit-overflow-scrolling: touch;
-      }
-
-      .ronda {
-        display: flex;
         flex-direction: column;
-        min-width: 168px;
-        flex: 1;
-      }
-      .ronda-nombre {
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--text-muted);
-        margin-bottom: 12px;
-        text-align: center;
+        gap: 14px;
+        padding: 4px 0 12px;
       }
 
-      /* Las llaves se reparten el alto para alinearse con la ronda previa. */
+      /* Tabs de ronda: se desplazan solos si no caben. */
+      .rondas-tabs {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 2px;
+      }
+      .tab {
+        flex-shrink: 0;
+        padding: 7px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface-1);
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+      }
+      .tab--activa {
+        background: var(--accent-fill);
+        color: #fff;
+        border-color: var(--accent-fill);
+      }
+
+      /* Llaves de la ronda activa, apiladas. La animación entra al cambiar
+         de ronda (el @for con track por ronda vuelve a montar el bloque). */
       .llaves {
         display: flex;
         flex-direction: column;
-        justify-content: space-around;
-        flex: 1;
         gap: 12px;
+        animation: entra-ronda 0.24s ease;
+      }
+      @keyframes entra-ronda {
+        from { opacity: 0; transform: translateX(10px); }
+        to { opacity: 1; transform: translateX(0); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .llaves { animation: none; }
       }
 
       .llave {
@@ -206,6 +272,55 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         padding: 3px 10px 6px;
         background: color-mix(in srgb, var(--warning-text) 8%, transparent);
       }
+
+      /* Indicador de detalle (nº de pronósticos / dueño) junto al equipo. */
+      .detalle-btn {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface-1);
+        color: var(--text-muted);
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .detalle-btn .chev { font-size: 12px; }
+      .detalle-btn:hover { color: var(--text-secondary); }
+
+      /* Panel colapsable: ancho fijo con scroll horizontal si hay muchos. */
+      .detalle {
+        border-top: 1px dashed var(--border);
+        background: var(--surface-1);
+        animation: entra-detalle 0.18s ease;
+      }
+      @keyframes entra-detalle {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      .detalle-fila {
+        display: flex;
+        gap: 6px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 8px 10px;
+      }
+      .chip-nom {
+        flex-shrink: 0;
+        padding: 3px 9px;
+        border-radius: 999px;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .detalle { animation: none; }
+      }
     `,
   ],
 })
@@ -218,11 +333,87 @@ export class CuadroBracketComponent {
    */
   readonly misAvances = input<Record<string, string> | null>(null);
 
+  /**
+   * Pronósticos de todos (solo llegan con el bracket en-curso/finalizado, por
+   * la regla de Firestore). Alimentan el detalle "quién puso a este equipo a
+   * avanzar". En modo dueños no se usan: ahí el detalle sale de bracket.duenos.
+   */
+  readonly pronosticos = input<PronosticoBracket[]>([]);
+
   readonly totalRondas = computed(() => rondasDe(this.bracket().config.equipos));
   readonly rondas = computed(() => Array.from({ length: this.totalRondas() }, (_, i) => i));
 
+  /** Ronda que se está viendo. Arranca en la última con ganador (lo más nuevo). */
+  readonly rondaActiva = signal(0);
+
+  constructor() {
+    // Coloca la ronda inicial en la más avanzada que ya tenga ganador, una
+    // sola vez, cuando llega el cuadro. Después manda la elección del usuario.
+    let ajustada = false;
+    effect(() => {
+      const llaves = this.bracket().llaves;
+      if (ajustada || llaves.length === 0) return;
+      ajustada = true;
+      const conGanador = llaves.filter((l) => l.ganador).map((l) => l.ronda);
+      untracked(() => this.rondaActiva.set(conGanador.length ? Math.max(...conGanador) : 0));
+    });
+  }
+
+  irARonda(r: number): void {
+    this.detallesAbiertos.set(new Set()); // al cambiar de ronda, cierra detalles
+    this.rondaActiva.set(r);
+  }
+
   nombre(ronda: number): string {
     return nombreRonda(ronda, this.totalRondas());
+  }
+
+  /** Nombre compacto para el tab (Cuartos, Semifinal, Final, Octavos…). */
+  nombreCorto(ronda: number): string {
+    return nombreRonda(ronda, this.totalRondas()).replace(' de final', '');
+  }
+
+  /* --- Detalle colapsable por lado de llave --- */
+  private readonly detallesAbiertos = signal<Set<string>>(new Set());
+  abierto(clave: string): boolean {
+    return this.detallesAbiertos().has(clave);
+  }
+  alternarDetalle(clave: string): void {
+    this.detallesAbiertos.update((s) => {
+      const n = new Set(s);
+      if (n.has(clave)) n.delete(clave);
+      else n.add(clave);
+      return n;
+    });
+  }
+
+  /**
+   * Nombres a mostrar en el detalle de un equipo:
+   *  · modo dueños → el dueño de ese equipo (uno).
+   *  · modo pronóstico → los usuarios que pusieron ese equipo a avanzar en
+   *    la ronda de esta llave (mismo criterio por equipo+ronda que los puntos).
+   */
+  detalleDe(l: Llave, nombre?: string): string[] {
+    if (!nombre) return [];
+    const b = this.bracket();
+    if (b.modo === 'duenos') {
+      const d = (b.duenos ?? []).find((x) => x.equipo === nombre);
+      return d ? [d.nombre] : [];
+    }
+    const rondaPorId = new Map(b.llaves.map((x) => [x.id, x.ronda]));
+    return this.pronosticos()
+      .filter((p) => {
+        for (const [idLlave, equipo] of Object.entries(p.avances ?? {})) {
+          if (equipo === nombre && rondaPorId.get(idLlave) === l.ronda) return true;
+        }
+        return false;
+      })
+      .map((p) => p.alias);
+  }
+
+  /** Cuántos hay en el detalle (0 = no mostramos el indicador). */
+  contarDetalle(l: Llave, nombre?: string): number {
+    return this.detalleDe(l, nombre).length;
   }
 
   llavesDe(ronda: number): Llave[] {
