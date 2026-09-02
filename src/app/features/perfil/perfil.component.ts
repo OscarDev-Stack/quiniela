@@ -70,6 +70,10 @@ import { APP_VERSION } from '../../core/version';
           </h1>
         }
 
+        @if (esMio() && me()?.email; as correo) {
+          <p class="correo">{{ correo }}</p>
+        }
+
         @if (posicion(); as p) {
           <p class="posicion">Lugar #{{ p }} del ranking</p>
         }
@@ -245,6 +249,11 @@ import { APP_VERSION } from '../../core/version';
             @if (mensajeTg()) {
               <p class="aviso-tg" [class.aviso-tg--error]="errorTg()">{{ mensajeTg() }}</p>
             }
+            @if (!conectado() && enlaceTg(); as enlace) {
+              <a class="btn-tg btn-tg--enlace" [href]="enlace" target="_blank" rel="noopener">
+                <i class="ti ti-brand-telegram"></i> ¿No abrió? Abre Telegram
+              </a>
+            }
           </div>
 
           <!-- Categorías: qué tipo de avisos recibir. Solo tiene sentido si
@@ -328,6 +337,7 @@ import { APP_VERSION } from '../../core/version';
       }
       .check { color: var(--accent-fill); font-size: 18px; }
       .posicion { font-size: 13px; color: var(--text-muted); margin: 4px 0 0; }
+      .correo { font-size: 12px; color: var(--text-muted); margin: 2px 0 0; opacity: 0.8; }
 
       /* Botón lápiz junto al nombre */
       .editar-alias {
@@ -412,6 +422,8 @@ import { APP_VERSION } from '../../core/version';
       }
       .btn-tg:hover { filter: brightness(1.06); }
       .btn-tg:disabled { opacity: 0.6; cursor: default; }
+      /* Enlace de respaldo: si el salto automático no abrió Telegram. */
+      .btn-tg--enlace { margin-top: 10px; text-decoration: none; width: fit-content; }
       .switch {
         display: flex; align-items: center; justify-content: space-between; gap: 14px;
         margin-bottom: 16px; font-size: 14px; cursor: pointer;
@@ -678,16 +690,34 @@ export class PerfilComponent {
   /** ¿Ya quedó ligada la cuenta de Telegram? */
   readonly conectado = computed(() => !!this.me()?.telegramChatId);
 
+  /** Enlace de conexión listo, como respaldo por si el salto no abre solo. */
+  readonly enlaceTg = signal('');
+
   /** Abre Telegram con el enlace personal de conexión. */
   async conectar(): Promise<void> {
     this.guardandoTg.set(true);
     this.mensajeTg.set('');
     this.errorTg.set(false);
+    this.enlaceTg.set('');
 
     try {
       const enlace = await this.perfil.vincularTelegram();
-      // Se abre en otra pestaña: en móvil salta directo a la app.
-      window.open(enlace, '_blank');
+      // Guardamos el enlace para ofrecer un botón directo de respaldo.
+      this.enlaceTg.set(enlace);
+
+      // En una PWA instalada en iOS (modo standalone), window.open('_blank')
+      // se pierde: no hay pestaña a donde ir. Navegar en la misma ventana con
+      // location.href sí dispara la apertura de Telegram. Fuera de standalone,
+      // una pestaña nueva es lo más cómodo.
+      const standalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+
+      if (standalone) {
+        window.location.href = enlace;
+      } else {
+        window.open(enlace, '_blank');
+      }
       this.mensajeTg.set('Pulsa Iniciar en Telegram y listo. Esta pantalla se actualiza sola.');
     } catch (e: unknown) {
       this.errorTg.set(true);
