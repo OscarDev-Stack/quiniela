@@ -292,7 +292,12 @@ import { ToastService } from '../../shared/toast.service';
                 <div class="partido">
                   <span class="equipos">{{ p.local }} vs {{ p.visitante }}</span>
                   @if (j.estado === 'resuelta' && p.resultado !== 'pospuesto') {
-                    <span class="res">{{ etiqueta(p) }}</span>
+                    <span class="res">
+                      @if (p.golesLocal != null && p.golesVisitante != null) {
+                        <span class="res-marcador">{{ p.golesLocal }} - {{ p.golesVisitante }}</span>
+                      }
+                      <span class="res-txt">{{ etiqueta(p) }}</span>
+                    </span>
                   } @else {
                     <div class="captura">
                       <input
@@ -505,7 +510,9 @@ import { ToastService } from '../../shared/toast.service';
         background: var(--warning-bg); color: var(--warning-text); border-color: transparent;
       }
       .deduccion { font-size: 12px; color: var(--text-secondary); min-width: 96px; }
-      .res { font-size: 13px; color: var(--text-secondary); }
+      .res { font-size: 13px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 8px; }
+      .res-marcador { font-weight: 700; color: var(--text-primary); }
+      .res-txt { color: var(--text-secondary); }
       .aviso-aplazado {
         display: flex; align-items: flex-start; gap: 8px;
         font-size: 12px; padding: 10px 12px; border-radius: var(--radius);
