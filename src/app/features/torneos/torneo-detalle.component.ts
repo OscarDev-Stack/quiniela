@@ -985,13 +985,30 @@ export class TorneoDetalleComponent {
     }),
   );
 
-  /** Ganadores: los que siguen vivos, o quienes cayeron en la última jornada. */
+  /**
+   * Ganadores del torneo. Se calcula distinto según el modo, igual que el
+   * backend al repartir:
+   *  - QUINIELA: quienes tienen MÁS puntos del torneo; desempate por más
+   *    marcadores exactos. (No es "todos": solo la cima de la tabla.)
+   *  - SUPERVIVENCIA: los que siguen vivos, o quienes cayeron en la última
+   *    jornada si ya no queda nadie.
+   */
   private readonly ganadores = computed<Participante[]>(() => {
+    const todos = this.participantes();
+    if (todos.length === 0) return [];
+
+    if (this.esQuiniela()) {
+      const mejorPuntos = Math.max(...todos.map((p) => p.puntosTorneo ?? 0));
+      const conMasPuntos = todos.filter((p) => (p.puntosTorneo ?? 0) === mejorPuntos);
+      const mejorExactos = Math.max(...conMasPuntos.map((p) => p.exactos ?? 0));
+      return conMasPuntos.filter((p) => (p.exactos ?? 0) === mejorExactos);
+    }
+
     const vivos = this.vivos();
     if (vivos.length > 0) return vivos;
 
-    const ultima = Math.max(0, ...this.participantes().map((p) => p.eliminadoEn ?? 0));
-    return this.participantes().filter((p) => p.eliminadoEn === ultima);
+    const ultima = Math.max(0, ...todos.map((p) => p.eliminadoEn ?? 0));
+    return todos.filter((p) => p.eliminadoEn === ultima);
   });
 
   readonly soyGanador = computed(() => {

@@ -2779,7 +2779,13 @@ export const finalizarTorneo = onCall(opcionesCall, async (req) => {
         const cierre = await cerrarQuiniela(torneoRef, torneoId, t);
         if (!cierre) throw new HttpsError('failed-precondition', 'El torneo no tiene participantes.');
         await actualizarRanking(cierre.uids);
-        return { ok: true, ganadores: cierre.uids.length, premioPorCabeza: Number(t['bolsa'] ?? 0) };
+        // El premio por cabeza real lo dejó cerrarQuiniela en premioPagado.
+        const cerrado = (await torneoRef.get()).data() as Record<string, unknown>;
+        return {
+            ok: true,
+            ganadores: cierre.uids.length,
+            premioPorCabeza: Number(cerrado['premioPagado'] ?? 0),
+        };
     }
 
     const vivos = await torneoRef.collection('participantes').where('vivo', '==', true).get();
