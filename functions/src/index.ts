@@ -3439,6 +3439,14 @@ async function cerrarQuiniela(
     torneoId: string,
     torneo: Record<string, unknown>,
 ): Promise<{ nombre: string; uids: string[] } | null> {
+    // Idempotencia: si el torneo ya se cerró, NO repartir otra vez. Evita
+    // pagos dobles o recálculos con datos a medio calificar si esta función
+    // llega a ejecutarse más de una vez (reintentos, doble "Publicar", etc.).
+    const frescoSnap = await torneoRef.get();
+    if (frescoSnap.data()?.['estado'] === 'finalizado') {
+        return null;
+    }
+
     const participantes = await torneoRef.collection('participantes').get();
     if (participantes.empty) return null;
 
