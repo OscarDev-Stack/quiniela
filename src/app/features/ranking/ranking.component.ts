@@ -17,7 +17,7 @@ import { UserService } from '../../core/services/user.service';
 import { ContextoService } from '../../shared/contexto.service';
 import { GruposService } from '../../core/services/grupos.service';
 import { FilaTablaGrupo } from '../../core/models/grupo.model';
-import { switchMap } from 'rxjs/operators';
+import { switchMap, map } from 'rxjs/operators';
 import { of } from 'rxjs';
 
 type Vista = 'porcentaje' | 'balance';
@@ -38,7 +38,7 @@ type Vista = 'porcentaje' | 'balance';
             Clasificación global
           }
         </span>
-        @if (isAdmin() && !enGrupo()) {
+        @if (puedeBalance() && !enGrupo()) {
           <div class="toggle">
             <button [class.on]="vista() === 'porcentaje'" (click)="vista.set('porcentaje')">% acierto</button>
             <button [class.on]="vista() === 'balance'" (click)="vista.set('balance')">
@@ -66,13 +66,19 @@ type Vista = 'porcentaje' | 'balance';
               }
               <span class="col-avatar" [class]="'col-avatar--' + f.posicion">{{ inicial(f.alias) }}</span>
               <span class="col-alias">{{ f.id === miUid() ? 'Tú' : f.alias }}</span>
-              <span class="col-val">
+              <span class="col-val" [class.neg]="esBalance() && (f.balance ?? 0) < 0">
                 @if (esBalance()) {
                   {{ (f.balance ?? 0) > 0 ? '+' : '' }}{{ f.balance ?? 0 | number }} pts
                 } @else {
                   {{ f.porcentaje }}%
                 }
               </span>
+              @if (esBalance()) {
+                <span class="col-gyg">
+                  <span class="ganado">+{{ f.totalGanado ?? 0 | number }}</span>
+                  <span class="gastado">-{{ f.totalGastado ?? 0 | number }}</span>
+                </span>
+              }
               <span class="barra barra--{{ f.posicion }}">{{ f.posicion }}</span>
             </div>
           }
@@ -189,6 +195,14 @@ type Vista = 'porcentaje' | 'balance';
       }
       .col--1 .col-alias { font-size: 14px; }
       .col-val { font-size: 11px; color: var(--text-secondary); margin-bottom: 7px; }
+      .col-val.neg { color: var(--danger-text); }
+      /* Ganado/gastado bajo el balance en el podio. */
+      .col-gyg {
+        display: flex; flex-direction: column; align-items: center; gap: 1px;
+        font-size: 10px; font-weight: 600; line-height: 1.25; margin: -4px 0 7px;
+      }
+      .col-gyg .ganado { color: var(--success-text); }
+      .col-gyg .gastado { color: var(--danger-text); }
       .barra {
         width: 100%; border-radius: 12px 12px 0 0;
         display: flex; align-items: flex-start; justify-content: center; padding-top: 8px;
@@ -290,6 +304,12 @@ export class RankingComponent {
 
   readonly limite = TOP_LIMITE;
   readonly isAdmin = toSignal(this.users.isAdmin$, { initialValue: false });
+  /** Usuario con cuenta validada: puede ver la vista de balance. */
+  readonly validado = toSignal(this.users.me$.pipe(map((u) => u?.validada === true)), {
+    initialValue: false,
+  });
+  /** ¿Puede usar la vista de balance? Admin o cualquier validado. */
+  readonly puedeBalance = computed(() => this.isAdmin() || this.validado());
 
   private readonly authUser = toSignal(user(this.auth), { initialValue: null });
   readonly miUid = computed(() => this.authUser()?.uid ?? '');
@@ -297,8 +317,8 @@ export class RankingComponent {
   readonly vista = signal<Vista>('porcentaje');
   readonly miPosicion = signal<number | null>(null);
 
-  /** ¿Vista de balance activa? (solo admin, fuera de grupo). */
-  readonly esBalance = computed(() => this.vista() === 'balance' && this.isAdmin() && !this.enGrupo());
+  /** ¿Vista de balance activa? Admin o validado, fuera de grupo. */
+  readonly esBalance = computed(() => this.vista() === 'balance' && this.puedeBalance() && !this.enGrupo());
 
   /** Mi fila: una sola lectura, independiente de la tabla. */
   readonly miFila = toSignal(this.service.miFila(), { initialValue: null });
