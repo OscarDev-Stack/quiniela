@@ -9,6 +9,7 @@ import { Torneo, Participante } from '../../core/models/torneo.model';
 import { ConfirmarService } from '../../shared/confirmar.service';
 import { ToastService } from '../../shared/toast.service';
 import { ContextoService } from '../../shared/contexto.service';
+import { CodigoInvitarComponent } from '../../shared/codigo-invitar.component';
 
 /**
  * Pantalla dedicada SOLO a gestionar torneos ya creados (iniciar, cerrar,
@@ -18,7 +19,7 @@ import { ContextoService } from '../../shared/contexto.service';
 @Component({
     selector: 'app-gestionar-torneos',
     standalone: true,
-    imports: [CommonModule, FormsModule, RouterLink],
+    imports: [CommonModule, FormsModule, RouterLink, CodigoInvitarComponent],
     template: `
 
     <div class="stats">
@@ -82,12 +83,9 @@ import { ContextoService } from '../../shared/contexto.service';
         @if (abierto(t.id)) {
 
         <div class="invitacion">
-          <span class="codigo">{{ t.codigo }}</span>
+          <app-codigo-invitar [codigo]="t.codigo" [url]="urlInvitacion(t.codigo)" />
 
           <div class="invitacion-acciones">
-            <button class="btn sm" (click)="copiar(t)">
-              <i class="ti ti-copy"></i> Copiar enlace
-            </button>
             @if (t.estado === 'inscripcion') {
               <button class="btn sm" (click)="iniciar(t)">Iniciar torneo</button>
             }
@@ -798,10 +796,9 @@ export class GestionarTorneosComponent {
 
 
 
-    copiar(t: Torneo): void {
-        const url = `${location.origin}/unirse/${t.codigo}`;
-        navigator.clipboard?.writeText(url);
-        this.toast.exito(`Enlace copiado: ${url}`);
+    /** URL de invitación para el QR. El copiar (solo el código) lo hace el componente. */
+    urlInvitacion(codigo: string): string {
+        return `${location.origin}/unirse/${codigo}`;
     }
 
     async iniciar(t: Torneo): Promise<void> {

@@ -171,37 +171,56 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
 
             <div class="modal-cuerpo">
               <p>
-                Cada partido tiene una <strong>bolsa</strong>: la suma de todo lo que
-                apostaron los participantes. Al cerrar, esa bolsa se reparte
-                <strong>entre quienes acertaron</strong>, en proporción a lo que
-                apostó cada uno. No es una cuota fija: depende de cómo quedaron
-                las apuestas.
+                Cada partido tiene una <strong>bolsa</strong>: la suma de todo lo
+                que apostó la gente. Al cerrar, se reparte <strong>entre quienes
+                acertaron</strong>, según lo que puso cada uno. No es cuota fija.
               </p>
 
-              <p class="ej-titulo">Ejemplo sencillo</p>
-              <p>
-                3 personas apuestan <strong>100</strong> cada una (bolsa = 300).
-                Gana el <strong>Local</strong>, y solo <strong>2</strong> le
-                atinaron. Esos 300 se reparten entre los 2 ganadores según lo que
-                pusieron: como apostaron lo mismo, cada uno se lleva
-                <strong>150</strong> (sus 100 de vuelta + 50 de ganancia).
-              </p>
+              <!-- Ejemplo visual: una tarjeta como las reales (simplificada). -->
+              <div class="ej-card">
+                <div class="ej-top">
+                  <span class="ej-comp">Ejemplo</span>
+                  <span class="ej-badge">Bolsa 400</span>
+                </div>
+                <div class="ej-vs">
+                  <span class="ej-eq ej-eq--gana">Local <i class="ti ti-trophy"></i></span>
+                  <span class="ej-x">vs</span>
+                  <span class="ej-eq">Visitante</span>
+                </div>
+                <div class="ej-premios">
+                  <div class="ej-cell ej-cell--gana">
+                    <div class="ej-lbl">Gana Local</div>
+                    <div class="ej-val">+100</div>
+                    <div class="ej-sub">por cada 100</div>
+                  </div>
+                  <div class="ej-cell">
+                    <div class="ej-lbl">Empate</div>
+                    <div class="ej-val soft">—</div>
+                    <div class="ej-sub">sin apuestas</div>
+                  </div>
+                  <div class="ej-cell">
+                    <div class="ej-lbl">Gana Visitante</div>
+                    <div class="ej-val soft">—</div>
+                    <div class="ej-sub">sin apuestas</div>
+                  </div>
+                </div>
+                <p class="ej-apuestas">
+                  Apostaron 100 cada uno: <strong>Brian</strong> y <strong>Gio</strong> al Local ·
+                  <strong>Gabo</strong> y <strong>Erick</strong> al Visitante.
+                </p>
+              </div>
 
-              <p class="ej-titulo">Ejemplo con apuestas distintas</p>
               <p>
-                Bolsa = 400. Gana el <strong>Empate</strong>, y le atinaron dos
-                personas: una apostó <strong>300</strong> y otra <strong>100</strong>
-                (400 al empate). Como toda la bolsa fue al empate, cada quien
-                recupera lo suyo proporcionalmente: la de 300 se lleva 300 y la de
-                100 se lleva 100. Si al empate hubieran apostado menos que el total
-                de la bolsa, el excedente de los que fallaron engorda el premio de
-                los que acertaron.
+                Ganó el <strong>Local</strong>. La bolsa (400) se reparte entre los
+                que acertaron, <strong>Brian y Gio</strong>: cada uno recupera sus
+                100 y gana <strong>100 más</strong>. Por eso ves
+                <strong>“+100 por cada 100”</strong>. Gabo y Erick pierden lo que
+                apostaron.
               </p>
 
               <p class="ej-nota">
-                Por eso verás <strong>“+X por cada 100”</strong>: es cuánto ganarías
-                de más por cada 100 que apuestes a ese resultado, según el estado
-                actual. Se ajusta hasta que el partido inicia; ahí queda fijo.
+                Mientras más gente falle, más grande es el premio de quien acierta.
+                El número se ajusta hasta que el partido inicia; ahí queda fijo.
               </p>
             </div>
 
@@ -390,10 +409,40 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
         color: var(--text-muted); font-size: 20px; padding: 4px;
       }
       .modal-cuerpo p { font-size: 14px; line-height: 1.55; color: var(--text-secondary); margin: 0 0 12px; }
-      .ej-titulo { font-weight: 700; color: var(--text-primary) !important; margin-bottom: 4px !important; }
       .ej-nota {
         background: var(--accent-bg); color: var(--accent-text) !important;
         border-radius: var(--radius); padding: 10px 12px; font-size: 13px !important;
+      }
+
+      /* Tarjeta de ejemplo (simplificada, imita una tarjeta de partido). */
+      .ej-card {
+        border: 1px solid var(--border); border-radius: 12px; padding: 12px;
+        margin: 0 0 14px; background: var(--surface-1);
+      }
+      .ej-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+      .ej-comp { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+      .ej-badge {
+        font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+        background: var(--surface-2); color: var(--success-text);
+      }
+      .ej-vs { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 12px; }
+      .ej-eq { font-size: 15px; font-weight: 700; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 5px; }
+      .ej-eq--gana { color: var(--text-primary); }
+      .ej-eq--gana i { color: #f1c40f; font-size: 14px; }
+      .ej-x { font-size: 11px; color: var(--text-muted); }
+      .ej-premios { display: flex; gap: 8px; }
+      .ej-cell {
+        flex: 1; text-align: center; background: var(--surface-2);
+        border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 4px;
+      }
+      .ej-cell--gana { border-color: color-mix(in srgb, var(--success-text) 45%, var(--border)); }
+      .ej-lbl { font-size: 11px; color: var(--text-muted); }
+      .ej-val { font-size: 16px; font-weight: 800; color: var(--success-text); }
+      .ej-val.soft { color: var(--text-muted); font-weight: 600; }
+      .ej-sub { font-size: 10px; color: var(--text-muted); }
+      .ej-apuestas {
+        font-size: 12px !important; color: var(--text-secondary); line-height: 1.5;
+        margin: 12px 0 0 !important; padding-top: 10px; border-top: 1px dashed var(--border);
       }
       .modal-ok {
         width: 100%; padding: 12px; margin-top: 4px; cursor: pointer; font-weight: 600; font-size: 15px;

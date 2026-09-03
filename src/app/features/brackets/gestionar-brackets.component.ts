@@ -9,6 +9,7 @@ import { ContextoService } from '../../shared/contexto.service';
 import { CuadroBracketComponent } from './cuadro-bracket.component';
 import { ArmarBracketComponent } from './armar-bracket.component';
 import { AsignarDuenosComponent } from './asignar-duenos.component';
+import { CodigoInvitarComponent } from '../../shared/codigo-invitar.component';
 import {
   Bracket,
   Llave,
@@ -26,6 +27,7 @@ import {
   imports: [CommonModule, FormsModule, RouterLink, CuadroBracketComponent,
     ArmarBracketComponent,
     AsignarDuenosComponent,
+    CodigoInvitarComponent,
   ],
   template: `
     <div class="wrap">
@@ -56,12 +58,7 @@ import {
 
           @if (abierto() === b.id) {
             <div class="invitar">
-              <p class="codigo">
-                Código: <strong>{{ b.codigo }}</strong>
-              </p>
-              <button class="btn sm" (click)="copiar(b)">
-                {{ copiado() === b.id ? '¡Copiado!' : 'Copiar enlace' }}
-              </button>
+              <app-codigo-invitar [codigo]="b.codigo" [url]="urlInvitacion(b)" />
             </div>
 
             <!-- Resumen de configuración -->
@@ -396,12 +393,9 @@ export class GestionarBracketsComponent {
     }
   }
 
-  /** Copia el enlace para que el jugador entre directo a pronosticar. */
-  copiar(b: Bracket): void {
-    const url = `${location.origin}/eliminatorias/${b.id}`;
-    navigator.clipboard?.writeText(url);
-    this.copiado.set(b.id);
-    setTimeout(() => this.copiado.set(null), 1500);
+  /** URL de invitación para el QR (lleva al detalle de la eliminatoria). */
+  urlInvitacion(b: Bracket): string {
+    return `${location.origin}/eliminatorias/${b.id}`;
   }
 
   etiqueta(estado: string): string {

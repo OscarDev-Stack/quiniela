@@ -6,6 +6,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { switchMap } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
 import { CargandoComponent } from '../../shared/cargando.component';
+import { CodigoInvitarComponent } from '../../shared/codigo-invitar.component';
 import { GruposService } from '../../core/services/grupos.service';
 import { UserService } from '../../core/services/user.service';
 import { ToastService } from '../../shared/toast.service';
@@ -14,7 +15,7 @@ import { Grupo, MiembroGrupo } from '../../core/models/grupo.model';
 @Component({
   selector: 'app-grupo-detalle',
   standalone: true,
-  imports: [CommonModule, FormsModule, NavComponent, CargandoComponent],
+  imports: [CommonModule, FormsModule, NavComponent, CargandoComponent, CodigoInvitarComponent],
   template: `
     <div class="screen">
       <app-nav [back]="true" title="Grupo" />
@@ -31,14 +32,9 @@ import { Grupo, MiembroGrupo } from '../../core/models/grupo.model';
           </div>
         </div>
 
-        <!-- Código para compartir -->
-        <div class="codigo-box">
-          <div class="codigo-label">Código de invitación</div>
-          <div class="codigo-val">{{ g.codigo }}</div>
-          <button class="copiar" (click)="copiar(g.codigo)">
-            <i class="ti ti-copy"></i> Copiar
-          </button>
-        </div>
+        <!-- Código para compartir: copiar código + QR de invitación. -->
+        <app-codigo-invitar [codigo]="g.codigo" [url]="urlInvitacion(g.codigo)" />
+        <div class="esp-16"></div>
 
         <!-- Acciones de admin -->
         @if (soyAdmin(g)) {
@@ -156,20 +152,7 @@ import { Grupo, MiembroGrupo } from '../../core/models/grupo.model';
       .cab-nom { font-size: 19px; font-weight: 800; }
       .cab-sub { font-size: 13px; color: var(--text-secondary); }
 
-      .codigo-box {
-        background: var(--surface-2); border: 1px dashed var(--accent-fill);
-        border-radius: 14px; padding: 14px; text-align: center; margin-bottom: 16px;
-      }
-      .codigo-label { font-size: 11px; color: var(--text-secondary); letter-spacing: 1px; }
-      .codigo-val {
-        font-size: 26px; font-weight: 800; letter-spacing: 4px;
-        color: var(--accent-text); margin: 4px 0 10px;
-      }
-      .copiar {
-        display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
-        font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 999px;
-        border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
-      }
+      .esp-16 { height: 16px; }
 
       .btn {
         display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -341,11 +324,9 @@ export class GrupoDetalleComponent {
     return (alias?.trim()?.[0] ?? '?').toUpperCase();
   }
 
-  copiar(codigo: string): void {
-    navigator.clipboard?.writeText(codigo).then(
-      () => this.toast.exito('Código copiado.'),
-      () => this.toast.error('No se pudo copiar.'),
-    );
+  /** URL de invitación al grupo para el QR (lleva a unirse-grupo por código). */
+  urlInvitacion(codigo: string): string {
+    return `${location.origin}/unirse-grupo/${codigo}`;
   }
 
   abrirAgregar(): void {
