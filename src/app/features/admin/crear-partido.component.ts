@@ -97,6 +97,17 @@ import { NavComponent } from '../../shared/nav.component';
             <option value="quien-pasa">¿Quién pasa?</option>
           </select>
         </label>
+
+        <label class="field">
+          <span>% al bote acumulado</span>
+          <select [(ngModel)]="busqueda.porcentajeBote">
+            <option [ngValue]="0">Nada</option>
+            <option [ngValue]="5">5%</option>
+            <option [ngValue]="10">10%</option>
+            <option [ngValue]="15">15%</option>
+            <option [ngValue]="20">20%</option>
+          </select>
+        </label>
       </div>
       <button class="btn" [disabled]="buscando()" (click)="buscar()">
         {{ buscando() ? 'Buscando…' : (busqueda.fuente === 'sportsdb' ? 'Buscar próximos partidos' : 'Buscar partidos') }}
@@ -373,6 +384,7 @@ export class CrearPartidoComponent {
     desde: '',
     hasta: '',
     type: '1x2' as TipoPartido,
+    porcentajeBote: 0,
   };
 
   form = {
@@ -472,6 +484,7 @@ export class CrearPartidoComponent {
         awayTeam: nombreOficial(f.awayTeam),
         type: this.busqueda.type,
         closesAtMs: inicio.getTime(),
+        porcentajeBote: Number(this.busqueda.porcentajeBote),
         ...(f.apiFixtureId ? { apiFixtureId: f.apiFixtureId } : {}),
         ...(f.apiEventId ? { apiEventId: f.apiEventId } : {}),
         ...(f.apiLigaId ? { apiLigaId: f.apiLigaId } : {}),
@@ -498,6 +511,7 @@ export class CrearPartidoComponent {
         type: this.busqueda.type,
         status: 'abierto',
         closesAt: Timestamp.fromDate(inicio),
+        porcentajeBote: Number(this.busqueda.porcentajeBote),
         ...(f.apiFixtureId ? { apiFixtureId: f.apiFixtureId } : {}),
         ...(f.apiEventId ? { apiEventId: f.apiEventId } : {}),
         ...(f.apiLigaId ? { apiLigaId: f.apiLigaId } : {}),
