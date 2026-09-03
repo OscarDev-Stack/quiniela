@@ -10,4 +10,6 @@ export const environment = {
         measurementId: 'G-N54K2C3C1T',
     },
     vapidKey: 'BCxtkG0S7DachIM6KMm_osSDfvQ4Gw4SKfIV4VCaTR8f1kpKZWP3FMzPzUnFpIPtCpdlRimN0Mjum8D72HLWk3I',
+    // Site Key pública de Cloudflare Turnstile para PRODUCCIÓN.
+    turnstileSiteKey: '0x4AAAAAAEdUWtaENzy8lzBw',
 };
