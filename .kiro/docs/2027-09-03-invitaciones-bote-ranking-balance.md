@@ -1,6 +1,6 @@
 # Invitaciones unificadas, bote en API y ranking de balance
 
-Fecha: 28 de agosto de 2026
+Fecha: 03 de septiembre de 2027
 Rama: `develop`
 
 Resumen de los cambios de esta sesión relacionados con invitaciones (torneo/eliminatoria/grupo), el bote en partidos de API y el ranking por balance. Todo el front está en builds verdes; lo marcado como backend requiere desplegar Cloud Functions.
