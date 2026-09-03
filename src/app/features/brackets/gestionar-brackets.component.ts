@@ -393,9 +393,9 @@ export class GestionarBracketsComponent {
     }
   }
 
-  /** URL de invitación para el QR (lleva al detalle de la eliminatoria). */
+  /** URL de invitación para el QR (pantalla de invitación con reglas). */
   urlInvitacion(b: Bracket): string {
-    return `${location.origin}/eliminatorias/${b.id}`;
+    return `${location.origin}/unirse-elim/${b.codigo}`;
   }
 
   etiqueta(estado: string): string {

@@ -169,6 +169,35 @@ export class BracketsService {
         }) as Observable<PronosticoBracket[]>;
     }
 
+    /** Datos públicos de una eliminatoria por su código (para mostrar reglas). */
+    async consultar(codigo: string): Promise<{
+        id: string;
+        nombre: string;
+        modo: 'pronostico' | 'duenos';
+        equipos: number;
+        avance: string;
+        formatoRondas: string;
+        costoEntrada: number;
+        estado: string;
+    }> {
+        const fn = httpsCallable<
+            { codigo: string },
+            {
+                ok: boolean;
+                id: string;
+                nombre: string;
+                modo: 'pronostico' | 'duenos';
+                equipos: number;
+                avance: string;
+                formatoRondas: string;
+                costoEntrada: number;
+                estado: string;
+            }
+        >(this.fns, 'consultarBracket');
+        const res = await fn({ codigo });
+        return res.data;
+    }
+
     /** Se une a un bracket con su código. */
     async unirse(codigo: string): Promise<{ id: string }> {
         const fn = httpsCallable<{ codigo: string }, { ok: boolean; id: string }>(

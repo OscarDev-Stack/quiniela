@@ -8,6 +8,7 @@ import { ConfirmarDialogComponent } from './shared/confirmar-dialog.component';
 import { NovedadesComponent } from './shared/novedades.component';
 import { ToastsComponent } from './shared/toasts.component';
 import { NovedadesService } from './shared/novedades.service';
+import { limpiarInvitacion } from './shared/invitacion.util';
 import { UserService } from './core/services/user.service';
 import { StatsService } from './shared/stats.service';
 
@@ -39,6 +40,27 @@ export class App {
         if (!me) return;
         const rol = esSuperAdmin ? 'super_admin' : me.esAdminGrupo ? 'admin_grupo' : 'jugador';
         this.stats.propiedades({ rol, validado: me.validada ? 'si' : 'no' });
+      });
+
+    // Limpieza defensiva: una invitación pendiente en localStorage solo tiene
+    // sentido en el flujo "sin sesión → login → retomar /unirse". Al resolver
+    // la primera navegación, si NO aterrizamos en una pantalla de invitación
+    // (ni login/registro), cualquier código guardado es residuo y se borra; si
+    // no, reenviaba a "unirse" en cada login o al abrir una pestaña nueva.
+    this.router.events
+      .pipe(
+        filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+        take(1),
+        takeUntilDestroyed(),
+      )
+      .subscribe((e) => {
+        const url = e.urlAfterRedirects;
+        // /unirse cubre /unirse, /unirse-grupo y /unirse-elim.
+        const enFlujoInvitacion =
+          url.startsWith('/unirse') || url.startsWith('/login') || url.startsWith('/registro');
+        if (!enFlujoInvitacion) {
+          limpiarInvitacion();
+        }
       });
 
     // Las novedades NO deben aparecer sobre el portón de acceso (Turnstile).

@@ -4,6 +4,7 @@ import { Router, RouterLink } from '@angular/router';
 import { Firestore, doc, setDoc, serverTimestamp } from '@angular/fire/firestore';
 import { AuthService } from '../../core/services/auth.service';
 import { StatsService } from '../../shared/stats.service';
+import { consumirInvitacion, rutaDeInvitacion } from '../../shared/invitacion.util';
 
 @Component({
   selector: 'app-register',
@@ -195,10 +196,9 @@ export class RegisterComponent implements OnInit {
       this.stats.evento('cuenta_creada', { metodo: 'correo' });
       this.stats.evento('registro_pendiente_validacion', { metodo: 'correo' });
 
-      const invitacion = localStorage.getItem('invitacion');
-      // Se consume una sola vez: si no, cada login reenvía a unirse.
-      localStorage.removeItem('invitacion');
-      this.router.navigate(invitacion ? ['/unirse', invitacion] : ['/inicio']);
+      // Retoma la invitación pendiente (torneo/bracket/grupo) una sola vez.
+      const inv = consumirInvitacion();
+      this.router.navigate(inv ? rutaDeInvitacion(inv) : ['/inicio']);
     } catch (e: unknown) {
       const code = (e as { code?: string })?.code;
       this.stats.evento('registro_fallido', { motivo: code ?? 'desconocido' });

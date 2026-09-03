@@ -7,6 +7,7 @@ import { GruposService } from '../../core/services/grupos.service';
 import { ContextoService } from '../../shared/contexto.service';
 import { ToastService } from '../../shared/toast.service';
 import { NavComponent } from '../../shared/nav.component';
+import { guardarInvitacion, limpiarInvitacion } from '../../shared/invitacion.util';
 
 /**
  * Pantalla de invitación a un GRUPO por código (a la que lleva el QR).
@@ -78,12 +79,9 @@ export class UnirseGrupoComponent {
   readonly uniendo = signal(false);
   readonly error = signal('');
 
-  constructor() {
-    // La invitación sobrevive al login/registro: se retoma al volver.
-    if (this.codigo) localStorage.setItem('invitacionGrupo', this.codigo);
-  }
-
   ir(destino: 'login' | 'registro'): void {
+    // Sin sesión: guarda la invitación para retomarla tras login/registro.
+    guardarInvitacion('grupo', this.codigo);
     this.router.navigate(['/' + destino]);
   }
 
@@ -92,7 +90,7 @@ export class UnirseGrupoComponent {
     this.error.set('');
     try {
       const r = await this.gruposSrv.unirse(this.codigo);
-      localStorage.removeItem('invitacionGrupo');
+      limpiarInvitacion();
       this.toast.exito(`Te uniste a ${r.nombre}.`);
       // El grupo al que te unes se vuelve el contexto activo.
       this.contexto.cambiar({ grupoId: r.grupoId, nombre: r.nombre, icono: r.icono });

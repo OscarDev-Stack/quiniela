@@ -3584,6 +3584,57 @@ export const consultarTorneo = onCall(opcionesCall, async (req) => {
     };
 });
 
+/**
+ * Datos públicos de una eliminatoria a partir de su código de invitación.
+ * Igual que consultarTorneo: permite mostrar nombre y reglas antes de aceptar,
+ * incluso a quien aún no tiene cuenta.
+ */
+export const consultarBracket = onCall(opcionesCall, async (req) => {
+    const codigo = String(req.data?.codigo ?? '').trim().toUpperCase();
+    if (!codigo) throw new HttpsError('invalid-argument', 'Falta el código.');
+
+    const encontrados = await db
+        .collection('brackets')
+        .where('codigo', '==', codigo)
+        .limit(1)
+        .get();
+    if (encontrados.empty) {
+        throw new HttpsError('not-found', 'Ese código de invitación no existe.');
+    }
+
+    const doc = encontrados.docs[0];
+    const b = doc.data() as Record<string, unknown>;
+
+    // Si la eliminatoria es de un grupo, solo un miembro puede ver sus detalles.
+    const grupoId = b['grupoId'];
+    if (typeof grupoId === 'string' && grupoId) {
+        const uid = req.auth?.uid;
+        const esMiembro = uid
+            ? (await db.doc(`grupos/${grupoId}/miembros/${uid}`).get()).exists
+            : false;
+        if (!esMiembro) {
+            throw new HttpsError(
+                'permission-denied',
+                'Esta eliminatoria es de un grupo privado. Únete al grupo para poder verla.',
+            );
+        }
+    }
+
+    const config = (b['config'] ?? {}) as Record<string, unknown>;
+
+    return {
+        ok: true,
+        id: doc.id,
+        nombre: String(b['nombre'] ?? 'Eliminatoria'),
+        modo: String(b['modo'] ?? 'pronostico'),
+        equipos: Number(config['equipos'] ?? 0),
+        avance: String(config['avance'] ?? 'fijo'),
+        formatoRondas: String(config['formatoRondas'] ?? 'unico'),
+        costoEntrada: Number(b['costoEntrada'] ?? 0),
+        estado: String(b['estado'] ?? 'inscripcion'),
+    };
+});
+
 /* ============================================================
    Cambiar mi alias (nombre público)
    El usuario no puede escribir su propio documento (las reglas solo

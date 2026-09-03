@@ -6,6 +6,7 @@ import { AuthCredential } from '@angular/fire/auth';
 import { AuthService } from '../../core/services/auth.service';
 import { StatsService } from '../../shared/stats.service';
 import { APP_VERSION } from '../../core/version';
+import { consumirInvitacion, rutaDeInvitacion } from '../../shared/invitacion.util';
 
 @Component({
   selector: 'app-login',
@@ -426,10 +427,10 @@ export class LoginComponent implements OnInit {
 
   /** Consume la invitación pendiente (si la hay) y navega a destino. */
   private async entrar(): Promise<void> {
-    const invitacion = localStorage.getItem('invitacion');
-    // Se consume una sola vez: si no, cada login reenvía a unirse.
-    localStorage.removeItem('invitacion');
-    await this.router.navigate(invitacion ? ['/unirse', invitacion] : ['/inicio']);
+    // Se consume una sola vez (se borra al leerla): así no reenvía a "unirse"
+    // en cada login ni al abrir pestañas. Sirve para torneo, bracket y grupo.
+    const inv = consumirInvitacion();
+    await this.router.navigate(inv ? rutaDeInvitacion(inv) : ['/inicio']);
   }
 
   private mapError(code?: string): string {
