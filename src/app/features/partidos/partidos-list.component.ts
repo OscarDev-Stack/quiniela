@@ -146,13 +146,22 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
             }
 
             <!-- Complemento: aparece solo cuando ya cerraron los pronósticos
-                 (en juego o finalizado). Aclara cómo se reparte la bolsa. -->
+                 (en juego o finalizado). Nota personalizada con TU pronóstico. -->
             @if (m.status === 'en-juego' || m.status === 'cerrado') {
-              <p class="nota-reparto">
-                <i class="ti ti-info-circle"></i>
-                La bolsa se reparte entre quienes acierten, según lo que apostó
-                cada uno. El “+X por cada 100” es tu ganancia neta por cada 100 apostados.
-              </p>
+              @if (miPremio(m); as prem) {
+                <p class="nota-reparto">
+                  <i class="ti ti-info-circle"></i>
+                  Apostaste a <strong>{{ nombreResultado(m, prem.resultado) }}</strong>:
+                  ganas <strong>+{{ netoPor100(m, prem.resultado) | number }}</strong> por cada 100.
+                  La bolsa se reparte entre quienes acierten, según lo que apostó cada uno.
+                </p>
+              } @else {
+                <p class="nota-reparto">
+                  <i class="ti ti-info-circle"></i>
+                  La bolsa se reparte entre quienes acierten, según lo que apostó cada uno.
+                  El número de cada opción es la ganancia neta por cada 100 apostados.
+                </p>
+              }
             }
           }
         </article>
@@ -190,32 +199,33 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
                 <div class="ej-premios">
                   <div class="ej-cell ej-cell--gana">
                     <div class="ej-lbl">Gana Local</div>
-                    <div class="ej-val">+100</div>
-                    <div class="ej-sub">por cada 100</div>
+                    <div class="ej-val">+300</div>
+                    <div class="ej-sub">1 apuesta</div>
                   </div>
                   <div class="ej-cell">
                     <div class="ej-lbl">Empate</div>
-                    <div class="ej-val soft">—</div>
-                    <div class="ej-sub">sin apuestas</div>
+                    <div class="ej-val">+300</div>
+                    <div class="ej-sub">1 apuesta</div>
                   </div>
                   <div class="ej-cell">
                     <div class="ej-lbl">Gana Visitante</div>
-                    <div class="ej-val soft">—</div>
-                    <div class="ej-sub">sin apuestas</div>
+                    <div class="ej-val">+100</div>
+                    <div class="ej-sub">2 apuestas</div>
                   </div>
                 </div>
                 <p class="ej-apuestas">
-                  Apostaron 100 cada uno: <strong>Brian</strong> y <strong>Gio</strong> al Local ·
-                  <strong>Gabo</strong> y <strong>Erick</strong> al Visitante.
+                  Apostaron 100 cada uno: <strong>Brian</strong> y <strong>Gio</strong> al Visitante ·
+                  <strong>Gabo</strong> al Empate · <strong>Erick</strong> al Local.
                 </p>
               </div>
 
               <p>
-                Ganó el <strong>Local</strong>. La bolsa (400) se reparte entre los
-                que acertaron, <strong>Brian y Gio</strong>: cada uno recupera sus
-                100 y gana <strong>100 más</strong>. Por eso ves
-                <strong>“+100 por cada 100”</strong>. Gabo y Erick pierden lo que
-                apostaron.
+                Ganó el <strong>Local</strong>. Solo <strong>Erick</strong> acertó,
+                así que se lleva toda la bolsa (400): recupera sus 100 y gana
+                <strong>300 más</strong> → <strong>“+300 por cada 100”</strong>.
+                Fíjate que al Visitante, donde apostaron más (200), el premio por
+                cada 100 era menor (+100): entre más gente va a un lado, menos toca
+                a cada uno.
               </p>
 
               <p class="ej-nota">
