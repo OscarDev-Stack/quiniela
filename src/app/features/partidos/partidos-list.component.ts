@@ -151,15 +151,19 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
               @if (miPremio(m); as prem) {
                 <p class="nota-reparto">
                   <i class="ti ti-info-circle"></i>
-                  Apostaste a <strong>{{ nombreResultado(m, prem.resultado) }}</strong>:
-                  ganas <strong>+{{ netoPor100(m, prem.resultado) | number }}</strong> por cada 100.
-                  La bolsa se reparte entre quienes acierten, según lo que apostó cada uno.
+                  <span>
+                    Apostaste a <strong>{{ nombreResultado(m, prem.resultado) }}</strong>: ganas
+                    <strong>+{{ netoPor100(m, prem.resultado) | number }}</strong> por cada 100.
+                    La bolsa se reparte entre quienes acierten, según lo que apostó cada uno.
+                  </span>
                 </p>
               } @else {
                 <p class="nota-reparto">
                   <i class="ti ti-info-circle"></i>
-                  La bolsa se reparte entre quienes acierten, según lo que apostó cada uno.
-                  El número de cada opción es la ganancia neta por cada 100 apostados.
+                  <span>
+                    La bolsa se reparte entre quienes acierten, según lo que apostó cada uno.
+                    El número de cada opción es la ganancia neta por cada 100 apostados.
+                  </span>
                 </p>
               }
             }
@@ -396,11 +400,13 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
 
       /* Nota de reparto (complemento, solo cuando ya cerró). */
       .nota-reparto {
-        display: flex; gap: 7px; margin: 10px 0 0; padding: 9px 11px;
-        font-size: 12px; line-height: 1.45; color: var(--text-secondary);
+        display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 0; padding: 10px 12px;
+        font-size: 12px; line-height: 1.5; color: var(--text-secondary);
         background: var(--surface-1); border-radius: var(--radius);
       }
-      .nota-reparto i { flex-shrink: 0; margin-top: 1px; color: var(--accent-text); }
+      .nota-reparto i { flex-shrink: 0; margin-top: 2px; font-size: 15px; color: var(--accent-text); }
+      .nota-reparto span { flex: 1; }
+      .nota-reparto strong { color: var(--text-primary); white-space: nowrap; }
 
       /* Modal "¿Cómo se gana?" */
       .modal-fondo {
