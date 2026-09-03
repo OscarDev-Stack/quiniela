@@ -12,7 +12,7 @@ import { PronosticosService } from '../../core/services/pronosticos.service';
 import { BracketsService } from '../../core/services/brackets.service';
 import { ContextoService } from '../../shared/contexto.service';
 import { Pronostico } from '../../core/models/pronostico.model';
-import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/models/partido.model';
+import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } from '../../core/models/partido.model';
 
 @Component({
   selector: 'app-partidos-list',
@@ -394,12 +394,9 @@ export class PartidosListComponent {
     );
   }
 
-  /**
-   * Texto del minuto en vivo: si es un número le agrega la comilla ("63'");
-   * si es un estado ("HT", "Half Time"...) lo muestra tal cual.
-   */
+  /** Texto del minuto/estado en vivo, traducido al español. */
   minutoTexto(min: string): string {
-    return /^\d+$/.test(min) ? `${min}'` : min;
+    return minutoVivoTexto(min);
   }
 
   /** Fecha y hora del partido en zona MX, ej. "sáb 6 sep · 19:00". Null si no hay. */

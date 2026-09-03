@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { EscudoComponent } from '../../shared/escudo.component';
 import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
 import { Quiniela } from '../../core/models/torneo.model';
+import { minutoVivoTexto } from '../../core/models/partido.model';
 
 const PUNTOS_EXACTO = 5;
 const PUNTOS_RESULTADO = 3;
@@ -212,9 +213,9 @@ export class CartonesJornadaComponent {
     return typeof p.vivoLocal === 'number' && typeof p.vivoVisitante === 'number';
   }
 
-  /** "63" → "63'"; los estados ("HT"…) se muestran tal cual. */
+  /** Texto del minuto/estado en vivo, traducido al español. */
   minutoTexto(min: string): string {
-    return /^\d+$/.test(min) ? `${min}'` : min;
+    return minutoVivoTexto(min);
   }
 
   /** Cuánto vale un pronóstico contra el resultado real. */

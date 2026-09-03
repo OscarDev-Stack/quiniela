@@ -91,3 +91,38 @@ export function textoRestante(p: Partido, ahora: number): string {
     if (horas > 0) return `Cierra en ${horas}h ${mins}m`;
     return `Cierra en ${mins}m`;
 }
+
+/**
+ * Traduce el minuto/estado EN VIVO que devuelve TheSportsDB a un texto claro
+ * en español. Los minutos numéricos ("63") se muestran como "63'"; los códigos
+ * de estado (vienen en inglés) se traducen. Si llega algo no reconocido, se
+ * muestra tal cual para no ocultar información.
+ */
+export function minutoVivoTexto(min: string | null | undefined): string {
+    const v = String(min ?? '').trim();
+    if (!v) return '';
+
+    // Minuto numérico, con o sin el símbolo de added time ("45+2").
+    if (/^\d+(\+\d+)?'?$/.test(v)) return v.endsWith("'") ? v : `${v}'`;
+
+    const estados: Record<string, string> = {
+        '1H': '1er tiempo',
+        '2H': '2do tiempo',
+        HT: 'Descanso',
+        ET: 'Tiempo extra',
+        '1ET': '1er t. extra',
+        '2ET': '2do t. extra',
+        BT: 'Descanso',
+        P: 'Penales',
+        PEN: 'Penales',
+        FT: 'Final',
+        AET: 'Final (t. extra)',
+        AP: 'Final (penales)',
+        NS: 'Por empezar',
+        LIVE: 'En vivo',
+        'Match Finished': 'Final',
+        'Half Time': 'Descanso',
+        'Extra Time': 'Tiempo extra',
+    };
+    return estados[v] ?? estados[v.toUpperCase()] ?? v;
+}
