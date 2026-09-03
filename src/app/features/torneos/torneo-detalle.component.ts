@@ -558,7 +558,7 @@ import { StatsService } from '../../shared/stats.service';
                       {{ p.alias }}@if (p.id === miUid()) { <span class="tu">· tú</span> }
                     </span>
                   </span>
-                  <span class="chip-estado">Cayó · J{{ p.eliminadoEn }}</span>
+                  <span class="chip-estado">Eliminado · J{{ p.eliminadoEn }}</span>
                 </div>
 
                 @if (p.equiposUsados.length > 0) {
