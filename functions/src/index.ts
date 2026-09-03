@@ -1003,15 +1003,24 @@ export const cerrarPartidos = onSchedule(cada(5), async () => {
             const porResultado = (bolsaSnap.data()?.['porResultado'] ?? {}) as Record<string, number>;
             const conteos = (bolsaSnap.data()?.['conteos'] ?? {}) as Record<string, number>;
 
-            // Cuánto pagaría cada 100 puntos apostados a ese resultado.
+            // El bote sale de la bolsa: se reparte lo que queda (bolsa neta).
+            // Debe calcularse igual que en la liquidación para que el premio
+            // mostrado coincida con lo que de verdad se paga.
+            const alBote = calcularBote(total, p['porcentajeBote']);
+            const repartible = total - alBote;
+
+            // Cuánto pagaría cada 100 puntos apostados a ese resultado, ya
+            // descontado el bote.
             const premioPor100: Record<string, number> = {};
             Object.entries(porResultado).forEach(([r, apostado]) => {
-                premioPor100[r] = apostado > 0 ? Math.floor((100 * total) / apostado) : 0;
+                premioPor100[r] = apostado > 0 ? Math.floor((100 * repartible) / apostado) : 0;
             });
 
             await d.ref.update({
                 status: 'en-juego',
-                poolTotal: total,
+                // poolTotal es lo repartible (neto), que es lo que la vista usa
+                // para estimar premios; así no muestra de más por el bote.
+                poolTotal: repartible,
                 porResultado,
                 premioPor100,
                 // Número de pronósticos por resultado: permite mostrar

@@ -28,6 +28,9 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
             {{ f }}
           </button>
         }
+        <button class="ayuda-btn" (click)="verAyuda.set(true)" aria-label="Cómo se juega" title="Cómo se juega">
+          <i class="ti ti-help-circle"></i>
+        </button>
       </nav>
 
       @if (cargando()) {
@@ -141,8 +144,70 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
                 }
               </div>
             }
+
+            <!-- Complemento: aparece solo cuando ya cerraron los pronósticos
+                 (en juego o finalizado). Aclara cómo se reparte la bolsa. -->
+            @if (m.status === 'en-juego' || m.status === 'cerrado') {
+              <p class="nota-reparto">
+                <i class="ti ti-info-circle"></i>
+                La bolsa se reparte entre quienes acierten, según lo que apostó
+                cada uno. El “+X por cada 100” es tu ganancia neta por cada 100 apostados.
+              </p>
+            }
           }
         </article>
+      }
+
+      <!-- Modal estático: cómo se juega (mecánica de premios). -->
+      @if (verAyuda()) {
+        <div class="modal-fondo" (click)="verAyuda.set(false)">
+          <div class="modal" (click)="$event.stopPropagation()">
+            <div class="modal-cab">
+              <h2 class="modal-tit"><i class="ti ti-trophy"></i> ¿Cómo se gana?</h2>
+              <button class="modal-x" (click)="verAyuda.set(false)" aria-label="Cerrar">
+                <i class="ti ti-x"></i>
+              </button>
+            </div>
+
+            <div class="modal-cuerpo">
+              <p>
+                Cada partido tiene una <strong>bolsa</strong>: la suma de todo lo que
+                apostaron los participantes. Al cerrar, esa bolsa se reparte
+                <strong>entre quienes acertaron</strong>, en proporción a lo que
+                apostó cada uno. No es una cuota fija: depende de cómo quedaron
+                las apuestas.
+              </p>
+
+              <p class="ej-titulo">Ejemplo sencillo</p>
+              <p>
+                3 personas apuestan <strong>100</strong> cada una (bolsa = 300).
+                Gana el <strong>Local</strong>, y solo <strong>2</strong> le
+                atinaron. Esos 300 se reparten entre los 2 ganadores según lo que
+                pusieron: como apostaron lo mismo, cada uno se lleva
+                <strong>150</strong> (sus 100 de vuelta + 50 de ganancia).
+              </p>
+
+              <p class="ej-titulo">Ejemplo con apuestas distintas</p>
+              <p>
+                Bolsa = 400. Gana el <strong>Empate</strong>, y le atinaron dos
+                personas: una apostó <strong>300</strong> y otra <strong>100</strong>
+                (400 al empate). Como toda la bolsa fue al empate, cada quien
+                recupera lo suyo proporcionalmente: la de 300 se lleva 300 y la de
+                100 se lleva 100. Si al empate hubieran apostado menos que el total
+                de la bolsa, el excedente de los que fallaron engorda el premio de
+                los que acertaron.
+              </p>
+
+              <p class="ej-nota">
+                Por eso verás <strong>“+X por cada 100”</strong>: es cuánto ganarías
+                de más por cada 100 que apuestes a ese resultado, según el estado
+                actual. Se ajusta hasta que el partido inicia; ahí queda fijo.
+              </p>
+            </div>
+
+            <button class="modal-ok" (click)="verAyuda.set(false)">Entendido</button>
+          </div>
+        </div>
       }
     </div>
   `,
@@ -169,7 +234,14 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
       }
       :host { display: block; }
 
-      .filters { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 16px; }
+      .filters { display: flex; align-items: center; gap: 8px; overflow-x: auto; padding-bottom: 16px; }
+      .ayuda-btn {
+        flex-shrink: 0; margin-left: auto; width: 34px; height: 34px; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 1px solid var(--border); border-radius: 50%;
+        background: transparent; color: var(--text-muted); font-size: 18px;
+      }
+      .ayuda-btn:hover { color: var(--accent-text); border-color: var(--accent-fill); }
       .chip {
         font-size: 13px; padding: 7px 15px; border-radius: 999px; cursor: pointer;
         border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
@@ -292,6 +364,41 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
       .premio-val.soft { color: var(--text-muted); }
       .premio-sub { font-size: 10px; color: var(--text-muted); }
       .winner { color: var(--text-muted); }
+
+      /* Nota de reparto (complemento, solo cuando ya cerró). */
+      .nota-reparto {
+        display: flex; gap: 7px; margin: 10px 0 0; padding: 9px 11px;
+        font-size: 12px; line-height: 1.45; color: var(--text-secondary);
+        background: var(--surface-1); border-radius: var(--radius);
+      }
+      .nota-reparto i { flex-shrink: 0; margin-top: 1px; color: var(--accent-text); }
+
+      /* Modal "¿Cómo se gana?" */
+      .modal-fondo {
+        position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.55);
+        display: flex; align-items: center; justify-content: center; padding: 20px;
+      }
+      .modal {
+        width: 100%; max-width: 440px; max-height: 85vh; overflow-y: auto;
+        background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); padding: 18px 20px;
+      }
+      .modal-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+      .modal-tit { display: flex; align-items: center; gap: 8px; font-size: 18px; margin: 0; }
+      .modal-x {
+        flex-shrink: 0; background: transparent; border: none; cursor: pointer;
+        color: var(--text-muted); font-size: 20px; padding: 4px;
+      }
+      .modal-cuerpo p { font-size: 14px; line-height: 1.55; color: var(--text-secondary); margin: 0 0 12px; }
+      .ej-titulo { font-weight: 700; color: var(--text-primary) !important; margin-bottom: 4px !important; }
+      .ej-nota {
+        background: var(--accent-bg); color: var(--accent-text) !important;
+        border-radius: var(--radius); padding: 10px 12px; font-size: 13px !important;
+      }
+      .modal-ok {
+        width: 100%; padding: 12px; margin-top: 4px; cursor: pointer; font-weight: 600; font-size: 15px;
+        border: none; border-radius: var(--radius); background: var(--accent-fill); color: #fff;
+      }
     `,
   ],
 })
@@ -320,6 +427,8 @@ export class PartidosListComponent {
   readonly filtros = ['Abiertos', 'Todos', 'Finalizados'];
   /* Arranca en Todos: si no hay partidos abiertos, ver la lista vacía confunde. */
   readonly filtro = signal('Todos');
+  /** Modal estático "¿Cómo se gana?". */
+  readonly verAyuda = signal(false);
 
   /** True hasta que llegan los primeros partidos, para no ver la vista vacía. */
   readonly cargando = signal(true);
