@@ -4706,9 +4706,9 @@ export const crearBracket = onCall(opcionesCall, async (req) => {
             db.doc(`admins/${uid}`).get(),
         ]);
         if (!grupoSnap.exists) throw new HttpsError('not-found', 'El grupo no existe.');
-        const esAdminGrupo = grupoSnap.data()?.['adminUid'] === uid;
+        const esAdminGrupo = esAdminDeGrupo(grupoSnap.data(), uid);
         if (!esAdminGrupo && !adminSnap.exists) {
-            throw new HttpsError('permission-denied', 'Solo el administrador del grupo puede crear eliminatorias para él.');
+            throw new HttpsError('permission-denied', 'Solo un administrador del grupo puede crear eliminatorias para él.');
         }
     } else {
         const adminSnap = await db.doc(`admins/${uid}`).get();
@@ -5699,6 +5699,18 @@ function generarCodigoGrupo(): string {
     return c;
 }
 
+/**
+ * ¿Es este usuario administrador del grupo? Un grupo puede tener varios
+ * admins (adminUids). Se respeta el adminUid antiguo para grupos creados
+ * antes de que existiera el array.
+ */
+function esAdminDeGrupo(grupo: Record<string, unknown> | undefined, uid: string): boolean {
+    if (!grupo) return false;
+    const lista = grupo['adminUids'];
+    if (Array.isArray(lista) && lista.length > 0) return lista.includes(uid);
+    return grupo['adminUid'] === uid;
+}
+
 /** Crea un grupo. Solo lo puede hacer un "admin de grupo". */
 export const crearGrupo = onCall(opcionesCall, async (req) => {
     const uid = req.auth?.uid;
@@ -5737,6 +5749,7 @@ export const crearGrupo = onCall(opcionesCall, async (req) => {
         icono,
         codigo,
         adminUid: uid,
+        adminUids: [uid],
         miembrosCount: 1,
         createdAt: FieldValue.serverTimestamp(),
     });
@@ -5814,8 +5827,8 @@ export const agregarMiembroGrupo = onCall(opcionesCall, async (req) => {
     if (!grupo) {
         throw new HttpsError('not-found', 'El grupo no existe.');
     }
-    if (grupo['adminUid'] !== uid) {
-        throw new HttpsError('permission-denied', 'Solo el administrador del grupo puede agregar miembros.');
+    if (!esAdminDeGrupo(grupo, uid)) {
+        throw new HttpsError('permission-denied', 'Solo un administrador del grupo puede agregar miembros.');
     }
 
     const miembroRef = grupoRef.collection('miembros').doc(nuevoUid);
@@ -5864,8 +5877,14 @@ export const salirDeGrupo = onCall(opcionesCall, async (req) => {
         throw new HttpsError('not-found', 'No perteneces a este grupo.');
     }
 
-    const soyAdmin = grupo['adminUid'] === uid;
+    const soyAdmin = esAdminDeGrupo(grupo, uid);
     const total = Number(grupo['miembrosCount'] ?? 1);
+    const adminsActuales: string[] = Array.isArray(grupo['adminUids'])
+        ? (grupo['adminUids'] as string[])
+        : grupo['adminUid']
+          ? [String(grupo['adminUid'])]
+          : [];
+    const otrosAdmins = adminsActuales.filter((a) => a !== uid);
 
     // Si soy el único miembro, el grupo se elimina.
     if (total <= 1) {
@@ -5878,27 +5897,110 @@ export const salirDeGrupo = onCall(opcionesCall, async (req) => {
         return { ok: true, eliminado: true };
     }
 
-    // Si soy admin y hay más gente, debo transferir el rol.
-    if (soyAdmin) {
+    // Si soy admin y NO queda ningún otro admin, hay que transferir el rol
+    // antes de salir. Si ya hay otros admins, puedo salir sin más.
+    if (soyAdmin && otrosAdmins.length === 0) {
         if (!nuevoAdminUid) {
-            throw new HttpsError('failed-precondition', 'Debes transferir el rol de administrador antes de salir.');
+            throw new HttpsError('failed-precondition', 'Debes dejar a alguien a cargo antes de salir.');
         }
         const nuevoRef = grupoRef.collection('miembros').doc(nuevoAdminUid);
         if (!(await nuevoRef.get()).exists) {
             throw new HttpsError('not-found', 'La persona que elegiste no está en el grupo.');
         }
         await nuevoRef.update({ rol: 'admin' });
-        await grupoRef.update({ adminUid: nuevoAdminUid });
+        await grupoRef.update({
+            adminUid: nuevoAdminUid,
+            adminUids: FieldValue.arrayUnion(nuevoAdminUid),
+        });
     }
 
     await miembroRef.delete();
-    await grupoRef.update({ miembrosCount: FieldValue.increment(-1) });
+    await grupoRef.update({
+        miembrosCount: FieldValue.increment(-1),
+        // Me quito de la lista de admins. Si yo era el adminUid principal,
+        // lo paso a otro admin que quede (o al sucesor recién nombrado).
+        adminUids: FieldValue.arrayRemove(uid),
+        ...(grupo['adminUid'] === uid && otrosAdmins.length > 0
+            ? { adminUid: otrosAdmins[0] }
+            : {}),
+    });
     await db.doc(`users/${uid}`).update({
         grupos: FieldValue.arrayRemove(grupoId),
         gruposFavoritos: FieldValue.arrayRemove(grupoId),
     });
 
     return { ok: true, eliminado: false };
+});
+
+/**
+ * Nombra administrador a otro miembro del grupo. Solo un admin actual puede
+ * hacerlo. Suma al array de admins y marca su rol como 'admin' (para el badge).
+ */
+export const hacerAdminGrupo = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const grupoId = String(req.data?.grupoId ?? '');
+    const nuevoUid = String(req.data?.uid ?? '');
+    if (!grupoId || !nuevoUid) throw new HttpsError('invalid-argument', 'Faltan datos.');
+
+    const grupoRef = db.doc(`grupos/${grupoId}`);
+    const grupo = (await grupoRef.get()).data();
+    if (!grupo) throw new HttpsError('not-found', 'El grupo no existe.');
+    if (!esAdminDeGrupo(grupo, uid)) {
+        throw new HttpsError('permission-denied', 'Solo un administrador del grupo puede nombrar a otros.');
+    }
+
+    const miembroRef = grupoRef.collection('miembros').doc(nuevoUid);
+    if (!(await miembroRef.get()).exists) {
+        throw new HttpsError('not-found', 'Esa persona no está en el grupo.');
+    }
+
+    await miembroRef.update({ rol: 'admin' });
+    await grupoRef.update({ adminUids: FieldValue.arrayUnion(nuevoUid) });
+    return { ok: true };
+});
+
+/**
+ * Le quita el rol de administrador a un miembro. Solo un admin actual puede
+ * hacerlo. No se permite dejar al grupo sin ningún administrador.
+ */
+export const quitarAdminGrupo = onCall(opcionesCall, async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const grupoId = String(req.data?.grupoId ?? '');
+    const quitarUid = String(req.data?.uid ?? '');
+    if (!grupoId || !quitarUid) throw new HttpsError('invalid-argument', 'Faltan datos.');
+
+    const grupoRef = db.doc(`grupos/${grupoId}`);
+    const grupo = (await grupoRef.get()).data();
+    if (!grupo) throw new HttpsError('not-found', 'El grupo no existe.');
+    if (!esAdminDeGrupo(grupo, uid)) {
+        throw new HttpsError('permission-denied', 'Solo un administrador del grupo puede quitar el rol.');
+    }
+
+    const adminsActuales: string[] = Array.isArray(grupo['adminUids'])
+        ? (grupo['adminUids'] as string[])
+        : grupo['adminUid']
+          ? [String(grupo['adminUid'])]
+          : [];
+    if (!adminsActuales.includes(quitarUid)) {
+        throw new HttpsError('failed-precondition', 'Esa persona no es administradora.');
+    }
+    if (adminsActuales.length <= 1) {
+        throw new HttpsError('failed-precondition', 'El grupo debe tener al menos un administrador.');
+    }
+
+    const miembroRef = grupoRef.collection('miembros').doc(quitarUid);
+    await miembroRef.update({ rol: 'miembro' });
+    const patch: Record<string, unknown> = { adminUids: FieldValue.arrayRemove(quitarUid) };
+    // Si quitamos al admin principal, pasamos ese puesto a otro que quede.
+    if (grupo['adminUid'] === quitarUid) {
+        patch['adminUid'] = adminsActuales.find((a) => a !== quitarUid) ?? uid;
+    }
+    await grupoRef.update(patch);
+    return { ok: true };
 });
 
 /** Marca o desmarca un grupo como favorito para el usuario. */
@@ -5994,9 +6096,9 @@ export const crearTorneo = onCall(opcionesCall, async (req) => {
             db.doc(`admins/${uid}`).get(),
         ]);
         if (!grupoSnap.exists) throw new HttpsError('not-found', 'El grupo no existe.');
-        const esAdminGrupo = grupoSnap.data()?.['adminUid'] === uid;
+        const esAdminGrupo = esAdminDeGrupo(grupoSnap.data(), uid);
         if (!esAdminGrupo && !adminSnap.exists) {
-            throw new HttpsError('permission-denied', 'Solo el administrador del grupo puede crear torneos para él.');
+            throw new HttpsError('permission-denied', 'Solo un administrador del grupo puede crear torneos para él.');
         }
     } else {
         const esAdmin = (await db.doc(`admins/${uid}`).get()).exists;
@@ -6056,9 +6158,9 @@ export const crearPartidoGrupo = onCall(opcionesCall, async (req) => {
         db.doc(`admins/${uid}`).get(),
     ]);
     if (!grupoSnap.exists) throw new HttpsError('not-found', 'El grupo no existe.');
-    const esAdminGrupo = grupoSnap.data()?.['adminUid'] === uid;
+    const esAdminGrupo = esAdminDeGrupo(grupoSnap.data(), uid);
     if (!esAdminGrupo && !adminSnap.exists) {
-        throw new HttpsError('permission-denied', 'Solo el administrador del grupo puede crear partidos para él.');
+        throw new HttpsError('permission-denied', 'Solo un administrador del grupo puede crear partidos para él.');
     }
 
     const homeTeam = String(d.homeTeam ?? '').trim();
@@ -6115,9 +6217,9 @@ export const liquidarPartidoGrupo = onCall(opcionesCall, async (req) => {
         db.doc(`grupos/${grupoId}`).get(),
         db.doc(`admins/${uid}`).get(),
     ]);
-    const esAdminGrupo = grupoSnap.exists && grupoSnap.data()?.['adminUid'] === uid;
+    const esAdminGrupo = grupoSnap.exists && esAdminDeGrupo(grupoSnap.data(), uid);
     if (!esAdminGrupo && !adminSnap.exists) {
-        throw new HttpsError('permission-denied', 'Solo el administrador del grupo puede liquidar sus partidos.');
+        throw new HttpsError('permission-denied', 'Solo un administrador del grupo puede liquidar sus partidos.');
     }
 
     return ejecutarLiquidacion(partidoId, resultadoOficial);

@@ -68,8 +68,20 @@ import { Grupo, MiembroGrupo } from '../../core/models/grupo.model';
           <div class="miembro">
             <div class="ava">{{ inicial(m.alias) }}</div>
             <span class="mi-alias">{{ m.uid === miUid() ? m.alias + ' (tú)' : m.alias }}</span>
-            @if (m.rol === 'admin') {
+            @if (esAdminMiembro(m)) {
               <span class="mi-badge">ADMIN</span>
+            }
+            <!-- Acciones de admin: nombrar o quitar admin a otros miembros. -->
+            @if (soyAdmin(g) && m.uid !== miUid()) {
+              @if (esAdminMiembro(m)) {
+                <button class="mi-accion" [disabled]="ocupado()" (click)="quitarAdmin(m)" title="Quitar administrador">
+                  <i class="ti ti-shield-off"></i>
+                </button>
+              } @else {
+                <button class="mi-accion mi-accion--dar" [disabled]="ocupado()" (click)="hacerAdmin(m)" title="Hacer administrador">
+                  <i class="ti ti-shield-check"></i>
+                </button>
+              }
             }
           </div>
         }
@@ -206,6 +218,16 @@ import { Grupo, MiembroGrupo } from '../../core/models/grupo.model';
         font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
         color: var(--tipo-elim-text, #0c447c); background: var(--tipo-elim-bg, rgba(55,138,221,0.14));
       }
+      /* Botón para nombrar/quitar admin junto a cada miembro. */
+      .mi-accion {
+        flex-shrink: 0; width: 32px; height: 32px; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 1px solid var(--border); border-radius: 8px;
+        background: var(--surface-1); color: var(--text-muted); font-size: 16px;
+      }
+      .mi-accion:hover { color: var(--text-primary); }
+      .mi-accion--dar:hover { color: var(--accent-text); border-color: var(--accent-fill); }
+      .mi-accion:disabled { opacity: 0.5; cursor: default; }
 
       .empty { color: var(--text-muted); font-size: 14px; text-align: center; padding: 40px 0; }
 
@@ -263,7 +285,42 @@ export class GrupoDetalleComponent {
   private timerBusqueda: ReturnType<typeof setTimeout> | null = null;
 
   soyAdmin(g: Grupo): boolean {
-    return g.adminUid === this.miUid();
+    const yo = this.miUid();
+    if (!yo) return false;
+    return (g.adminUids?.length ? g.adminUids.includes(yo) : g.adminUid === yo);
+  }
+
+  /** ¿Este miembro es administrador del grupo? */
+  esAdminMiembro(m: MiembroGrupo): boolean {
+    const g = this.grupo();
+    if (g?.adminUids?.length) return g.adminUids.includes(m.uid);
+    return m.rol === 'admin' || g?.adminUid === m.uid;
+  }
+
+  /** Nombra admin a un miembro. */
+  async hacerAdmin(m: MiembroGrupo): Promise<void> {
+    this.ocupado.set(true);
+    try {
+      await this.gruposSrv.hacerAdmin(this.id, m.uid);
+      this.toast.exito(`${m.alias} ahora es administrador.`);
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudo nombrar administrador.');
+    } finally {
+      this.ocupado.set(false);
+    }
+  }
+
+  /** Le quita el rol de admin a un miembro. */
+  async quitarAdmin(m: MiembroGrupo): Promise<void> {
+    this.ocupado.set(true);
+    try {
+      await this.gruposSrv.quitarAdmin(this.id, m.uid);
+      this.toast.exito(`${m.alias} ya no es administrador.`);
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudo quitar el rol.');
+    } finally {
+      this.ocupado.set(false);
+    }
   }
 
   /** Va al formulario de crear torneo con este grupo precargado. */
@@ -336,8 +393,11 @@ export class GrupoDetalleComponent {
   }
 
   intentarSalir(g: Grupo): void {
-    // Si soy admin y hay más gente, debo transferir primero.
-    if (this.soyAdmin(g) && this.miembros().length > 1) {
+    // Solo hay que transferir si soy el ÚNICO admin y queda más gente. Si hay
+    // otros admins, puedo salir directo (el grupo no se queda sin mando).
+    const adminsUids = g.adminUids?.length ? g.adminUids : [g.adminUid];
+    const soyUnicoAdmin = this.soyAdmin(g) && adminsUids.filter((a) => a).length <= 1;
+    if (soyUnicoAdmin && this.miembros().length > 1) {
       this.dialogo.set('transferir');
       return;
     }

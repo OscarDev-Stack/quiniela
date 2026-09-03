@@ -85,6 +85,18 @@ export class GruposService {
         await fn({ grupoId, uid });
     }
 
+    /** Nombra administrador a un miembro del grupo. */
+    async hacerAdmin(grupoId: string, uid: string): Promise<void> {
+        const fn = httpsCallable(this.fns, 'hacerAdminGrupo');
+        await fn({ grupoId, uid });
+    }
+
+    /** Le quita el rol de administrador a un miembro. */
+    async quitarAdmin(grupoId: string, uid: string): Promise<void> {
+        const fn = httpsCallable(this.fns, 'quitarAdminGrupo');
+        await fn({ grupoId, uid });
+    }
+
     /** Busca usuarios por alias (solo devuelve uid + alias, sin correos). */
     async buscarUsuarios(texto: string): Promise<{ uid: string; alias: string }[]> {
         const fn = httpsCallable(this.fns, 'buscarUsuariosPorAlias');
