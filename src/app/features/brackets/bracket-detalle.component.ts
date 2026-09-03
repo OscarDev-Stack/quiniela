@@ -70,6 +70,28 @@ import { Bracket } from '../../core/models/bracket.model';
               : 'Acertaste el cuadro y quedaste en primer lugar.'"
             [premio]="miPremioBracket()"
           />
+        } @else if (b.estado === 'finalizado' && participo()) {
+          <!-- No ganaste: cierre honesto con el resultado, sin dejar a nadie sin mensaje. -->
+          <section class="panel panel--fin">
+            <div class="fin-ico"><i class="ti ti-flag-checkered"></i></div>
+            <h2 class="fin-tit">Eliminatoria terminada</h2>
+            <p class="fin-txt">
+              @if (b.modo === 'duenos') {
+                @if (miDueno(); as d) {
+                  Tu equipo <strong>{{ d.equipo }}</strong> no fue campeón esta vez.
+                }
+                @if (b.ganadorAlias) { Ganó <strong>{{ b.ganadorAlias }}</strong>. }
+              } @else {
+                @if (miPron()?.posicion; as pos) {
+                  Quedaste en el <strong>lugar {{ pos }}</strong> con {{ miPron()?.puntos ?? 0 }} pts.
+                } @else {
+                  Esta vez no se dio.
+                }
+                @if (b.ganadorAlias) { Ganó <strong>{{ b.ganadorAlias }}</strong>. }
+              }
+            </p>
+            <p class="fin-anim">¡Vamos por la próxima!</p>
+          </section>
         }
 
         <!-- ARRIBA DEL TODO: lo tuyo. Es lo primero que la gente quiere ver:
@@ -246,6 +268,12 @@ import { Bracket } from '../../core/models/bracket.model';
         display: flex; align-items: center; gap: 7px;
         color: var(--accent-text);
       }
+      /* Cierre para quien no ganó: sobrio, sin celebración. */
+      .panel--fin { text-align: center; }
+      .fin-ico { font-size: 34px; color: var(--text-muted); margin-bottom: 4px; }
+      .fin-tit { font-size: 17px; font-weight: 700; margin: 0 0 6px; }
+      .fin-txt { font-size: 14px; color: var(--text-secondary); line-height: 1.5; margin: 0 0 8px; }
+      .fin-anim { font-size: 13px; font-weight: 600; color: var(--accent-text); margin: 0; }
       .cargando { font-size: 14px; color: var(--text-muted); }
       .leyenda-cuadro {
         display: flex; gap: 16px; margin-top: 10px;
@@ -489,6 +517,17 @@ export class BracketDetalleComponent {
       return !!mio && b.ganadorAlias === mio.nombre;
     }
     return this.miPron()?.posicion === 1;
+  });
+
+  /**
+   * ¿Participé en esta eliminatoria? En dueños, si tengo equipo asignado;
+   * en pronóstico, si dejé un pronóstico. Sirve para mostrar el mensaje de
+   * cierre a quien jugó (aunque no haya ganado).
+   */
+  readonly participo = computed(() => {
+    const b = this.bracket();
+    if (!b) return false;
+    return b.modo === 'duenos' ? !!this.miDueno() : !!this.miPron();
   });
 
   /** Premio que gané en la eliminatoria (0 si no gané o no aplica). */

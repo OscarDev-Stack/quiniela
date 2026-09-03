@@ -29,11 +29,21 @@ import {
   template: `
     @if (bracket(); as b) {
       <div class="wrap">
+        <!-- Ya cerró: por defecto solo mostramos al campeón elegido, con un
+             botón para desplegar todas las selecciones. Antes de cerrar, el
+             cuadro completo se muestra para poder pronosticar. -->
         @if (yaCerro(b)) {
-          <div class="aviso aviso--cerrado">
-            <i class="ti ti-lock"></i>
-            El pronóstico ya cerró. Aquí está el tuyo tal como quedó.
-          </div>
+          @if (campeon(); as c) {
+            <div class="campeon campeon--arriba">
+              <span class="campeon-corona">🏆 Tu campeón</span>
+              <app-escudo [equipo]="c" [size]="72" />
+              <strong class="campeon-nom">{{ c }}</strong>
+            </div>
+          }
+          <button class="ver-selecciones" (click)="verSelecciones.set(!verSelecciones())">
+            <span><i class="ti ti-list-check"></i> Mis selecciones</span>
+            <i class="ti" [class.ti-chevron-down]="!verSelecciones()" [class.ti-chevron-up]="verSelecciones()"></i>
+          </button>
         } @else {
           <p class="intro">
             Elige quién avanza en cada llave. Tus elecciones arman el camino
@@ -41,6 +51,7 @@ import {
           </p>
         }
 
+        @if (!yaCerro(b) || verSelecciones()) {
         @for (r of rondas(b); track r) {
           <section class="ronda">
             <h3>{{ nombre(r, b) }}</h3>
@@ -80,8 +91,11 @@ import {
             }
           </section>
         }
+        }
 
-        @if (campeon(); as c) {
+        <!-- Campeón al pie: solo mientras se está pronosticando (aún no cierra).
+             Ya cerrado, el campeón se muestra arriba, fuera del colapsable. -->
+        @if (!yaCerro(b) && campeon(); as c) {
           <div class="campeon">
             <span class="campeon-corona">🏆 Tu campeón</span>
             <app-escudo [equipo]="c" [size]="72" />
@@ -149,8 +163,18 @@ import {
         background: var(--accent-bg); color: var(--accent-text); text-align: center;
         display: flex; flex-direction: column; align-items: center; gap: 8px;
       }
+      .campeon--arriba { margin-top: 0; }
       .campeon-corona { font-size: 13px; font-weight: 600; opacity: 0.85; }
       .campeon-nom { font-size: 18px; }
+      /* Toggle para desplegar las selecciones una vez cerrado el pronóstico. */
+      .ver-selecciones {
+        width: 100%; display: flex; align-items: center; justify-content: space-between;
+        gap: 8px; padding: 11px 13px; cursor: pointer; margin-bottom: 12px;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-1); color: var(--text-secondary);
+        font-size: 13px; font-weight: 600;
+      }
+      .ver-selecciones:hover { color: var(--text-primary); }
       .btn--primary {
         width: 100%; padding: 13px; cursor: pointer; font-size: 15px; font-weight: 600;
         border: none; border-radius: var(--radius); background: var(--accent-fill); color: #fff;
@@ -176,6 +200,8 @@ export class PronosticoBracketComponent {
   readonly guardando = signal(false);
   readonly mensaje = signal('');
   readonly error = signal(false);
+  /** Tras el cierre, controla si se despliegan todas las selecciones. */
+  readonly verSelecciones = signal(false);
 
   constructor() {
     // Precarga mi pronóstico previo si existe. Va en un effect porque

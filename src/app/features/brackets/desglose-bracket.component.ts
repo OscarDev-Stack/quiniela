@@ -120,7 +120,11 @@ export class DesgloseBracketComponent {
       case 'marcador-resultado':
         return `Resultado global acertado (${it.nombreRonda.toLowerCase()})`;
       case 'fallo':
-        return `No llegó a ${it.nombreRonda.toLowerCase()}`;
+        // En la final, "fallar" significa que llegó pero no se coronó: el
+        // texto correcto es "No fue campeón", no "No llegó a la final".
+        return it.nombreRonda.toLowerCase() === 'final'
+          ? 'No fue campeón'
+          : `No llegó a ${it.nombreRonda.toLowerCase()}`;
       default:
         return '';
     }
