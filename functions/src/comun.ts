@@ -56,7 +56,22 @@ setGlobalOptions({ maxInstances: 10 });
  * la app funciona; si lo activas antes, dejará de responder.
  */
 const EXIGIR_APP_CHECK = false;
-export const opcionesCall = { enforceAppCheck: EXIGIR_APP_CHECK };
+
+/**
+ * Opciones comunes de las funciones onCall (y del webhook onRequest).
+ *
+ * `invoker: 'public'` fija el permiso de invocación de Cloud Run a `allUsers`
+ * en cada deploy. Así las funciones que llama el navegador quedan siempre en
+ * "Permitir acceso público" (autenticación a nivel de red), sin depender de
+ * ajustes manuales en la consola. La seguridad real la dan Firebase Auth
+ * (req.auth dentro de cada función) y, cuando se active, App Check.
+ * NOTA: no aplica a onSchedule (esas no usan opcionesCall; las dispara
+ * Cloud Scheduler y no se exponen públicamente).
+ */
+export const opcionesCall = {
+    enforceAppCheck: EXIGIR_APP_CHECK,
+    invoker: 'public' as const,
+};
 
 /* --- Secrets --- */
 /** Llave de football-data.org. `firebase functions:secrets:set FOOTBALL_DATA_KEY` */

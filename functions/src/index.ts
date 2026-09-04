@@ -3348,7 +3348,9 @@ export const vincularTelegram = onCall(
  * y /stop para dejar de recibir avisos.
  */
 export const telegramWebhook = onRequest(
-    { secrets: [telegramToken, telegramWebhookSecret], maxInstances: 3 },
+    // Público: lo llama Telegram (sin credencial IAM). La autenticidad se
+    // valida con el header secreto (x-telegram-bot-api-secret-token).
+    { secrets: [telegramToken, telegramWebhookSecret], maxInstances: 3, invoker: 'public' },
     async (req, res) => {
         // Telegram manda este encabezado; si no coincide, no es él.
         const esperado = telegramWebhookSecret.value();
