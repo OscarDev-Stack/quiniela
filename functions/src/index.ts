@@ -959,7 +959,7 @@ async function avisarResultadoPartido(
                 'Esta vez no se dio. ¡A la próxima!';
         }
         try {
-            await avisar([uid], texto, 'partidos');
+            await avisar([uid], texto, 'partidos', '/mis-pronosticos');
         } catch {
             // Un fallo de aviso no debe tumbar la liquidación.
         }
@@ -2516,6 +2516,7 @@ export const resolverJornadaCompeticion = onCall(
                     `Jornada ${j.numero} calificada.\n\n${podio}\n\n` +
                     'Ya puedes ver los cartones de todos en la app.',
                     'torneosInscritos',
+                    `/torneos/${torneoDoc.id}`,
                 );
 
                 const ultima = Number(torneo['jornadas'] ?? 0);
@@ -2616,6 +2617,7 @@ export const resolverJornadaCompeticion = onCall(
                     `Quedaste fuera en la jornada ${j.numero}. ${razon}\n\n` +
                     `Siguen ${vivos.size} en pie. Puedes ver cómo termina en la app.`,
                     'torneosInscritos',
+                    `/torneos/${torneoDoc.id}`,
                 );
             }
             const bolsaBruta = Number(torneo['bolsa'] ?? 0);
@@ -2713,6 +2715,7 @@ export const resolverJornadaCompeticion = onCall(
                     `¡Terminó el torneo! Ganó ${lista.map((g) => g.alias).join(', ')}.` +
                     (premio > 0 ? `\nPremio: ${premio} pts por cabeza.` : ''),
                     'torneosInscritos',
+                    `/torneos/${torneoDoc.id}`,
                 );
             } else {
                 await torneoRef.update({ jornadaActual: j.numero + 1 });
@@ -2724,6 +2727,7 @@ export const resolverJornadaCompeticion = onCall(
                     `Jornada ${j.numero} resuelta. Quedan ${sobreviven} en pie.\n` +
                     `Ya puedes elegir tu equipo para la jornada ${j.numero + 1}.`,
                     'torneosInscritos',
+                    `/torneos/${torneoDoc.id}`,
                 );
             }
         }
@@ -3125,6 +3129,7 @@ export const cerrarInscripciones = onSchedule(
                     ? `Ya puedes capturar tus marcadores de la jornada ${jornada}.`
                     : `Ya puedes elegir tu equipo para la jornada ${jornada}.`),
                 'torneosInscritos',
+                `/torneos/${torneoDoc.id}`,
             );
         }
     },
@@ -3731,15 +3736,40 @@ function limpiarHtml(texto: string): string {
         .trim();
 }
 
-async function enviarPush(uid: string, tokens: string[], titulo: string, cuerpo: string): Promise<boolean> {
+/** Base del sitio para armar los enlaces de las notificaciones push. */
+const APP_URL = 'https://automatepowerv1.web.app';
+
+/**
+ * Construye el enlace absoluto al que lleva la notificación al tocarla.
+ * `ruta` es una ruta relativa de la app (ej. "/torneos/ID"); si no se pasa,
+ * lleva al inicio.
+ */
+function linkPush(ruta?: string): string {
+    if (!ruta) return APP_URL;
+    return `${APP_URL}${ruta.startsWith('/') ? ruta : '/' + ruta}`;
+}
+
+async function enviarPush(
+    uid: string,
+    tokens: string[],
+    titulo: string,
+    cuerpo: string,
+    ruta?: string,
+): Promise<boolean> {
     if (tokens.length === 0) return false;
     try {
         const resp = await getMessaging().sendEachForMulticast({
             tokens,
             notification: { title: titulo, body: cuerpo },
             webpush: {
-                fcmOptions: { link: 'https://automatepowerv1.web.app' },
-                notification: { icon: '/icons/icon-192.png' },
+                // Al tocar la notificación, abre la pantalla relevante (deep link).
+                fcmOptions: { link: linkPush(ruta) },
+                notification: {
+                    icon: '/icons/icon-192.png',
+                    // Ícono de la barra de estado (Android). Usamos el ícono
+                    // disponible; el SW también fija su propio badge.
+                    badge: '/icons/icon-192.png',
+                },
             },
         });
 
@@ -3795,6 +3825,7 @@ async function avisar(
     uids: string[],
     texto: string,
     categoria?: CategoriaNotif,
+    ruta?: string,
 ): Promise<number> {
     if (uids.length === 0) return 0;
 
@@ -3825,7 +3856,7 @@ async function avisar(
             const lineas = limpio.split('\n').filter((l) => l.trim());
             const titulo = lineas[0] ?? 'Quiniela';
             const cuerpo = lineas.slice(1).join('\n') || titulo;
-            await enviarPush(doc.id, tokens, titulo, cuerpo);
+            await enviarPush(doc.id, tokens, titulo, cuerpo, ruta);
         }
     }
     return enviados;
@@ -4098,6 +4129,8 @@ export const avisarRegistro = onCall(
             '👤 <b>Cuenta nueva</b>\n' +
             `${String(u['alias'] ?? 'Sin alias')} · ${String(u['email'] ?? '')}\n\n` +
             `Hay ${pendientes.data().count} cuenta(s) esperando validación.`,
+            undefined,
+            '/admin/usuarios',
         );
 
         return { ok: true, enviados };
@@ -4148,6 +4181,8 @@ export const solicitarReinicio = onCall(
             '♻️ <b>Solicitud de reinicio</b>\n' +
             `${alias} pide que le reinicien el saldo.\n` +
             `Va en ${saldo} pts.`,
+            undefined,
+            '/admin/usuarios',
         );
 
         return { ok: true };
@@ -4309,6 +4344,7 @@ export const recordarJornada = onSchedule(
                     ? 'Si no los mandas, esta jornada te quedas en ceros.'
                     : 'Si no eliges, quedas eliminado.'),
                 'torneosInscritos',
+                `/torneos/${torneoDoc.id}`,
             );
 
             avisados += faltantes.length;
@@ -4578,6 +4614,7 @@ export const revivir = onCall(
             `Reviviste en la jornada ${resultado.jornada} por ${resultado.costo} pts.\n` +
             'Vuelves con las vidas que tenías al caer. ¡Elige con cuidado!',
             'torneosInscritos',
+            `/torneos/${torneoId}`,
         );
 
         return { ok: true, ...resultado };
@@ -4932,6 +4969,7 @@ export const asignarDuenoBracket = onCall({ ...opcionesCall, secrets: [telegramT
             `Te asignaron a <b>${equipo}</b>.\n` +
             (costo > 0 ? `Entra a la app para aceptar (cuesta ${costo} pts).` : 'Entra a la app para aceptar.'),
             'torneosInscritos',
+            `/eliminatorias/${bracketId}`,
         );
     }
 
@@ -5051,6 +5089,8 @@ export const rechazarDuenoBracket = onCall({ ...opcionesCall, secrets: [telegram
             `⚠️ <b>${nombreBracket}</b>\n` +
             `Un participante rechazó al equipo ${equipoLiberado}.\n` +
             `Ya quedó libre para reasignar.`,
+            undefined,
+            '/admin/brackets',
         );
     }
 
@@ -5468,6 +5508,7 @@ async function calificarDuenos(
             `¡Tu equipo ${campeon} fue campeón!\n` +
             (bolsa > 0 ? `Ganaste ${bolsa} pts. ¡Felicidades!` : '¡Felicidades!'),
             'torneosInscritos',
+            `/eliminatorias/${bracketId}`,
         );
     }
 
@@ -5591,6 +5632,7 @@ export const calificarBracket = onCall(
                     `Quedaste en ${i + 1}° lugar con ${jug.puntos} pts.\n` +
                     `Ganaste ${premio} pts. ¡Felicidades!`,
                     'torneosInscritos',
+                    `/eliminatorias/${bracketId}`,
                 );
             }
         }
@@ -5637,6 +5679,8 @@ export const avisarDuenosPendientes = onSchedule(
                 `⏰ <b>${String(b['nombre'] ?? 'Eliminatoria')}</b>\n` +
                 `Cierra pronto y faltan ${faltan.length} por aceptar: ${nombres}.\n` +
                 `Al cerrar se les cobrará automáticamente (o se libera su equipo si no tienen puntos).`,
+                undefined,
+                '/admin/brackets',
             );
             await d.ref.update({ avisadoPendientes: true });
         }
@@ -5730,6 +5774,7 @@ async function cobrarDuenosPendientes(
                 `El torneo arrancó con tu equipo ${dn.equipo}.` +
                 (costo > 0 ? ` Se te cobró la entrada de ${costo} pts.` : ''),
                 'torneosInscritos',
+                `/eliminatorias/${ref.id}`,
             );
         } else {
             // Sin saldo: se libera el equipo y se saca de su lista.

@@ -4,7 +4,9 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "build": "ng build",
+    "build": "ng build && node scripts/generar-sw.js prod",
+    "build:prod": "ng build --configuration production && node scripts/generar-sw.js prod",
+    "build:dev": "ng build --configuration development && node scripts/generar-sw.js dev",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },

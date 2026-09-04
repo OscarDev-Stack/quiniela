@@ -28,13 +28,15 @@ jobs:
       - name: Instalar dependencias
         run: npm ci --legacy-peer-deps
 
-      # Compila con la config segun la rama (dev o produccion)
+      # Compila con la config segun la rama (dev o produccion). build:prod y
+      # build:dev tambien generan el service worker de messaging con el
+      # firebaseConfig del entorno correcto (scripts/generar-sw.js).
       - name: Compilar Angular
         run: |
           if [ "${GITHUB_REF##*/}" = "master" ]; then
-            npm run build -- --configuration=production
+            npm run build:prod
           else
-            npm run build -- --configuration=development
+            npm run build:dev
           fi
 
       # Escribe la llave del SA correcto para que la CLI de Firebase autentique
