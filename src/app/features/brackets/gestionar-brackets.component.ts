@@ -254,7 +254,8 @@ import {
       .btn:disabled { opacity: 0.5; }
       .aviso { font-size: 13px; color: var(--text-secondary); margin: 8px 0 0; }
       .aviso--error { color: var(--danger-text); }
-      .invitar { display: flex; align-items: center; gap: 10px; margin: 10px 0 14px; }
+      .invitar { margin: 10px 0 14px; }
+      .invitar app-codigo-invitar { display: block; width: 100%; }
 
       /* Resumen de configuración */
       .resumen-cfg { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 14px; }
