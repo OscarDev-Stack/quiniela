@@ -253,6 +253,48 @@ export const EQUIPOS_LIGA_MX: EquipoCatalogo[] = [
   { nombre: 'Torino', escudo: 'torino.png', alias: ['torino', 'torino fc', 'torino calcio'], liga: 'Serie A' },
   { nombre: 'Udinese', escudo: 'udinese.png', alias: ['udinese', 'udinese calcio'], liga: 'Serie A' },
   { nombre: 'Venezia', escudo: 'venezia.png', alias: ['venezia', 'venezia fc', 'venice'], liga: 'Serie A' },
+
+  /* ---------------- NFL (32) — escudos de TheSportsDB (list/teams/4391) ---------------- */
+  /* AFC East */
+  { nombre: 'Buffalo Bills', escudo: 'nfl-bills.png', alias: ['buffalo bills', 'buffalo', 'bills'], liga: 'NFL' },
+  { nombre: 'Miami Dolphins', escudo: 'nfl-dolphins.png', alias: ['miami dolphins', 'miami', 'dolphins'], liga: 'NFL' },
+  { nombre: 'New England Patriots', escudo: 'nfl-patriots.png', alias: ['new england patriots', 'new england', 'patriots'], liga: 'NFL' },
+  { nombre: 'New York Jets', escudo: 'nfl-jets.png', alias: ['new york jets', 'ny jets', 'jets'], liga: 'NFL' },
+  /* AFC North */
+  { nombre: 'Baltimore Ravens', escudo: 'nfl-ravens.png', alias: ['baltimore ravens', 'baltimore', 'ravens'], liga: 'NFL' },
+  { nombre: 'Cincinnati Bengals', escudo: 'nfl-bengals.png', alias: ['cincinnati bengals', 'cincinnati', 'bengals'], liga: 'NFL' },
+  { nombre: 'Cleveland Browns', escudo: 'nfl-browns.png', alias: ['cleveland browns', 'cleveland', 'browns'], liga: 'NFL' },
+  { nombre: 'Pittsburgh Steelers', escudo: 'nfl-steelers.png', alias: ['pittsburgh steelers', 'pittsburgh', 'steelers'], liga: 'NFL' },
+  /* AFC South */
+  { nombre: 'Houston Texans', escudo: 'nfl-texans.png', alias: ['houston texans', 'houston', 'texans'], liga: 'NFL' },
+  { nombre: 'Indianapolis Colts', escudo: 'nfl-colts.png', alias: ['indianapolis colts', 'indianapolis', 'colts'], liga: 'NFL' },
+  { nombre: 'Jacksonville Jaguars', escudo: 'nfl-jaguars.png', alias: ['jacksonville jaguars', 'jacksonville', 'jaguars', 'jags'], liga: 'NFL' },
+  { nombre: 'Tennessee Titans', escudo: 'nfl-titans.png', alias: ['tennessee titans', 'tennessee', 'titans'], liga: 'NFL' },
+  /* AFC West */
+  { nombre: 'Denver Broncos', escudo: 'nfl-broncos.png', alias: ['denver broncos', 'denver', 'broncos'], liga: 'NFL' },
+  { nombre: 'Kansas City Chiefs', escudo: 'nfl-chiefs.png', alias: ['kansas city chiefs', 'kansas city', 'chiefs', 'kc chiefs'], liga: 'NFL' },
+  { nombre: 'Las Vegas Raiders', escudo: 'nfl-raiders.png', alias: ['las vegas raiders', 'las vegas', 'raiders', 'oakland raiders'], liga: 'NFL' },
+  { nombre: 'Los Angeles Chargers', escudo: 'nfl-chargers.png', alias: ['los angeles chargers', 'la chargers', 'chargers', 'san diego chargers'], liga: 'NFL' },
+  /* NFC East */
+  { nombre: 'Dallas Cowboys', escudo: 'nfl-cowboys.png', alias: ['dallas cowboys', 'dallas', 'cowboys'], liga: 'NFL' },
+  { nombre: 'New York Giants', escudo: 'nfl-giants.png', alias: ['new york giants', 'ny giants', 'giants'], liga: 'NFL' },
+  { nombre: 'Philadelphia Eagles', escudo: 'nfl-eagles.png', alias: ['philadelphia eagles', 'philadelphia', 'eagles', 'philly'], liga: 'NFL' },
+  { nombre: 'Washington Commanders', escudo: 'nfl-commanders.png', alias: ['washington commanders', 'washington', 'commanders', 'washington football team'], liga: 'NFL' },
+  /* NFC North */
+  { nombre: 'Chicago Bears', escudo: 'nfl-bears.png', alias: ['chicago bears', 'chicago', 'bears'], liga: 'NFL' },
+  { nombre: 'Detroit Lions', escudo: 'nfl-lions.png', alias: ['detroit lions', 'detroit', 'lions'], liga: 'NFL' },
+  { nombre: 'Green Bay Packers', escudo: 'nfl-packers.png', alias: ['green bay packers', 'green bay', 'packers'], liga: 'NFL' },
+  { nombre: 'Minnesota Vikings', escudo: 'nfl-vikings.png', alias: ['minnesota vikings', 'minnesota', 'vikings'], liga: 'NFL' },
+  /* NFC South */
+  { nombre: 'Atlanta Falcons', escudo: 'nfl-falcons.png', alias: ['atlanta falcons', 'atlanta', 'falcons'], liga: 'NFL' },
+  { nombre: 'Carolina Panthers', escudo: 'nfl-panthers.png', alias: ['carolina panthers', 'carolina', 'panthers'], liga: 'NFL' },
+  { nombre: 'New Orleans Saints', escudo: 'nfl-saints.png', alias: ['new orleans saints', 'new orleans', 'saints'], liga: 'NFL' },
+  { nombre: 'Tampa Bay Buccaneers', escudo: 'nfl-buccaneers.png', alias: ['tampa bay buccaneers', 'tampa bay', 'buccaneers', 'bucs', 'tampa'], liga: 'NFL' },
+  /* NFC West */
+  { nombre: 'Arizona Cardinals', escudo: 'nfl-cardinals.png', alias: ['arizona cardinals', 'arizona', 'cardinals'], liga: 'NFL' },
+  { nombre: 'Los Angeles Rams', escudo: 'nfl-rams.png', alias: ['los angeles rams', 'la rams', 'rams', 'st louis rams'], liga: 'NFL' },
+  { nombre: 'San Francisco 49ers', escudo: 'nfl-49ers.png', alias: ['san francisco 49ers', 'san francisco', '49ers', 'niners', 'sf 49ers'], liga: 'NFL' },
+  { nombre: 'Seattle Seahawks', escudo: 'nfl-seahawks.png', alias: ['seattle seahawks', 'seattle', 'seahawks'], liga: 'NFL' },
 ];
 
 /** Quita acentos y espacios extra, para comparar nombres sin fallar por tildes. */

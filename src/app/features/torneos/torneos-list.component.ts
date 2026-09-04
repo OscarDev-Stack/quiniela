@@ -1,5 +1,6 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { tap } from 'rxjs/operators';
@@ -9,16 +10,23 @@ import { apagarCargando } from '../../shared/cargando.util';
 import { TorneosService } from '../../core/services/torneos.service';
 import { BracketsService } from '../../core/services/brackets.service';
 import { ContextoService } from '../../shared/contexto.service';
+import { ToastService } from '../../shared/toast.service';
 import { Torneo } from '../../core/models/torneo.model';
 import { Bracket } from '../../core/models/bracket.model';
 
 @Component({
   selector: 'app-torneos-list',
   standalone: true,
-  imports: [CommonModule, NavComponent, CargandoComponent],
+  imports: [CommonModule, FormsModule, NavComponent, CargandoComponent],
   template: `
     <div class="screen">
       <app-nav title="Torneos" />
+
+      <div class="acciones">
+        <button class="btn" (click)="abrirUnirse()">
+          <i class="ti ti-ticket"></i> Unirme con código
+        </button>
+      </div>
 
       @if (cargando()) {
         <app-cargando texto="Cargando torneos" />
@@ -26,12 +34,12 @@ import { Bracket } from '../../core/models/bracket.model';
         <div class="vacio">
           <i class="ti ti-tournament"></i>
           <p>No participas en ningún torneo.</p>
-          <p class="pista">Los torneos son por invitación: alguien debe compartirte su enlace.</p>
+          <p class="pista">Los torneos y eliminatorias son por invitación: únete con el código que te compartan.</p>
         </div>
       }
 
       @for (t of visibles(); track t.id) {
-        <article class="card" [class.card--quin]="t.modo === 'quiniela'" [class.card--surv]="t.modo !== 'quiniela'" (click)="abrir(t)">
+        <article class="card" [class.card--quin]="t.modo === 'quiniela'" [class.card--surv]="t.modo !== 'quiniela'" [class.card--terminado]="finalizado(t.estado)" (click)="abrir(t)">
           <div class="top">
             <span class="competicion">{{ t.competicionNombre }}</span>
             @switch (t.estado) {
@@ -71,7 +79,7 @@ import { Bracket } from '../../core/models/bracket.model';
       @if (bracketsVisibles().length > 0) {
         <h3 class="seccion">Eliminatorias</h3>
         @for (b of bracketsVisibles(); track b.id) {
-          <article class="card card--bracket" (click)="abrirBracket(b)">
+          <article class="card card--bracket" [class.card--terminado]="finalizado(b.estado)" (click)="abrirBracket(b)">
             <div class="top">
               <span class="competicion">Eliminatoria</span>
               @switch (b.estado) {
@@ -87,6 +95,9 @@ import { Bracket } from '../../core/models/bracket.model';
               @if (b.costoEntrada > 0) {
                 <span class="bolsa"><i class="ti ti-coins"></i> Bolsa {{ b.bolsa | number }} pts</span>
               }
+              @if (esPublicoNoMio(b)) {
+                <span class="unete"><i class="ti ti-door-enter"></i> Únete</span>
+              }
               @if (b.ganadorAlias) {
                 <span class="ganador"><i class="ti ti-trophy"></i> {{ b.ganadorAlias }}</span>
               }
@@ -94,14 +105,71 @@ import { Bracket } from '../../core/models/bracket.model';
           </article>
         }
       }
+
+      <!-- Diálogo: unirse con código (torneo o eliminatoria) -->
+      @if (mostrarUnirse()) {
+        <div class="overlay" (click)="cerrarUnirse()">
+          <div class="dialogo" (click)="$event.stopPropagation()">
+            <h3>Unirme con código</h3>
+            <p class="dialogo-ayuda">
+              Escribe el código de invitación del torneo o la eliminatoria.
+            </p>
+            <label class="campo">
+              <span>Código de invitación</span>
+              <input
+                [(ngModel)]="codigo"
+                placeholder="ABC123"
+                maxlength="8"
+                autocapitalize="characters"
+                style="text-transform:uppercase"
+              />
+            </label>
+            <div class="dialogo-acciones">
+              <button class="btn" (click)="cerrarUnirse()">Cancelar</button>
+              <button
+                class="btn btn--primary"
+                [disabled]="ocupado() || !codigo.trim()"
+                (click)="unirse()"
+              >
+                {{ ocupado() ? 'Uniéndome…' : 'Unirme' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      }
     </div>
   `,
   styles: [
     `
+      .acciones { display: flex; gap: 8px; margin-bottom: 16px; }
+      .btn {
+        flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        padding: 11px; font-size: 14px; font-weight: 600; cursor: pointer;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-2); color: var(--text-primary);
+      }
+      .btn--primary { background: var(--accent-fill); color: #fff; border-color: var(--accent-fill); }
+      .btn:disabled { opacity: 0.6; cursor: default; }
+
       .vacio { text-align: center; color: var(--text-muted); padding: 48px 0; }
       .vacio i { font-size: 36px; opacity: 0.5; }
       .vacio p { font-size: 14px; margin: 10px 0 0; }
       .vacio .pista { font-size: 12px; opacity: 0.8; }
+
+      /* Diálogo de "unirme con código" */
+      .overlay {
+        position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.45);
+        display: flex; align-items: center; justify-content: center; padding: 20px;
+      }
+      .dialogo {
+        width: 100%; max-width: 360px; background: var(--surface-2);
+        border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px;
+      }
+      .dialogo h3 { margin: 0 0 6px; font-size: 17px; }
+      .dialogo-ayuda { margin: 0 0 14px; font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
+      .campo { display: block; margin-bottom: 16px; }
+      .campo span { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
+      .dialogo-acciones { display: flex; gap: 8px; }
 
       .card {
         background: var(--surface-2); border: 1px solid var(--border);
@@ -115,6 +183,7 @@ import { Bracket } from '../../core/models/bracket.model';
       .ganador { color: var(--warning-text); font-weight: 600; }
       .bolsa { color: var(--success-text); font-weight: 600; }
       .premio { color: var(--success-text); }
+      .unete { color: var(--accent-text); font-weight: 600; }
 
       .tag { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
         background: var(--surface-1); color: var(--text-secondary); }
@@ -127,6 +196,15 @@ import { Bracket } from '../../core/models/bracket.model';
       .card--bracket { border-left: 4px solid var(--tipo-elim-fill); }
       .card--surv { border-left: 4px solid var(--tipo-surv-fill); }
       .card--quin { border-left: 4px solid var(--tipo-quin-fill); }
+
+      /* Terminados: atenuados y con el acento en gris, para distinguirlos de
+         un vistazo de los que siguen activos. */
+      .card--terminado {
+        opacity: 0.6;
+        background: var(--surface-1);
+        border-left-color: var(--border-strong);
+      }
+      .card--terminado:hover { opacity: 0.85; }
     `,
   ],
 })
@@ -135,12 +213,61 @@ export class TorneosListComponent {
   private readonly bracketsService = inject(BracketsService);
   private readonly router = inject(Router);
   private readonly contexto = inject(ContextoService);
+  private readonly toast = inject(ToastService);
+
+  /* --- Unirme con código (torneo o eliminatoria) --- */
+  readonly mostrarUnirse = signal(false);
+  readonly ocupado = signal(false);
+  codigo = '';
+
+  abrirUnirse(): void {
+    this.codigo = '';
+    this.mostrarUnirse.set(true);
+  }
+  cerrarUnirse(): void {
+    this.mostrarUnirse.set(false);
+  }
+
+  /**
+   * Une por código. El mismo código puede ser de un torneo o de una
+   * eliminatoria, así que probamos torneo primero (reusa la pantalla de
+   * reglas /unirse/:codigo, que muestra el costo antes de aceptar) y, si no
+   * existe como torneo, lo intentamos como eliminatoria.
+   */
+  async unirse(): Promise<void> {
+    const codigo = this.codigo.trim().toUpperCase();
+    if (!codigo) return;
+
+    this.ocupado.set(true);
+    try {
+      // 1) ¿Es un torneo? consultarTorneo resuelve por código sin inscribir.
+      await this.service.consultar(codigo);
+      // Existe: mandamos a la pantalla de reglas para aceptar (respeta costo).
+      this.ocupado.set(false);
+      this.cerrarUnirse();
+      this.router.navigate(['/unirse', codigo]);
+      return;
+    } catch {
+      // No es torneo (o no existe). Probamos como eliminatoria.
+    }
+
+    try {
+      const r = await this.bracketsService.unirse(codigo);
+      this.cerrarUnirse();
+      this.router.navigate(['/eliminatorias', r.id]);
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'Ese código no existe.');
+    } finally {
+      this.ocupado.set(false);
+    }
+  }
 
   /** True hasta que llegan los primeros torneos Y brackets (ambas secciones). */
   readonly cargando = signal(true);
   private readonly inicioCarga = Date.now();
   private readonly listoTorneos = signal(false);
   private readonly listoBrackets = signal(false);
+  private readonly listoBracketsPublicos = signal(false);
 
   private readonly torneos = toSignal(
     this.service.misTorneos$.pipe(tap(() => this.listoTorneos.set(true))),
@@ -150,26 +277,58 @@ export class TorneosListComponent {
     this.bracketsService.misBrackets().pipe(tap(() => this.listoBrackets.set(true))),
     { initialValue: [] as Bracket[] },
   );
+  /** Eliminatorias públicas abiertas (para unirse aunque no participes aún). */
+  private readonly bracketsPublicos = toSignal(
+    this.bracketsService.bracketsPublicos().pipe(tap(() => this.listoBracketsPublicos.set(true))),
+    { initialValue: [] as Bracket[] },
+  );
 
-  /** Apaga el loading cuando ambas fuentes de la vista ya emitieron. */
+  /** Apaga el loading cuando las fuentes de la vista ya emitieron. */
   private readonly apagar = effect(() => {
-    if (this.listoTorneos() && this.listoBrackets()) {
+    if (this.listoTorneos() && this.listoBrackets() && this.listoBracketsPublicos()) {
       apagarCargando(this.cargando, this.inicioCarga);
     }
   });
+
+  /**
+   * Orden por estado: primero lo que está EN JUEGO, luego lo abierto a
+   * inscripción, y al final lo finalizado. Así de un vistazo se ve qué está
+   * activo sin que los terminados estorben.
+   */
+  private rangoEstado(estado: string): number {
+    if (estado === 'en-curso') return 0;
+    if (estado === 'inscripcion') return 1;
+    return 2; // finalizado y cualquier otro
+  }
 
   readonly visibles = computed(() => {
     const ctx = this.contexto.grupoId(); // null = Global
     return [...this.torneos()]
       .filter((t) => (t.grupoId ?? null) === ctx)
-      .sort((a, b) => a.estado.localeCompare(b.estado));
+      .sort((a, b) => this.rangoEstado(a.estado) - this.rangoEstado(b.estado));
   });
 
-  /** Brackets del contexto activo (Global o el grupo elegido). */
+  /**
+   * Brackets del contexto activo: los MÍOS más las eliminatorias PÚBLICAS
+   * abiertas donde aún no estoy (sin duplicar), para que se puedan descubrir
+   * y unir desde aquí. Mismo orden por estado.
+   */
   readonly bracketsVisibles = computed(() => {
     const ctx = this.contexto.grupoId();
-    return this.brackets().filter((b) => (b.grupoId ?? null) === ctx);
+    const mios = this.brackets().filter((b) => (b.grupoId ?? null) === ctx);
+    const idsMios = new Set(mios.map((b) => b.id));
+    const publicasNuevas = this.bracketsPublicos().filter(
+      (b) => (b.grupoId ?? null) === ctx && !idsMios.has(b.id),
+    );
+    return [...mios, ...publicasNuevas].sort(
+      (a, b) => this.rangoEstado(a.estado) - this.rangoEstado(b.estado),
+    );
   });
+
+  /** ¿Está finalizado? Para atenuarlo visualmente. */
+  finalizado(estado: string): boolean {
+    return estado === 'finalizado';
+  }
 
   abrir(t: Torneo): void {
     this.router.navigate(['/torneos', t.id]);
@@ -177,6 +336,11 @@ export class TorneosListComponent {
 
   abrirBracket(b: Bracket): void {
     this.router.navigate(['/eliminatorias', b.id]);
+  }
+
+  /** ¿Es una eliminatoria pública abierta en la que aún no participo? */
+  esPublicoNoMio(b: Bracket): boolean {
+    return !this.brackets().some((m) => m.id === b.id);
   }
 
   /** Describe el tipo de eliminatoria: formato y cruces. */

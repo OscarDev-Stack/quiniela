@@ -9,6 +9,7 @@ import { NotificacionesBotonComponent } from './notificaciones-boton.component';
 import { CargandoComponent } from '../../shared/cargando.component';
 import { apagarCargando } from '../../shared/cargando.util';
 import { ToastService } from '../../shared/toast.service';
+import { StatsService } from '../../shared/stats.service';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { of, switchMap, tap } from 'rxjs';
 import { Auth, user } from '@angular/fire/auth';
@@ -67,6 +68,10 @@ import { APP_VERSION } from '../../core/version';
               </button>
             }
           </h1>
+        }
+
+        @if (esMio() && me()?.email; as correo) {
+          <p class="correo">{{ correo }}</p>
         }
 
         @if (posicion(); as p) {
@@ -190,55 +195,115 @@ import { APP_VERSION } from '../../core/version';
       }
 
       @if (esMio() && validada()) {
-        <section class="panel">
+        <!-- Un solo panel de Notificaciones con los dos canales adentro. -->
+        <section class="panel panel--notif">
           <div class="panel-head">
             <h3><i class="ti ti-bell"></i> Notificaciones</h3>
           </div>
-          <app-notificaciones-boton [pushActivo]="me()?.pushActivo === true" />
-        </section>
+          <p class="notif-intro">
+            Elige por dónde recibir los avisos de tus jornadas, resultados y torneos.
+          </p>
 
-        <section class="panel">
-          <div class="panel-head">
-            <h3><i class="ti ti-brand-telegram"></i> Avisos por Telegram</h3>
+          <!-- Canal 1: este dispositivo (push) -->
+          <div class="canal">
+            <app-notificaciones-boton [pushActivo]="me()?.pushActivo === true" />
+          </div>
+
+          <!-- Canal 2: Telegram -->
+          <div class="canal canal--tg">
+            <div class="fila">
+              <div class="txt">
+                <span class="tit"><i class="ti ti-brand-telegram"></i> Telegram</span>
+                <small class="pista">
+                  @if (conectado()) {
+                    Recibes los avisos en tu chat de Telegram.
+                  } @else {
+                    Conéctalo con un toque y recibe los avisos en tu chat, sin copiar códigos.
+                  }
+                </small>
+              </div>
+
+              @if (conectado()) {
+                <label class="switch">
+                  <input
+                    type="checkbox"
+                    class="switch-input"
+                    [ngModel]="activo"
+                    (ngModelChange)="alternarAvisos($event)"
+                  />
+                  <span class="switch-pista" aria-hidden="true"></span>
+                </label>
+              } @else {
+                <button class="btn-tg" [disabled]="guardandoTg()" (click)="conectar()">
+                  <i class="ti ti-brand-telegram"></i>
+                  {{ guardandoTg() ? 'Preparando…' : 'Conectar' }}
+                </button>
+              }
+            </div>
+
             @if (conectado()) {
-              <span class="marca-ok"><i class="ti ti-circle-check"></i> Conectado</span>
+              <p class="ayuda-tg ayuda-tg--chica">
+                Escribe <strong>/stop</strong> en el chat del bot para dejar de recibirlos.
+              </p>
+            }
+            @if (mensajeTg()) {
+              <p class="aviso-tg" [class.aviso-tg--error]="errorTg()">{{ mensajeTg() }}</p>
+            }
+            @if (!conectado() && enlaceTg(); as enlace) {
+              <a class="btn-tg btn-tg--enlace" [href]="enlace" target="_blank" rel="noopener">
+                <i class="ti ti-brand-telegram"></i> ¿No abrió? Abre Telegram
+              </a>
             }
           </div>
 
-          @if (conectado()) {
-            <label class="switch">
-              <span class="switch-texto">Quiero recibir avisos de mis torneos</span>
-              <input
-                type="checkbox"
-                class="switch-input"
-                [ngModel]="activo"
-                (ngModelChange)="alternarAvisos($event)"
-              />
-              <span class="switch-pista" aria-hidden="true"></span>
-            </label>
+          <!-- Categorías: qué tipo de avisos recibir. Solo tiene sentido si
+               hay algún canal activo (push o Telegram). -->
+          @if (algunCanalActivo()) {
+            <div class="canal canal--cat">
+              <p class="cat-titulo">¿Qué avisos quieres recibir?</p>
 
-            <p class="ayuda-tg">
-              También puedes escribir <strong>/stop</strong> en el chat del bot para
-              dejar de recibirlos.
-            </p>
-          } @else {
-            <p class="ayuda-tg">
-              <strong>No pierdas un torneo por olvido.</strong>
-              Te aviso en cuanto abra la jornada, mientras todavía hay tiempo de elegir,
-              y te mando los resultados apenas salen.
-            </p>
-            <p class="ayuda-tg ayuda-tg--chica">
-              Se conecta con un toque. No tienes que copiar ningún número.
-            </p>
+              <label class="switch switch--cat">
+                <span class="txt">
+                  <span class="tit">Torneos donde participo</span>
+                  <small class="pista">Jornadas, resultados y premios de tus torneos y eliminatorias.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  class="switch-input"
+                  [ngModel]="catInscritos()"
+                  (ngModelChange)="alternarCategoria('torneosInscritos', $event)"
+                />
+                <span class="switch-pista" aria-hidden="true"></span>
+              </label>
 
-            <button class="btn btn--principal" [disabled]="guardandoTg()" (click)="conectar()">
-              <i class="ti ti-brand-telegram"></i>
-              {{ guardandoTg() ? 'Preparando…' : 'Conectar Telegram' }}
-            </button>
-          }
+              <label class="switch switch--cat">
+                <span class="txt">
+                  <span class="tit">Resumen del día</span>
+                  <small class="pista">Un aviso diario con los torneos públicos y partidos por cerrar de tu grupo o global.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  class="switch-input"
+                  [ngModel]="catOportunidades()"
+                  (ngModelChange)="alternarCategoria('oportunidades', $event)"
+                />
+                <span class="switch-pista" aria-hidden="true"></span>
+              </label>
 
-          @if (mensajeTg()) {
-            <p class="aviso-tg" [class.aviso-tg--error]="errorTg()">{{ mensajeTg() }}</p>
+              <label class="switch switch--cat">
+                <span class="txt">
+                  <span class="tit">Resultados de mis pronósticos</span>
+                  <small class="pista">Cuando se liquida un partido que pronosticaste.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  class="switch-input"
+                  [ngModel]="catPartidos()"
+                  (ngModelChange)="alternarCategoria('partidos', $event)"
+                />
+                <span class="switch-pista" aria-hidden="true"></span>
+              </label>
+            </div>
           }
         </section>
       }
@@ -253,6 +318,7 @@ import { APP_VERSION } from '../../core/version';
 
       <button class="version" (click)="verNovedades()">
         v{{ version }} · Ver novedades
+        <span class="marca-agua">Fut by AutomatePower</span>
       </button>
     </div>
   `,
@@ -271,6 +337,7 @@ import { APP_VERSION } from '../../core/version';
       }
       .check { color: var(--accent-fill); font-size: 18px; }
       .posicion { font-size: 13px; color: var(--text-muted); margin: 4px 0 0; }
+      .correo { font-size: 12px; color: var(--text-muted); margin: 2px 0 0; opacity: 0.8; }
 
       /* Botón lápiz junto al nombre */
       .editar-alias {
@@ -336,12 +403,42 @@ import { APP_VERSION } from '../../core/version';
       .trofeo-premio { font-size: 14px; font-weight: 600; color: var(--success-text); }
       .ayuda-tg { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; line-height: 1.5; }
       .ayuda-tg strong { color: var(--text-primary); }
-      .ayuda-tg--chica { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+      .ayuda-tg--chica { font-size: 12px; color: var(--text-muted); margin: 8px 0 0; }
+
+      /* Panel de notificaciones con los dos canales como filas separadas. */
+      .notif-intro { font-size: 12px; color: var(--text-secondary); margin: 0 0 4px; line-height: 1.45; }
+      .canal { padding: 14px 0; border-top: 1px solid var(--border); }
+      .canal:first-of-type { border-top: none; }
+      .canal .fila {
+        display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      }
+      .canal .txt { min-width: 0; }
+      .canal .tit { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; }
+      .canal .pista { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 3px; line-height: 1.4; }
+      .btn-tg {
+        flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
+        padding: 9px 15px; border-radius: var(--radius); cursor: pointer;
+        border: none; background: var(--accent-fill); color: #fff; font-weight: 600; font-size: 13px;
+      }
+      .btn-tg:hover { filter: brightness(1.06); }
+      .btn-tg:disabled { opacity: 0.6; cursor: default; }
+      /* Enlace de respaldo: si el salto automático no abrió Telegram. */
+      .btn-tg--enlace { margin-top: 10px; text-decoration: none; width: fit-content; }
       .switch {
         display: flex; align-items: center; justify-content: space-between; gap: 14px;
         margin-bottom: 16px; font-size: 14px; cursor: pointer;
       }
       .switch-texto { flex: 1; }
+      /* Dentro de un canal, el switch es solo el interruptor a la derecha. */
+      .canal .switch { margin-bottom: 0; flex-shrink: 0; }
+
+      /* Categorías: título y switches con texto a la izquierda. */
+      .canal--cat { display: flex; flex-direction: column; gap: 14px; }
+      .cat-titulo { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+      .canal .switch--cat { margin-bottom: 0; flex-shrink: 1; width: 100%; }
+      .switch--cat .txt { flex: 1; display: flex; flex-direction: column; }
+      .switch--cat .tit { font-size: 14px; font-weight: 600; }
+      .switch--cat .pista { font-size: 12px; color: var(--text-secondary); margin-top: 3px; line-height: 1.4; }
 
       /* El interruptor real está oculto; se dibuja la pista y el botón. */
       .switch-input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -404,6 +501,11 @@ import { APP_VERSION } from '../../core/version';
         background: transparent; border: none; padding: 8px;
       }
       .version:hover { opacity: 1; color: var(--accent-text); }
+      .marca-agua {
+        display: block; margin-top: 3px;
+        font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+        color: var(--text-muted); opacity: 0.7;
+      }
     `,
   ],
 })
@@ -423,6 +525,7 @@ export class PerfilComponent {
 
   private readonly confirmar = inject(ConfirmarService);
   private readonly toast = inject(ToastService);
+  private readonly stats = inject(StatsService);
 
   /** uid del perfil que se muestra: el de la ruta, o el mío. */
   private readonly uidRuta = this.route.snapshot.paramMap.get('uid');
@@ -491,6 +594,8 @@ export class PerfilComponent {
     this.guardandoAlias.set(true);
     try {
       await this.perfil.cambiarAlias(nuevo);
+      this.stats.evento('alias_cambiado');
+      this.stats.evento('perfil_editado', { campo: 'alias' });
       this.toast.exito('Nombre actualizado.');
       this.editandoAlias.set(false);
     } catch (e: unknown) {
@@ -585,16 +690,34 @@ export class PerfilComponent {
   /** ¿Ya quedó ligada la cuenta de Telegram? */
   readonly conectado = computed(() => !!this.me()?.telegramChatId);
 
+  /** Enlace de conexión listo, como respaldo por si el salto no abre solo. */
+  readonly enlaceTg = signal('');
+
   /** Abre Telegram con el enlace personal de conexión. */
   async conectar(): Promise<void> {
     this.guardandoTg.set(true);
     this.mensajeTg.set('');
     this.errorTg.set(false);
+    this.enlaceTg.set('');
 
     try {
       const enlace = await this.perfil.vincularTelegram();
-      // Se abre en otra pestaña: en móvil salta directo a la app.
-      window.open(enlace, '_blank');
+      // Guardamos el enlace para ofrecer un botón directo de respaldo.
+      this.enlaceTg.set(enlace);
+
+      // En una PWA instalada en iOS (modo standalone), window.open('_blank')
+      // se pierde: no hay pestaña a donde ir. Navegar en la misma ventana con
+      // location.href sí dispara la apertura de Telegram. Fuera de standalone,
+      // una pestaña nueva es lo más cómodo.
+      const standalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+
+      if (standalone) {
+        window.location.href = enlace;
+      } else {
+        window.open(enlace, '_blank');
+      }
       this.mensajeTg.set('Pulsa Iniciar en Telegram y listo. Esta pantalla se actualiza sola.');
     } catch (e: unknown) {
       this.errorTg.set(true);
@@ -618,6 +741,57 @@ export class PerfilComponent {
     }
   }
 
+  /* --- Categorías de notificación --- */
+  /** ¿Tiene algún canal activo? Solo entonces mostramos las categorías. */
+  readonly algunCanalActivo = computed(
+    () => this.me()?.pushActivo === true || this.conectado(),
+  );
+
+  /**
+   * Override optimista mientras Firestore propaga el cambio, para que el
+   * switch reaccione al instante. Se limpia solo cuando llega el valor real.
+   */
+  private readonly prefsOverride = signal<Partial<{
+    torneosInscritos: boolean;
+    oportunidades: boolean;
+    partidos: boolean;
+  }>>({});
+
+  /** Lee una categoría con default y respetando el override optimista. */
+  private leerCat(cat: 'torneosInscritos' | 'oportunidades' | 'partidos', porDefecto: boolean): boolean {
+    const ov = this.prefsOverride()[cat];
+    if (ov !== undefined) return ov;
+    return this.me()?.prefsNotif?.[cat] ?? porDefecto;
+  }
+
+  readonly catInscritos = computed(() => this.leerCat('torneosInscritos', true));
+  readonly catOportunidades = computed(() => this.leerCat('oportunidades', false));
+  readonly catPartidos = computed(() => this.leerCat('partidos', true));
+
+  /** Cambia una categoría y guarda las tres en el servidor. */
+  async alternarCategoria(
+    cat: 'torneosInscritos' | 'oportunidades' | 'partidos',
+    valor: boolean,
+  ): Promise<void> {
+    // Optimista: reflejamos el toque de inmediato.
+    this.prefsOverride.update((p) => ({ ...p, [cat]: valor }));
+
+    const prefs = {
+      torneosInscritos: this.catInscritos(),
+      oportunidades: this.catOportunidades(),
+      partidos: this.catPartidos(),
+    };
+
+    try {
+      await this.perfil.guardarPrefsNotif(prefs);
+      this.toast.exito('Preferencias guardadas.');
+    } catch (e: unknown) {
+      // Revertimos el override de esa categoría.
+      this.prefsOverride.update((p) => ({ ...p, [cat]: !valor }));
+      this.toast.error((e as Error)?.message ?? 'No se pudo guardar.');
+    }
+  }
+
   async salir(): Promise<void> {
     const ok = await this.confirmar.pedir({
       titulo: 'Cerrar sesión',
@@ -627,6 +801,7 @@ export class PerfilComponent {
     });
     if (!ok) return;
 
+    this.stats.evento('logout', { origen: 'perfil' });
     await this.authService.logout();
     this.router.navigate(['/login']);
   }

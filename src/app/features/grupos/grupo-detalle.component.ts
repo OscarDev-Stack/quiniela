@@ -6,15 +6,16 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { switchMap } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
 import { CargandoComponent } from '../../shared/cargando.component';
+import { CodigoInvitarComponent } from '../../shared/codigo-invitar.component';
 import { GruposService } from '../../core/services/grupos.service';
 import { UserService } from '../../core/services/user.service';
 import { ToastService } from '../../shared/toast.service';
-import { Grupo, MiembroGrupo, FilaTablaGrupo } from '../../core/models/grupo.model';
+import { Grupo, MiembroGrupo } from '../../core/models/grupo.model';
 
 @Component({
   selector: 'app-grupo-detalle',
   standalone: true,
-  imports: [CommonModule, FormsModule, NavComponent, CargandoComponent],
+  imports: [CommonModule, FormsModule, NavComponent, CargandoComponent, CodigoInvitarComponent],
   template: `
     <div class="screen">
       <app-nav [back]="true" title="Grupo" />
@@ -31,14 +32,9 @@ import { Grupo, MiembroGrupo, FilaTablaGrupo } from '../../core/models/grupo.mod
           </div>
         </div>
 
-        <!-- Código para compartir -->
-        <div class="codigo-box">
-          <div class="codigo-label">Código de invitación</div>
-          <div class="codigo-val">{{ g.codigo }}</div>
-          <button class="copiar" (click)="copiar(g.codigo)">
-            <i class="ti ti-copy"></i> Copiar
-          </button>
-        </div>
+        <!-- Código para compartir: copiar código + QR de invitación. -->
+        <app-codigo-invitar [codigo]="g.codigo" [url]="urlInvitacion(g.codigo)" />
+        <div class="esp-16"></div>
 
         <!-- Acciones de admin -->
         @if (soyAdmin(g)) {
@@ -62,31 +58,26 @@ import { Grupo, MiembroGrupo, FilaTablaGrupo } from '../../core/models/grupo.mod
           </div>
         }
 
-        <!-- Tabla del grupo -->
-        @if (tabla().length > 0) {
-          <div class="seccion">Tabla del grupo</div>
-          <div class="tabla">
-            @for (f of tabla(); track f.uid; let i = $index) {
-              <div class="fila" [class.fila--yo]="f.uid === miUid()">
-                <span class="pos" [class.pos--1]="i === 0" [class.pos--2]="i === 1" [class.pos--3]="i === 2">
-                  {{ i + 1 }}
-                </span>
-                <span class="fila-alias">{{ f.uid === miUid() ? f.alias + ' (tú)' : f.alias }}</span>
-                <span class="fila-pct">{{ f.porcentaje }}%</span>
-                <span class="fila-ac">{{ f.aciertos }}/{{ f.resueltos }}</span>
-              </div>
-            }
-          </div>
-        }
-
         <!-- Miembros -->
         <div class="seccion">Miembros</div>
         @for (m of miembros(); track m.uid) {
           <div class="miembro">
             <div class="ava">{{ inicial(m.alias) }}</div>
             <span class="mi-alias">{{ m.uid === miUid() ? m.alias + ' (tú)' : m.alias }}</span>
-            @if (m.rol === 'admin') {
+            @if (esAdminMiembro(m)) {
               <span class="mi-badge">ADMIN</span>
+            }
+            <!-- Acciones de admin: nombrar o quitar admin a otros miembros. -->
+            @if (soyAdmin(g) && m.uid !== miUid()) {
+              @if (esAdminMiembro(m)) {
+                <button class="mi-accion" [disabled]="ocupado()" (click)="quitarAdmin(m)" title="Quitar administrador">
+                  <i class="ti ti-shield-off"></i>
+                </button>
+              } @else {
+                <button class="mi-accion mi-accion--dar" [disabled]="ocupado()" (click)="hacerAdmin(m)" title="Hacer administrador">
+                  <i class="ti ti-shield-check"></i>
+                </button>
+              }
             }
           </div>
         }
@@ -161,20 +152,7 @@ import { Grupo, MiembroGrupo, FilaTablaGrupo } from '../../core/models/grupo.mod
       .cab-nom { font-size: 19px; font-weight: 800; }
       .cab-sub { font-size: 13px; color: var(--text-secondary); }
 
-      .codigo-box {
-        background: var(--surface-2); border: 1px dashed var(--accent-fill);
-        border-radius: 14px; padding: 14px; text-align: center; margin-bottom: 16px;
-      }
-      .codigo-label { font-size: 11px; color: var(--text-secondary); letter-spacing: 1px; }
-      .codigo-val {
-        font-size: 26px; font-weight: 800; letter-spacing: 4px;
-        color: var(--accent-text); margin: 4px 0 10px;
-      }
-      .copiar {
-        display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
-        font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 999px;
-        border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
-      }
+      .esp-16 { height: 16px; }
 
       .btn {
         display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -209,23 +187,6 @@ import { Grupo, MiembroGrupo, FilaTablaGrupo } from '../../core/models/grupo.mod
         font-size: 12px; font-weight: 700; color: var(--text-secondary);
         text-transform: uppercase; letter-spacing: 0.5px; margin: 20px 0 10px;
       }
-      .tabla { display: flex; flex-direction: column; }
-      .fila {
-        display: flex; align-items: center; gap: 10px;
-        padding: 9px 6px; border-bottom: 1px solid var(--border);
-      }
-      .fila--yo { background: var(--accent-bg); border-radius: 8px; }
-      .pos {
-        width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 12px; font-weight: 700; background: var(--surface-1); color: var(--text-secondary);
-      }
-      .pos--1 { background: #f4d03f; color: #6b5300; }
-      .pos--2 { background: #c8ccd4; color: #3a3f47; }
-      .pos--3 { background: #d98e5f; color: #4a2a12; }
-      .fila-alias { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .fila-pct { font-size: 14px; font-weight: 700; }
-      .fila-ac { font-size: 12px; color: var(--text-muted); min-width: 46px; text-align: right; }
       .miembro {
         display: flex; align-items: center; gap: 10px;
         padding: 9px 4px; border-bottom: 1px solid var(--border);
@@ -240,6 +201,16 @@ import { Grupo, MiembroGrupo, FilaTablaGrupo } from '../../core/models/grupo.mod
         font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
         color: var(--tipo-elim-text, #0c447c); background: var(--tipo-elim-bg, rgba(55,138,221,0.14));
       }
+      /* Botón para nombrar/quitar admin junto a cada miembro. */
+      .mi-accion {
+        flex-shrink: 0; width: 32px; height: 32px; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 1px solid var(--border); border-radius: 8px;
+        background: var(--surface-1); color: var(--text-muted); font-size: 16px;
+      }
+      .mi-accion:hover { color: var(--text-primary); }
+      .mi-accion--dar:hover { color: var(--accent-text); border-color: var(--accent-fill); }
+      .mi-accion:disabled { opacity: 0.5; cursor: default; }
 
       .empty { color: var(--text-muted); font-size: 14px; text-align: center; padding: 40px 0; }
 
@@ -288,12 +259,6 @@ export class GrupoDetalleComponent {
   readonly miembros = toSignal(this.gruposSrv.miembros(this.id), { initialValue: [] as MiembroGrupo[] });
   readonly otrosMiembros = computed(() => this.miembros().filter((m) => m.uid !== this.miUid()));
 
-  private readonly tablaRaw = toSignal(this.gruposSrv.tabla(this.id), { initialValue: [] as FilaTablaGrupo[] });
-  /** Tabla del grupo ordenada por % (y por aciertos como desempate). */
-  readonly tabla = computed(() =>
-    [...this.tablaRaw()].sort((a, b) => b.porcentaje - a.porcentaje || b.aciertos - a.aciertos),
-  );
-
   // Diálogos y búsqueda.
   readonly dialogo = signal<'ninguno' | 'agregar' | 'transferir'>('ninguno');
   readonly ocupado = signal(false);
@@ -303,7 +268,42 @@ export class GrupoDetalleComponent {
   private timerBusqueda: ReturnType<typeof setTimeout> | null = null;
 
   soyAdmin(g: Grupo): boolean {
-    return g.adminUid === this.miUid();
+    const yo = this.miUid();
+    if (!yo) return false;
+    return (g.adminUids?.length ? g.adminUids.includes(yo) : g.adminUid === yo);
+  }
+
+  /** ¿Este miembro es administrador del grupo? */
+  esAdminMiembro(m: MiembroGrupo): boolean {
+    const g = this.grupo();
+    if (g?.adminUids?.length) return g.adminUids.includes(m.uid);
+    return m.rol === 'admin' || g?.adminUid === m.uid;
+  }
+
+  /** Nombra admin a un miembro. */
+  async hacerAdmin(m: MiembroGrupo): Promise<void> {
+    this.ocupado.set(true);
+    try {
+      await this.gruposSrv.hacerAdmin(this.id, m.uid);
+      this.toast.exito(`${m.alias} ahora es administrador.`);
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudo nombrar administrador.');
+    } finally {
+      this.ocupado.set(false);
+    }
+  }
+
+  /** Le quita el rol de admin a un miembro. */
+  async quitarAdmin(m: MiembroGrupo): Promise<void> {
+    this.ocupado.set(true);
+    try {
+      await this.gruposSrv.quitarAdmin(this.id, m.uid);
+      this.toast.exito(`${m.alias} ya no es administrador.`);
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudo quitar el rol.');
+    } finally {
+      this.ocupado.set(false);
+    }
   }
 
   /** Va al formulario de crear torneo con este grupo precargado. */
@@ -324,11 +324,9 @@ export class GrupoDetalleComponent {
     return (alias?.trim()?.[0] ?? '?').toUpperCase();
   }
 
-  copiar(codigo: string): void {
-    navigator.clipboard?.writeText(codigo).then(
-      () => this.toast.exito('Código copiado.'),
-      () => this.toast.error('No se pudo copiar.'),
-    );
+  /** URL de invitación al grupo para el QR (lleva a unirse-grupo por código). */
+  urlInvitacion(codigo: string): string {
+    return `${location.origin}/unirse-grupo/${codigo}`;
   }
 
   abrirAgregar(): void {
@@ -376,8 +374,11 @@ export class GrupoDetalleComponent {
   }
 
   intentarSalir(g: Grupo): void {
-    // Si soy admin y hay más gente, debo transferir primero.
-    if (this.soyAdmin(g) && this.miembros().length > 1) {
+    // Solo hay que transferir si soy el ÚNICO admin y queda más gente. Si hay
+    // otros admins, puedo salir directo (el grupo no se queda sin mando).
+    const adminsUids = g.adminUids?.length ? g.adminUids : [g.adminUid];
+    const soyUnicoAdmin = this.soyAdmin(g) && adminsUids.filter((a) => a).length <= 1;
+    if (soyUnicoAdmin && this.miembros().length > 1) {
       this.dialogo.set('transferir');
       return;
     }

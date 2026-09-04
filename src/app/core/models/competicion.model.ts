@@ -16,7 +16,29 @@ export interface Competicion {
        apiLigaId: id de la liga (Liga MX = 4350). apiTemporada: "2026-2027". */
     apiLigaId?: number;
     apiTemporada?: string;
+    /* Tabla de posiciones oficial cacheada (se refresca al resolver jornada). */
+    tabla?: FilaTablaLiga[];
+    tablaActualizada?: Timestamp | { seconds: number } | Date | null;
     createdAt?: unknown;
+}
+
+/** Una fila de la tabla de posiciones de la liga (cache de TheSportsDB). */
+export interface FilaTablaLiga {
+    posicion: number;
+    /* Nombre oficial del equipo (ya normalizado, calza con los escudos). */
+    equipo: string;
+    jugados: number;
+    ganados: number;
+    empatados: number;
+    perdidos: number;
+    golesFavor: number;
+    golesContra: number;
+    diferencia: number;
+    puntos: number;
+    /* Racha reciente tipo "WDWLD" (más reciente al final). */
+    forma: string;
+    /* Zona de la tabla: "Playoffs", "Relegation"... Vacío si la API no la da. */
+    zona: string;
 }
 
 export interface PartidoJornada {
@@ -26,6 +48,13 @@ export interface PartidoJornada {
     /* Marcador final. Necesario para la quiniela por puntos. */
     golesLocal?: number | null;
     golesVisitante?: number | null;
+    /* Id del evento en TheSportsDB (si la jornada se trajo de la API), para
+       consultar su marcador en vivo. */
+    apiEventId?: string;
+    /* Marcador EN VIVO mientras el partido está en curso (solo informativo). */
+    vivoLocal?: number;
+    vivoVisitante?: number;
+    vivoMinuto?: string;
 }
 
 /** Deduce quién ganó a partir del marcador. */

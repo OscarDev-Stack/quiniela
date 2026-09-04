@@ -14,6 +14,7 @@ import { ToastService } from '../../shared/toast.service';
 import { ConfirmarService } from '../../shared/confirmar.service';
 import { PronosticoBracketComponent } from './pronostico-bracket.component';
 import { TablaBracketComponent } from './tabla-bracket.component';
+import { DesgloseBracketComponent } from './desglose-bracket.component';
 import { NavComponent } from '../../shared/nav.component';
 import { CargandoComponent } from '../../shared/cargando.component';
 import { CelebracionVictoriaComponent } from '../../shared/celebracion-victoria.component';
@@ -36,6 +37,7 @@ import { Bracket } from '../../core/models/bracket.model';
     EscudoComponent,
     PronosticoBracketComponent,
     TablaBracketComponent,
+    DesgloseBracketComponent,
     NavComponent,
     CargandoComponent,
     CelebracionVictoriaComponent,
@@ -68,25 +70,36 @@ import { Bracket } from '../../core/models/bracket.model';
               : 'Acertaste el cuadro y quedaste en primer lugar.'"
             [premio]="miPremioBracket()"
           />
-        }
-
-        <section class="panel">
-          <h2>Cuadro</h2>
-          <app-cuadro-bracket [bracket]="b" />
-        </section>
-
-        @if (b.estado === 'en-curso' || b.estado === 'finalizado') {
-          <section class="panel">
-            <h2>{{ b.estado === 'finalizado' ? 'Resultados' : 'Pronósticos de todos' }}</h2>
-            <app-tabla-bracket [pronosticos]="pronosticos()" [miUid]="miUid()" />
+        } @else if (b.estado === 'finalizado' && participo()) {
+          <!-- No ganaste: cierre honesto con el resultado, sin dejar a nadie sin mensaje. -->
+          <section class="panel panel--fin">
+            <div class="fin-ico"><i class="ti ti-flag-checkered"></i></div>
+            <h2 class="fin-tit">Eliminatoria terminada</h2>
+            <p class="fin-txt">
+              @if (b.modo === 'duenos') {
+                @if (miDueno(); as d) {
+                  Tu equipo <strong>{{ d.equipo }}</strong> no fue campeón esta vez.
+                }
+                @if (b.ganadorAlias) { Ganó <strong>{{ b.ganadorAlias }}</strong>. }
+              } @else {
+                @if (miPron()?.posicion; as pos) {
+                  Quedaste en el <strong>lugar {{ pos }}</strong> con {{ miPron()?.puntos ?? 0 }} pts.
+                } @else {
+                  Esta vez no se dio.
+                }
+                @if (b.ganadorAlias) { Ganó <strong>{{ b.ganadorAlias }}</strong>. }
+              }
+            </p>
+            <p class="fin-anim">¡Vamos por la próxima!</p>
           </section>
         }
 
-        <!-- ── MODO DUEÑOS ── -->
+        <!-- ARRIBA DEL TODO: lo tuyo. Es lo primero que la gente quiere ver:
+             qué equipo le tocó (dueños) o qué pronosticó (pronóstico). -->
         @if (b.modo === 'duenos') {
           @if (miDueno(); as d) {
             @if (d.estado === 'invitado') {
-              <section class="panel panel--aviso">
+              <section class="panel panel--aviso panel--destacado">
                 <h2>Te tocó un equipo</h2>
                 <div class="tu-equipo">
                   <app-escudo [equipo]="d.equipo" [size]="88" />
@@ -108,17 +121,45 @@ import { Bracket } from '../../core/models/bracket.model';
                 </button>
               </section>
             } @else {
-              <section class="panel">
+              <section class="panel panel--destacado">
                 <h2>Tu equipo</h2>
                 <div class="tu-equipo">
                   <app-escudo [equipo]="d.equipo" [size]="88" />
                   <span class="tu-equipo-nom">{{ d.equipo }}</span>
                 </div>
-                <p class="aviso-txt">Ganas si {{ d.equipo }} es campeón. Sigue el cuadro de arriba.</p>
+                <p class="aviso-txt">Ganas si {{ d.equipo }} es campeón. Sigue el cuadro de abajo.</p>
               </section>
             }
           }
+        } @else {
+          @if (b.estado !== 'inscripcion' || acepto()) {
+            <section class="panel panel--destacado">
+              <h2>Tu pronóstico</h2>
+              <app-pronostico-bracket [bracket]="b" />
+            </section>
+          }
+        }
 
+        <section class="panel">
+          <h2>Cuadro</h2>
+          <app-cuadro-bracket [bracket]="b" [misAvances]="avancesParaCuadro()" [pronosticos]="pronosticos()" />
+          @if (avancesParaCuadro()) {
+            <div class="leyenda-cuadro">
+              <span class="leyenda-item"><span class="punto punto--ok"></span> Acertaste</span>
+              <span class="leyenda-item"><span class="punto punto--mal"></span> Fallaste</span>
+            </div>
+          }
+        </section>
+
+        @if (b.estado === 'en-curso' || b.estado === 'finalizado') {
+          <section class="panel">
+            <h2>{{ b.estado === 'finalizado' ? 'Resultados' : 'Pronósticos de todos' }}</h2>
+            <app-tabla-bracket [pronosticos]="pronosticos()" [miUid]="miUid()" />
+          </section>
+        }
+
+        <!-- ── MODO DUEÑOS ── -->
+        @if (b.modo === 'duenos') {
           <!-- Quién le tocó a quién (visible para todos) -->
           @if ((b.duenos ?? []).length > 0) {
             <section class="panel">
@@ -143,10 +184,13 @@ import { Bracket } from '../../core/models/bracket.model';
         } @else {
         <!-- ── MODO PRONÓSTICO (el de siempre) ── -->
         @if (b.estado !== 'inscripcion' || acepto()) {
-          <section class="panel">
-            <h2>Tu pronóstico</h2>
-            <app-pronostico-bracket [bracket]="b" />
-          </section>
+          <!-- Desglose: de dónde salieron mis puntos (solo cuando ya cerró). -->
+          @if ((b.estado === 'en-curso' || b.estado === 'finalizado') && miPron()) {
+            <section class="panel">
+              <h2>Tus puntos, explicados</h2>
+              <app-desglose-bracket [bracket]="b" [pronostico]="miPron()" />
+            </section>
+          }
 
           <!-- Ya dentro: las reglas quedan al final, colapsadas. -->
           <section class="panel">
@@ -212,7 +256,33 @@ import { Bracket } from '../../core/models/bracket.model';
         border-radius: 12px; padding: 16px; margin-bottom: 14px;
       }
       .panel h2 { font-size: 15px; font-weight: 600; margin: 0 0 12px; }
+      /* Panel personal (tu equipo / tu pronóstico), arriba y resaltado. */
+      .panel--destacado {
+        border-color: color-mix(in srgb, var(--accent-fill) 40%, var(--border));
+        background:
+          linear-gradient(180deg,
+            color-mix(in srgb, var(--surface-2) 90%, var(--accent-fill)) 0%,
+            var(--surface-2) 60%);
+      }
+      .panel--destacado > h2 {
+        display: flex; align-items: center; gap: 7px;
+        color: var(--accent-text);
+      }
+      /* Cierre para quien no ganó: sobrio, sin celebración. */
+      .panel--fin { text-align: center; }
+      .fin-ico { font-size: 34px; color: var(--text-muted); margin-bottom: 4px; }
+      .fin-tit { font-size: 17px; font-weight: 700; margin: 0 0 6px; }
+      .fin-txt { font-size: 14px; color: var(--text-secondary); line-height: 1.5; margin: 0 0 8px; }
+      .fin-anim { font-size: 13px; font-weight: 600; color: var(--accent-text); margin: 0; }
       .cargando { font-size: 14px; color: var(--text-muted); }
+      .leyenda-cuadro {
+        display: flex; gap: 16px; margin-top: 10px;
+        font-size: 11px; color: var(--text-muted);
+      }
+      .leyenda-item { display: inline-flex; align-items: center; gap: 6px; }
+      .punto { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+      .punto--ok { background: var(--success-text); }
+      .punto--mal { background: var(--danger-text); }
       .switch {
         display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
         cursor: pointer;
@@ -375,7 +445,7 @@ export class BracketDetalleComponent {
     { initialValue: [] },
   );
 
-  private readonly miPron = toSignal(
+  readonly miPron = toSignal(
     toObservable(this.miUid).pipe(
       switchMap((uid) =>
         uid
@@ -388,6 +458,19 @@ export class BracketDetalleComponent {
 
   /** Se pone en true cuando ya sabemos si hay pronóstico (evita parpadeo). */
   private readonly pronCargado = signal(false);
+
+  /**
+   * Mis elecciones para resaltar el cuadro, SOLO en modo pronóstico y cuando
+   * ya cerró (en-curso/finalizado). Antes del cierre no se resalta para no
+   * competir con el flujo de captura. Null = no resaltar.
+   */
+  readonly avancesParaCuadro = computed<Record<string, string> | null>(() => {
+    const b = this.bracket();
+    if (!b || b.modo === 'duenos') return null;
+    if (b.estado !== 'en-curso' && b.estado !== 'finalizado') return null;
+    const av = this.miPron()?.avances;
+    return av && Object.keys(av).length > 0 ? av : null;
+  });
 
   /**
    * ¿Ya tenemos todo para mostrar sin saltos? Necesitamos el bracket, y
@@ -434,6 +517,17 @@ export class BracketDetalleComponent {
       return !!mio && b.ganadorAlias === mio.nombre;
     }
     return this.miPron()?.posicion === 1;
+  });
+
+  /**
+   * ¿Participé en esta eliminatoria? En dueños, si tengo equipo asignado;
+   * en pronóstico, si dejé un pronóstico. Sirve para mostrar el mensaje de
+   * cierre a quien jugó (aunque no haya ganado).
+   */
+  readonly participo = computed(() => {
+    const b = this.bracket();
+    if (!b) return false;
+    return b.modo === 'duenos' ? !!this.miDueno() : !!this.miPron();
   });
 
   /** Premio que gané en la eliminatoria (0 si no gané o no aplica). */

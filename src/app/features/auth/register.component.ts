@@ -1,8 +1,10 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { Firestore, doc, setDoc, serverTimestamp } from '@angular/fire/firestore';
 import { AuthService } from '../../core/services/auth.service';
+import { StatsService } from '../../shared/stats.service';
+import { consumirInvitacion, rutaDeInvitacion } from '../../shared/invitacion.util';
 
 @Component({
   selector: 'app-register',
@@ -137,10 +139,16 @@ import { AuthService } from '../../core/services/auth.service';
     `,
   ],
 })
-export class RegisterComponent {
+export class RegisterComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly db = inject(Firestore);
+  private readonly stats = inject(StatsService);
+
+  ngOnInit(): void {
+    // Traza del embudo: cuánta gente llega a la pantalla de crear cuenta.
+    this.stats.evento('registro_visto');
+  }
 
   alias = '';
   email = '';
@@ -184,12 +192,17 @@ export class RegisterComponent {
       // Avisa a los administradores que hay una cuenta por validar.
       await this.auth.avisarRegistro();
 
-      const invitacion = localStorage.getItem('invitacion');
-      // Se consume una sola vez: si no, cada login reenvía a unirse.
-      localStorage.removeItem('invitacion');
-      this.router.navigate(invitacion ? ['/unirse', invitacion] : ['/inicio']);
+      // Traza del embudo: cuenta creada por correo y a la espera de validación.
+      this.stats.evento('cuenta_creada', { metodo: 'correo' });
+      this.stats.evento('registro_pendiente_validacion', { metodo: 'correo' });
+
+      // Retoma la invitación pendiente (torneo/bracket/grupo) una sola vez.
+      const inv = consumirInvitacion();
+      this.router.navigate(inv ? rutaDeInvitacion(inv) : ['/inicio']);
     } catch (e: unknown) {
-      this.error.set(this.mapError((e as { code?: string })?.code));
+      const code = (e as { code?: string })?.code;
+      this.stats.evento('registro_fallido', { motivo: code ?? 'desconocido' });
+      this.error.set(this.mapError(code));
     } finally {
       this.loading.set(false);
     }

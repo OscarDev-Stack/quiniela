@@ -108,7 +108,7 @@ export class CompeticionesService {
     ): Promise<{
         numeroJornada: number;
         primeraHora: string;
-        partidos: Array<{ local: string; visitante: string }>;
+        partidos: Array<{ local: string; visitante: string; apiEventId?: string }>;
     }> {
         const fn = httpsCallable<
             { competicionId: string; numeroJornada: number },
@@ -116,7 +116,7 @@ export class CompeticionesService {
                 ok: boolean;
                 numeroJornada: number;
                 primeraHora: string;
-                partidos: Array<{ local: string; visitante: string }>;
+                partidos: Array<{ local: string; visitante: string; apiEventId?: string }>;
             }
         >(this.fns, 'traerJornadaApi');
         const res = await fn({ competicionId, numeroJornada });
@@ -153,7 +153,7 @@ export class CompeticionesService {
         competicionId: string,
         numero: number,
         cierraAt: Date,
-        partidos: Array<{ local: string; visitante: string }>,
+        partidos: Array<{ local: string; visitante: string; apiEventId?: string }>,
     ) {
         return addDoc(collection(this.db, `competiciones/${competicionId}/jornadas`), {
             numero,
@@ -184,6 +184,34 @@ export class CompeticionesService {
             { ok: boolean; cartones: number }
         >(this.fns, 'previsualizarQuiniela');
         const res = await fn({ competicionId, jornadaId });
+        return res.data;
+    }
+
+    /**
+     * Fuerza la descarga de la tabla de posiciones oficial (TheSportsDB) y la
+     * cachea en la competición. La tabla también se refresca sola al resolver
+     * cada jornada; esto sirve para el arranque o una actualización a demanda.
+     */
+    async refrescarTabla(competicionId: string): Promise<{ filas: number }> {
+        const fn = httpsCallable<{ competicionId: string }, { ok: boolean; filas: number }>(
+            this.fns,
+            'refrescarTablaApi',
+        );
+        const res = await fn({ competicionId });
+        return res.data;
+    }
+
+    /**
+     * Importa todos los equipos de la liga configurada y los fusiona con el
+     * catálogo de la competición. Evita tener que traer una jornada solo para
+     * poblar equipos.
+     */
+    async importarEquipos(competicionId: string): Promise<{ total: number; agregados: number }> {
+        const fn = httpsCallable<
+            { competicionId: string },
+            { ok: boolean; total: number; agregados: number }
+        >(this.fns, 'importarEquiposApi');
+        const res = await fn({ competicionId });
         return res.data;
     }
 

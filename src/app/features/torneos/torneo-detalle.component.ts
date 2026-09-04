@@ -14,6 +14,7 @@ import { ReglasTorneoComponent } from './reglas-torneo.component';
 import { PartidosJornadaComponent } from './partidos-jornada.component';
 import { TablaPosicionesComponent } from './tabla-posiciones.component';
 import { CartonesJornadaComponent } from './cartones-jornada.component';
+import { TablaLigaComponent } from './tabla-liga.component';
 import { CelebracionVictoriaComponent } from '../../shared/celebracion-victoria.component';
 import { TorneosService } from '../../core/services/torneos.service';
 import {
@@ -27,6 +28,7 @@ import { Jornada, fechaJornada, equiposDeJornada } from '../../core/models/compe
 import { CompeticionesService } from '../../core/services/competiciones.service';
 import { ConfirmarService } from '../../shared/confirmar.service';
 import { ToastService } from '../../shared/toast.service';
+import { StatsService } from '../../shared/stats.service';
 
 @Component({
   selector: 'app-torneo-detalle',
@@ -35,6 +37,7 @@ import { ToastService } from '../../shared/toast.service';
     PartidosJornadaComponent,
     TablaPosicionesComponent,
     CartonesJornadaComponent,
+    TablaLigaComponent,
     CargandoComponent,
     EscudoComponent,
     CelebracionVictoriaComponent,
@@ -96,6 +99,7 @@ import { ToastService } from '../../shared/toast.service';
         @if (t.estado === 'finalizado' && yo()) {
           @if (soyGanador()) {
             <app-celebracion-victoria
+              class="p-final"
               titulo="¡Felicidades, ganaste!"
               [subtitulo]="esQuiniela()
                 ? 'Terminaste primero con ' + (yo()!.puntosTorneo ?? 0) + ' puntos entre ' + participantes().length + ' jugador(es).'
@@ -103,7 +107,7 @@ import { ToastService } from '../../shared/toast.service';
               [premio]="miPremio()"
             />
           } @else {
-            <div class="final final--perdio">
+            <div class="final final--perdio p-final">
               <div class="trofeo"><i class="ti ti-confetti"></i></div>
               <h2>Torneo terminado</h2>
               @if (esQuiniela()) {
@@ -350,6 +354,18 @@ import { ToastService } from '../../shared/toast.service';
                   }
                 </div>
               }
+
+              @if (descansanEstaJornada().length > 0) {
+                <p class="descansan">
+                  <i class="ti ti-zzz"></i>
+                  Descansan esta jornada (no puedes elegirlos):
+                  @for (e of descansanEstaJornada(); track e) {
+                    <span class="descansa-chip">
+                      <app-escudo [equipo]="e" [size]="16" /> {{ e }}
+                    </span>
+                  }
+                </p>
+              }
             }
           </section>
         }
@@ -483,60 +499,100 @@ import { ToastService } from '../../shared/toast.service';
         <section class="panel p-jugadores">
           <div class="panel-head">
             <h3>Participantes</h3>
-            @if (revelarPicks()) {
-              <span class="nota-equipos">Jornada cerrada · elecciones a la vista</span>
-            } @else {
-              <span class="nota-equipos">Equipos ya gastados</span>
-            }
+            <span class="resumen-vivos">
+              <i class="ti ti-heart-filled"></i>
+              {{ enPie().length }} de {{ participantes().length }} en pie
+            </span>
           </div>
 
-          @for (p of ordenados(); track p.id) {
-            <div class="participante" [class.participante--fuera]="!p.vivo">
-              <div class="fila">
-                <span class="avatar">{{ inicial(p.alias) }}</span>
-                <span class="alias">{{ p.alias }}</span>
-                @if (p.vivo) {
-                  <span class="vidas">
-                    @if (p.vidasRestantes > 0) {
-                      <i class="ti ti-heart-filled"></i>
-                    } @else {
-                      <span class="sin-vida">sin vida</span>
-                    }
+          <!-- EN PIE -->
+          @if (enPie().length > 0) {
+            <div class="grupo-titulo">En pie</div>
+            @for (p of enPie(); track p.id) {
+              <div class="jugador jugador--vivo" [class.jugador--yo]="p.id === miUid()">
+                <div class="jug-cab">
+                  <span class="avatar avatar--vivo">{{ inicial(p.alias) }}</span>
+                  <span class="jug-info">
+                    <span class="alias">
+                      {{ p.alias }}@if (p.id === miUid()) { <span class="tu">· tú</span> }
+                    </span>
+                    <span class="corazones" [attr.aria-label]="p.vidasRestantes + ' vidas'">
+                      @for (i of corazones(); track i) {
+                        <i class="ti"
+                          [class.ti-heart-filled]="i < p.vidasRestantes"
+                          [class.ti-heart]="i >= p.vidasRestantes"
+                          [class.corazon-on]="i < p.vidasRestantes"></i>
+                      }
+                      @if (p.vidasRestantes === 0) { <span class="sin-vida">al límite</span> }
+                    </span>
                   </span>
-                  <span class="estado estado--vivo">Vivo</span>
+                  <span class="chip-estado chip-estado--vivo">Vivo</span>
+                </div>
+
+                @if (revelarPicks() && eligio(p.id); as equipo) {
+                  <div class="usados-fila">
+                    <span class="chip chip--actual">
+                      <app-escudo [equipo]="equipo" [size]="16" /> {{ equipo }}
+                    </span>
+                    @for (e of p.equiposUsados; track e) {
+                      <span class="chip chip--usado"><app-escudo [equipo]="e" [size]="16" /> {{ e }}</span>
+                    }
+                  </div>
+                } @else if (revelarPicks()) {
+                  <div class="usados-fila">
+                    <span class="chip chip--nada">No eligió</span>
+                    @for (e of p.equiposUsados; track e) {
+                      <span class="chip chip--usado"><app-escudo [equipo]="e" [size]="16" /> {{ e }}</span>
+                    }
+                  </div>
+                } @else if (p.equiposUsados.length > 0) {
+                  <div class="usados-fila">
+                    @for (e of p.equiposUsados; track e) {
+                      <span class="chip chip--usado"><app-escudo [equipo]="e" [size]="16" /> {{ e }}</span>
+                    }
+                  </div>
                 } @else {
-                  <span class="estado">Fuera · J{{ p.eliminadoEn }}</span>
+                  <p class="sin-usados">Aún no gasta ningún equipo.</p>
                 }
               </div>
+            }
+          }
 
-              @if (revelarPicks() && eligio(p.id); as equipo) {
-                <div class="usados-fila">
-                  <span class="chip chip--actual">
-                    <i class="ti ti-arrow-badge-right"></i> {{ equipo }}
+          <!-- ELIMINADOS -->
+          @if (eliminados().length > 0) {
+            <div class="grupo-titulo grupo-titulo--fuera">Eliminados</div>
+            @for (p of eliminados(); track p.id) {
+              <div class="jugador jugador--fuera" [class.jugador--yo]="p.id === miUid()">
+                <div class="jug-cab">
+                  <span class="avatar">{{ inicial(p.alias) }}</span>
+                  <span class="jug-info">
+                    <span class="alias">
+                      {{ p.alias }}@if (p.id === miUid()) { <span class="tu">· tú</span> }
+                    </span>
                   </span>
-                  @for (e of p.equiposUsados; track e) {
-                    <span class="chip chip--usado">{{ e }}</span>
-                  }
+                  <span class="chip-estado">Eliminado · J{{ p.eliminadoEn }}</span>
                 </div>
-              } @else if (revelarPicks() && p.vivo) {
-                <div class="usados-fila">
-                  <span class="chip chip--nada">No eligió</span>
-                  @for (e of p.equiposUsados; track e) {
-                    <span class="chip chip--usado">{{ e }}</span>
-                  }
-                </div>
-              } @else if (p.equiposUsados.length > 0) {
-                <div class="usados-fila">
-                  @for (e of p.equiposUsados; track e) {
-                    <span class="chip chip--usado">{{ e }}</span>
-                  }
-                </div>
-              } @else {
-                <p class="sin-usados">Todavía no ha gastado ningún equipo.</p>
-              }
-            </div>
+
+                @if (p.equiposUsados.length > 0) {
+                  <div class="usados-fila">
+                    @for (e of p.equiposUsados; track e) {
+                      <span class="chip chip--usado"><app-escudo [equipo]="e" [size]="16" /> {{ e }}</span>
+                    }
+                  </div>
+                }
+              </div>
+            }
           }
         </section>
+        }
+
+        @if (mostrarTablaLiga() && competicion(); as comp) {
+          <details class="panel reglas-panel">
+            <summary><i class="ti ti-table"></i> Tabla de la liga</summary>
+            <div class="tabla-liga-cuerpo">
+              <app-tabla-liga [competicion]="comp" />
+            </div>
+          </details>
         }
 
         <details class="panel reglas-panel">
@@ -564,6 +620,9 @@ import { ToastService } from '../../shared/toast.service';
       .flujo > .p-equipos { order: 3; }
       .flujo > .p-jugadores { order: 6; }
       .flujo > .reglas-panel { order: 9; }
+      /* El resultado final (ganaste / terminó) siempre justo bajo la franja. */
+      .flujo > .p-final { order: 0; }
+      .flujo--cerrada > .p-final { order: 0; }
 
       .flujo--cerrada > .p-partidos { order: 1; }
       .flujo--cerrada > .p-jugadores { order: 2; }
@@ -637,6 +696,16 @@ import { ToastService } from '../../shared/toast.service';
       h3 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
       .cierra { font-size: 12px; color: var(--text-secondary); }
       .ayuda { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; }
+      .descansan {
+        font-size: 12px; color: var(--text-muted); margin: 12px 0 0;
+        display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+      }
+      .descansa-chip {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 2px 8px; border-radius: 999px;
+        background: var(--surface-2, rgba(127,127,127,0.12));
+        opacity: 0.75;
+      }
 
       .restantes { font-size: 12px; color: var(--text-muted); }
       .panel-head--boton {
@@ -680,13 +749,46 @@ import { ToastService } from '../../shared/toast.service';
       }
       .sin-catalogo { font-size: 12px; color: var(--text-muted); margin: 0; }
 
-      .participante { padding: 10px 0; border-bottom: 1px solid var(--border); }
-      .participante:last-of-type { border-bottom: none; }
-      .participante--fuera { opacity: 0.55; }
-      .participante .fila { border-bottom: none; padding: 0; }
-      .nota-equipos { font-size: 11px; color: var(--text-muted); }
-      .usados-fila { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0 0 38px; }
-      .sin-usados { font-size: 11px; color: var(--text-muted); margin: 6px 0 0 38px; }
+      /* --- Sección de participantes (supervivencia) rediseñada --- */
+      .resumen-vivos {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 12px; font-weight: 700; color: var(--success-text);
+      }
+      .grupo-titulo {
+        font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+        color: var(--success-text); margin: 14px 0 8px;
+      }
+      .grupo-titulo--fuera { color: var(--text-muted); margin-top: 18px; }
+
+      .jugador {
+        border: 1px solid var(--border); border-radius: 12px;
+        padding: 11px 12px; margin-bottom: 8px; background: var(--surface-2);
+      }
+      .jugador--vivo {
+        border-color: color-mix(in srgb, var(--success-text) 30%, var(--border));
+        background: linear-gradient(180deg,
+          color-mix(in srgb, var(--surface-2) 94%, var(--success-text)) 0%, var(--surface-2) 55%);
+      }
+      .jugador--fuera { opacity: 0.6; }
+      .jugador--yo { box-shadow: inset 0 0 0 1.5px var(--accent-fill); }
+
+      .jug-cab { display: flex; align-items: center; gap: 10px; }
+      .avatar--vivo { background: color-mix(in srgb, var(--success-text) 18%, var(--surface-1)); color: var(--success-text); }
+      .jug-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+      .jug-info .alias { font-size: 14px; font-weight: 700; }
+      .tu { font-size: 11px; font-weight: 600; color: var(--accent-text); }
+      .corazones { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: var(--text-muted); }
+      .corazones .corazon-on { color: var(--danger-text); }
+      .corazones .sin-vida { margin-left: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--warning-text); }
+
+      .chip-estado {
+        flex-shrink: 0; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+        background: var(--surface-1); color: var(--text-muted);
+      }
+      .chip-estado--vivo { color: var(--success-text); background: var(--success-bg); }
+
+      .usados-fila { display: flex; flex-wrap: wrap; gap: 5px; margin: 9px 0 0 40px; }
+      .sin-usados { font-size: 11px; color: var(--text-muted); margin: 8px 0 0 40px; }
       .sin-vida { font-size: 11px; color: var(--text-muted); }
 
       .chip--actual {
@@ -795,6 +897,7 @@ export class TorneoDetalleComponent {
   private readonly competiciones = inject(CompeticionesService);
   private readonly confirmar = inject(ConfirmarService);
   private readonly toast = inject(ToastService);
+  private readonly stats = inject(StatsService);
 
   private readonly id = this.route.snapshot.paramMap.get('id')!;
 
@@ -804,6 +907,9 @@ export class TorneoDetalleComponent {
   // Marcamos el primer dato real de cada fuente que arma la vista.
   private readonly listoTorneo = signal(false);
   private readonly listoParticipantes = signal(false);
+  // Los cartones de la jornada llegan encadenados (torneo → jornada → cartones);
+  // marcamos cuando ya resolvimos su primer estado (con datos o vacío).
+  private readonly cartonesListos = signal(false);
 
   readonly torneo = toSignal(
     this.service.torneo(this.id).pipe(tap(() => this.listoTorneo.set(true))),
@@ -828,10 +934,14 @@ export class TorneoDetalleComponent {
    * Apaga el loading cuando el torneo y sus participantes ya llegaron. La
    * jornada depende del torneo (switchMap encadenado) y se resuelve enseguida;
    * no la exigimos para no dejar el spinner colgado si un torneo no tiene
-   * jornada aún.
+   * jornada aún. Los cartones ajenos también se cargan encadenados; solo los
+   * exigimos cuando esa sección va a mostrarse (quiniela con jornada revelada),
+   * evitando el parpadeo de "Nadie envió pronósticos" antes de que lleguen.
    */
   private readonly apagar = effect(() => {
-    if (this.listoTorneo() && this.listoParticipantes()) {
+    const base = this.listoTorneo() && this.listoParticipantes();
+    const esperaCartones = this.esQuiniela() && this.revelarQuinielas();
+    if (base && (!esperaCartones || this.cartonesListos())) {
       apagarCargando(this.cargando, this.inicioCarga);
     }
   });
@@ -929,15 +1039,18 @@ export class TorneoDetalleComponent {
         subCartones = null;
         jornadaCartones = -1;
         this.quinielasSignal.set([]);
+        // No hay cartones que esperar en este estado: liberamos el loading.
+        this.cartonesListos.set(true);
         return;
       }
       if (numero === jornadaCartones) return;
 
       jornadaCartones = numero;
       subCartones?.unsubscribe();
-      subCartones = this.service
-        .quinielasJornada(this.id, numero)
-        .subscribe((lista) => this.quinielasSignal.set(lista));
+      subCartones = this.service.quinielasJornada(this.id, numero).subscribe((lista) => {
+        this.quinielasSignal.set(lista);
+        this.cartonesListos.set(true);
+      });
     });
 
     inject(DestroyRef).onDestroy(() => {
@@ -958,13 +1071,48 @@ export class TorneoDetalleComponent {
     }),
   );
 
-  /** Ganadores: los que siguen vivos, o quienes cayeron en la última jornada. */
+  /* --- Listas para la sección de participantes (supervivencia) --- */
+  /** Los que siguen en pie, por alias. */
+  readonly enPie = computed(() =>
+    this.participantes()
+      .filter((p) => p.vivo)
+      .sort((a, b) => a.alias.localeCompare(b.alias, 'es')),
+  );
+  /** Los eliminados, primero los que cayeron más tarde (llegaron más lejos). */
+  readonly eliminados = computed(() =>
+    this.participantes()
+      .filter((p) => !p.vivo)
+      .sort((a, b) => (b.eliminadoEn ?? 0) - (a.eliminadoEn ?? 0) || a.alias.localeCompare(b.alias, 'es')),
+  );
+  /** Cuántas vidas configuró el torneo (para pintar los corazones). */
+  readonly vidasTorneo = computed(() => Math.max(1, Number(this.torneo()?.vidas ?? 1)));
+  /** Arreglo [0..vidas-1] para iterar los corazones en el template. */
+  readonly corazones = computed(() => Array.from({ length: this.vidasTorneo() }, (_, i) => i));
+
+  /**
+   * Ganadores del torneo. Se calcula distinto según el modo, igual que el
+   * backend al repartir:
+   *  - QUINIELA: quienes tienen MÁS puntos del torneo; desempate por más
+   *    marcadores exactos. (No es "todos": solo la cima de la tabla.)
+   *  - SUPERVIVENCIA: los que siguen vivos, o quienes cayeron en la última
+   *    jornada si ya no queda nadie.
+   */
   private readonly ganadores = computed<Participante[]>(() => {
+    const todos = this.participantes();
+    if (todos.length === 0) return [];
+
+    if (this.esQuiniela()) {
+      const mejorPuntos = Math.max(...todos.map((p) => p.puntosTorneo ?? 0));
+      const conMasPuntos = todos.filter((p) => (p.puntosTorneo ?? 0) === mejorPuntos);
+      const mejorExactos = Math.max(...conMasPuntos.map((p) => p.exactos ?? 0));
+      return conMasPuntos.filter((p) => (p.exactos ?? 0) === mejorExactos);
+    }
+
     const vivos = this.vivos();
     if (vivos.length > 0) return vivos;
 
-    const ultima = Math.max(0, ...this.participantes().map((p) => p.eliminadoEn ?? 0));
-    return this.participantes().filter((p) => p.eliminadoEn === ultima);
+    const ultima = Math.max(0, ...todos.map((p) => p.eliminadoEn ?? 0));
+    return todos.filter((p) => p.eliminadoEn === ultima);
   });
 
   readonly soyGanador = computed(() => {
@@ -1177,6 +1325,7 @@ export class TorneoDetalleComponent {
           visitante: Number(m.visitante),
         })),
       );
+      this.stats.evento('quiniela_guardada', { partidos: j.partidos.length });
       this.toast.exito('Pronósticos guardados.');
     } catch (e: unknown) {
       this.toast.error((e as Error)?.message ?? 'No se pudieron guardar.');
@@ -1187,13 +1336,23 @@ export class TorneoDetalleComponent {
 
   readonly usados = computed(() => [...(this.yo()?.equiposUsados ?? [])].sort());
 
-  /** Catálogo de equipos de la competición. */
-  private readonly competicion = toSignal(
+  /** Catálogo de equipos de la competición (y su tabla de posiciones cacheada). */
+  readonly competicion = toSignal(
     toObservable(computed(() => this.torneo()?.competicionId)).pipe(
       switchMap((id) => (id ? this.competiciones.competicion(id) : of(null))),
     ),
     { initialValue: null },
   );
+
+  /**
+   * Mostramos la tabla de la liga solo si la competición está vinculada a la
+   * API (tiene apiLigaId) y ya hay filas cacheadas. Si es una liga manual, no
+   * aparece nada.
+   */
+  readonly mostrarTablaLiga = computed(() => {
+    const c = this.competicion();
+    return !!c?.apiLigaId && (c?.tabla?.length ?? 0) > 0;
+  });
 
   /** Equipos comprometidos: los ya resueltos más los que están en juego. */
   readonly comprometidos = computed(() => {
@@ -1217,6 +1376,21 @@ export class TorneoDetalleComponent {
     const bloqueados = this.comprometidos().filter((e) => e !== actual);
     return equipos
       .filter((e) => !bloqueados.includes(e))
+      .sort((a, b) => a.localeCompare(b));
+  });
+
+  /**
+   * Equipos que TODAVÍA podría usar (no comprometidos) pero que NO juegan esta
+   * jornada: descansan. En la NFL es la "bye week". Se listan aparte para que el
+   * jugador entienda por qué su equipo no aparece entre los elegibles, en vez
+   * de creer que ya lo usó o que hay un error.
+   */
+  readonly descansanEstaJornada = computed(() => {
+    const juganEstaJornada = new Set(equiposDeJornada(this.jornadaActual()));
+    const actual = this.miPick()?.equipo;
+    const comprometidos = this.comprometidos().filter((e) => e !== actual);
+    return this.disponiblesTotales()
+      .filter((e) => !comprometidos.includes(e) && !juganEstaJornada.has(e))
       .sort((a, b) => a.localeCompare(b));
   });
 

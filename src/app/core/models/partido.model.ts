@@ -37,8 +37,23 @@ export interface Partido {
     premioPor100?: Record<string, number>;
     prizes?: PremioResultado[];
     resultadoOficial?: string;
-    /* Vínculo con el partido real de API-Football. */
+    /* Vínculo con el partido real de API-Football (football-data). */
     apiFixtureId?: number;
+    /* Vínculo con el evento de TheSportsDB (idEvent). Fuente alterna a
+       apiFixtureId; la meta es migrar todo a esta cuando madure. */
+    apiEventId?: string;
+    /* Id de liga de TheSportsDB (ej. Liga MX = 4350). Liga el partido a la
+       tabla cacheada para mostrar la forma reciente de sus equipos. */
+    apiLigaId?: number;
+    /* Marcador EN VIVO (TheSportsDB premium). Se actualiza mientras el
+       partido está en juego; solo informativo. vivoMinuto: "63", "HT"… */
+    vivoLocal?: number;
+    vivoVisitante?: number;
+    vivoMinuto?: string;
+    /* Forma reciente (últimos 5) de cada equipo, tipo "WWDLW". Se captura una
+       sola vez al crear el partido desde la API; informativa, no cambia. */
+    formaLocal?: string;
+    formaVisitante?: string;
     /* Resultado precargado por la API, a la espera de confirmación. */
     resultadoPropuesto?: string;
     marcadorPropuesto?: string;
@@ -75,4 +90,39 @@ export function textoRestante(p: Partido, ahora: number): string {
     if (dias > 0) return `Cierra en ${dias}d ${horas}h`;
     if (horas > 0) return `Cierra en ${horas}h ${mins}m`;
     return `Cierra en ${mins}m`;
+}
+
+/**
+ * Traduce el minuto/estado EN VIVO que devuelve TheSportsDB a un texto claro
+ * en español. Los minutos numéricos ("63") se muestran como "63'"; los códigos
+ * de estado (vienen en inglés) se traducen. Si llega algo no reconocido, se
+ * muestra tal cual para no ocultar información.
+ */
+export function minutoVivoTexto(min: string | null | undefined): string {
+    const v = String(min ?? '').trim();
+    if (!v) return '';
+
+    // Minuto numérico, con o sin el símbolo de added time ("45+2").
+    if (/^\d+(\+\d+)?'?$/.test(v)) return v.endsWith("'") ? v : `${v}'`;
+
+    const estados: Record<string, string> = {
+        '1H': '1er tiempo',
+        '2H': '2do tiempo',
+        HT: 'Descanso',
+        ET: 'Tiempo extra',
+        '1ET': '1er t. extra',
+        '2ET': '2do t. extra',
+        BT: 'Descanso',
+        P: 'Penales',
+        PEN: 'Penales',
+        FT: 'Final',
+        AET: 'Final (t. extra)',
+        AP: 'Final (penales)',
+        NS: 'Por empezar',
+        LIVE: 'En vivo',
+        'Match Finished': 'Final',
+        'Half Time': 'Descanso',
+        'Extra Time': 'Tiempo extra',
+    };
+    return estados[v] ?? estados[v.toUpperCase()] ?? v;
 }

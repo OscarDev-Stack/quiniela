@@ -163,7 +163,37 @@ import { ToastService } from '../../shared/toast.service';
                 </select>
               </label>
             </div>
-            <button class="btn sm" (click)="guardarApi(c)">Guardar conexión</button>
+            @if (!c.apiLigaId) {
+              <!-- Sin conexión: solo el botón azul de guardar. -->
+              <div class="acciones">
+                <button class="btn sm btn--primary" (click)="guardarApi(c)">Guardar conexión</button>
+              </div>
+            } @else {
+              <!-- Conectada: se puede reconfigurar y quedan dos acciones uniformes. -->
+              <div class="acciones-api">
+                <button class="btn-api" [disabled]="importandoEquipos()" (click)="importarEquipos(c)">
+                  <i class="ti ti-users-plus"></i>
+                  {{ importandoEquipos() ? 'Importando…' : 'Importar equipos de la liga' }}
+                </button>
+                <button class="btn-api" [disabled]="refrescandoTabla()" (click)="refrescarTabla(c)">
+                  <i class="ti ti-table"></i>
+                  {{ refrescandoTabla() ? 'Actualizando…' : 'Actualizar tabla de posiciones' }}
+                </button>
+              </div>
+              <button class="reconectar" (click)="guardarApi(c)">Cambiar liga o temporada</button>
+            }
+            @if (c.apiLigaId && c.tabla?.length) {
+              @if (tablaIncompleta(c)) {
+                <p class="nota nota--alerta">
+                  <i class="ti ti-alert-triangle"></i>
+                  La tabla cargó solo {{ c.tabla?.length }} equipos (parece incompleta).
+                  Suele pasar si la suscripción a la API caducó o volvió a la key gratuita.
+                  Los jugadores no la verán hasta que esté completa. Revisa la suscripción.
+                </p>
+              } @else {
+                <p class="nota">Tabla cargada: {{ c.tabla?.length }} equipos. Se actualiza sola al resolver cada jornada.</p>
+              }
+            }
           }
         </div>
 
@@ -262,7 +292,12 @@ import { ToastService } from '../../shared/toast.service';
                 <div class="partido">
                   <span class="equipos">{{ p.local }} vs {{ p.visitante }}</span>
                   @if (j.estado === 'resuelta' && p.resultado !== 'pospuesto') {
-                    <span class="res">{{ etiqueta(p) }}</span>
+                    <span class="res">
+                      @if (p.golesLocal != null && p.golesVisitante != null) {
+                        <span class="res-marcador">{{ p.golesLocal }} - {{ p.golesVisitante }}</span>
+                      }
+                      <span class="res-txt">{{ etiqueta(p) }}</span>
+                    </span>
                   } @else {
                     <div class="captura">
                       <input
@@ -384,6 +419,11 @@ import { ToastService } from '../../shared/toast.service';
         border-radius: 999px; padding: 2px 9px;
       }
       .nota { font-size: 12px; color: var(--text-muted); margin: 10px 0 4px; }
+      .nota--alerta {
+        color: var(--warning-text); background: var(--warning-bg);
+        border-radius: var(--radius); padding: 8px 10px;
+        display: flex; align-items: flex-start; gap: 6px;
+      }
       .gestor { display: flex; align-items: center; justify-content: space-between;
         gap: 10px; font-size: 13px; padding: 8px 0;
         border-bottom: 1px solid var(--border); }
@@ -470,13 +510,37 @@ import { ToastService } from '../../shared/toast.service';
         background: var(--warning-bg); color: var(--warning-text); border-color: transparent;
       }
       .deduccion { font-size: 12px; color: var(--text-secondary); min-width: 96px; }
-      .res { font-size: 13px; color: var(--text-secondary); }
+      .res { font-size: 13px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 8px; }
+      .res-marcador { font-weight: 700; color: var(--text-primary); }
+      .res-txt { color: var(--text-secondary); }
       .aviso-aplazado {
         display: flex; align-items: flex-start; gap: 8px;
         font-size: 12px; padding: 10px 12px; border-radius: var(--radius);
         background: var(--warning-bg); color: var(--warning-text); margin-bottom: 8px;
       }
       .acciones { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+      /* Dos acciones uniformes de la API (equipos + tabla), mismo tamaño. */
+      .acciones-api {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;
+      }
+      .btn-api {
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        padding: 10px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+        border: 1px solid var(--border-strong); border-radius: var(--radius);
+        background: var(--surface-1); color: var(--text-primary);
+        text-align: center; line-height: 1.2;
+      }
+      .btn-api:hover { background: var(--surface-2); }
+      .btn-api:disabled { opacity: 0.6; cursor: default; }
+      .btn-api i { font-size: 15px; flex-shrink: 0; }
+      @media (max-width: 420px) { .acciones-api { grid-template-columns: 1fr; } }
+      /* Enlace discreto para reconfigurar la liga/temporada ya conectada. */
+      .reconectar {
+        margin-top: 8px; background: none; border: none; cursor: pointer; padding: 4px 0;
+        font-size: 12px; color: var(--text-muted); text-decoration: underline;
+      }
+      .reconectar:hover { color: var(--text-secondary); }
 
       .btn { padding: 9px 16px; cursor: pointer; border: 1px solid var(--border-strong);
         border-radius: var(--radius); background: transparent; font-size: 14px; }
@@ -505,15 +569,29 @@ export class AdminCompeticionesComponent {
   readonly resolviendo = signal(false);
   /** True mientras se consulta la API (traer jornada o resultados). */
   readonly trayendo = signal(false);
+  /** True mientras se refresca la tabla de posiciones desde la API. */
+  readonly refrescandoTabla = signal(false);
+  /** True mientras se importan los equipos de la liga. */
+  readonly importandoEquipos = signal(false);
   nombre = '';
 
   /* --- Conexión con la API (TheSportsDB) --- */
-  /** Ligas soportadas por la API. Agregar aquí para habilitar más. */
+  /** Ligas soportadas por la API. Mismos ids que el buscador de partidos. */
   readonly ligasApi: Array<{ id: number; nombre: string }> = [
     { id: 4350, nombre: 'Liga MX' },
+    { id: 4480, nombre: 'Champions League' },
+    { id: 4328, nombre: 'Premier League' },
+    { id: 4335, nombre: 'LaLiga' },
+    { id: 4332, nombre: 'Serie A' },
+    { id: 4331, nombre: 'Bundesliga' },
+    { id: 4334, nombre: 'Ligue 1' },
+    { id: 4391, nombre: 'NFL' },
   ];
-  /** Temporadas elegibles (formato de la API). La más reciente primero. */
-  readonly temporadasApi: string[] = ['2026-2027', '2025-2026', '2024-2025'];
+  /**
+   * Temporadas elegibles (formato de la API). La más reciente primero.
+   * Fútbol usa "2026-2027"; la NFL usa el año simple ("2026").
+   */
+  readonly temporadasApi: string[] = ['2026-2027', '2025-2026', '2024-2025', '2026', '2025'];
 
   private readonly apiPanel = signal<string[]>([]);
   private readonly apiCfgMap: Record<string, { ligaId: number | null; temporada: string }> = {};
@@ -569,9 +647,25 @@ export class AdminCompeticionesComponent {
     this.trayendo.set(true);
     try {
       const r = await this.service.traerJornadaApi(c.id, bor.numero);
-      bor.filas = r.partidos.map((p) => ({ local: p.local, visitante: p.visitante }));
+      bor.filas = r.partidos.map((p) => ({
+        local: p.local,
+        visitante: p.visitante,
+        ...(p.apiEventId ? { apiEventId: p.apiEventId } : {}),
+      }));
+      let cierrePrellenado = '';
       if (r.primeraHora) {
         bor.cierra = this.isoALocalInput(r.primeraHora);
+        // Hora legible del cierre YA con el margen aplicado (hora MX), para
+        // avisarle al admin qué quedó. Reusamos el mismo valor del input.
+        const d = new Date(bor.cierra);
+        if (!isNaN(d.getTime())) {
+          cierrePrellenado = d.toLocaleString('es-MX', {
+            day: 'numeric',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+        }
       }
 
       // Los selects solo muestran equipos del catálogo de la competición. Si la
@@ -593,6 +687,9 @@ export class AdminCompeticionesComponent {
 
       this.avisar(
         `${r.partidos.length} partido(s) traídos de la API.` +
+          (cierrePrellenado
+            ? ` Cierre sugerido: ${cierrePrellenado} (5 min antes del primer partido).`
+            : '') +
           (nuevos.length > 0 ? ` Se agregaron ${nuevos.length} equipo(s) al catálogo.` : '') +
           ' Revisa y guarda.',
       );
@@ -600,6 +697,49 @@ export class AdminCompeticionesComponent {
       this.toast.error((e as Error)?.message ?? 'No se pudo traer la jornada.');
     } finally {
       this.trayendo.set(false);
+    }
+  }
+
+  /**
+   * ¿La tabla cacheada parece incompleta? (síntoma de suscripción caducada o
+   * key gratuita que trunca a 5 filas). Mismo criterio que el componente que
+   * la muestra: al menos 80% del catálogo, o un mínimo de 8 equipos.
+   */
+  tablaIncompleta(c: Competicion): boolean {
+    const n = c.tabla?.length ?? 0;
+    if (n === 0) return false; // sin tabla aún: no es "incompleta", es que no se ha cargado
+    const catalogo = c.equipos?.length ?? 0;
+    const minimo = catalogo > 0 ? Math.ceil(catalogo * 0.8) : 8;
+    return n < minimo;
+  }
+
+  /** Fuerza la descarga de la tabla de posiciones oficial de la liga. */
+  async refrescarTabla(c: Competicion): Promise<void> {
+    this.refrescandoTabla.set(true);
+    try {
+      const r = await this.service.refrescarTabla(c.id);
+      this.avisar(`Tabla actualizada: ${r.filas} equipos.`);
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudo actualizar la tabla.');
+    } finally {
+      this.refrescandoTabla.set(false);
+    }
+  }
+
+  /** Importa todos los equipos de la liga y los fusiona con el catálogo. */
+  async importarEquipos(c: Competicion): Promise<void> {
+    this.importandoEquipos.set(true);
+    try {
+      const r = await this.service.importarEquipos(c.id);
+      this.avisar(
+        r.agregados > 0
+          ? `${r.agregados} equipo(s) agregados (${r.total} en total).`
+          : `El catálogo ya estaba completo (${r.total} equipos).`,
+      );
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudieron importar los equipos.');
+    } finally {
+      this.importandoEquipos.set(false);
     }
   }
 
@@ -619,17 +759,41 @@ export class AdminCompeticionesComponent {
     }
   }
 
-  /** Convierte un ISO UTC a formato datetime-local en la hora del navegador. */
+  /** Minutos que el cierre se adelanta respecto al primer partido. */
+  private static readonly MARGEN_CIERRE_MIN = 5;
+
+  /**
+   * Convierte el ISO UTC del primer partido (viene de la API) al valor de un
+   * input datetime-local, SIEMPRE en hora de México (no depende de la zona
+   * del navegador del admin), y adelantado MARGEN_CIERRE_MIN minutos para que
+   * el pronóstico cierre antes del pitido inicial.
+   */
   private isoALocalInput(iso: string): string {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return '';
-    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-    return local.toISOString().slice(0, 16);
+
+    // Adelantamos el cierre unos minutos respecto al inicio del partido.
+    const conMargen = new Date(d.getTime() - AdminCompeticionesComponent.MARGEN_CIERRE_MIN * 60000);
+
+    // Formateamos en hora de México sin importar dónde esté el admin. Con
+    // en-CA obtenemos YYYY-MM-DD, y luego la hora en formato 24h.
+    const fecha = conMargen.toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
+    const hora = conMargen.toLocaleTimeString('en-GB', {
+      timeZone: 'America/Mexico_City',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    return `${fecha}T${hora}`;
   }
 
   borrador: Record<
     string,
-    { numero: number; cierra: string; filas: Array<{ local: string; visitante: string }> }
+    {
+      numero: number;
+      cierra: string;
+      filas: Array<{ local: string; visitante: string; apiEventId?: string }>;
+    }
   > = {};
 
   /** Texto del catálogo de equipos mientras se edita. */
@@ -709,7 +873,7 @@ export class AdminCompeticionesComponent {
   b(competicionId: string): {
     numero: number;
     cierra: string;
-    filas: Array<{ local: string; visitante: string }>;
+    filas: Array<{ local: string; visitante: string; apiEventId?: string }>;
   } {
     if (!this.borrador[competicionId]) {
       this.borrador[competicionId] = { numero: 1, cierra: '', filas: [] };
@@ -969,6 +1133,15 @@ export class AdminCompeticionesComponent {
 
   async guardar(c: Competicion, j: Jornada): Promise<void> {
     await this.service.guardarResultados(c.id, j.id, j.partidos);
+    // Recalcula la previa de las quinielas con lo capturado hasta ahora, para
+    // que los jugadores vean sus puntos parciales (incluidos los empates que
+    // se acaban de capturar) sin esperar a que se publique la jornada. Si
+    // falla, no bloquea: los resultados ya quedaron guardados.
+    try {
+      await this.service.previsualizarQuiniela(c.id, j.id);
+    } catch {
+      // La previa es un extra; si falla, los resultados ya están guardados.
+    }
     this.avisar('Resultados guardados.');
   }
 

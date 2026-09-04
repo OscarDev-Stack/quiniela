@@ -12,7 +12,7 @@ import { PronosticosService } from '../../core/services/pronosticos.service';
 import { BracketsService } from '../../core/services/brackets.service';
 import { ContextoService } from '../../shared/contexto.service';
 import { Pronostico } from '../../core/models/pronostico.model';
-import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/models/partido.model';
+import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } from '../../core/models/partido.model';
 
 @Component({
   selector: 'app-partidos-list',
@@ -28,6 +28,9 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
             {{ f }}
           </button>
         }
+        <button class="ayuda-btn" (click)="verAyuda.set(true)" aria-label="Cómo se juega" title="Cómo se juega">
+          <i class="ti ti-help-circle"></i>
+        </button>
       </nav>
 
       @if (cargando()) {
@@ -58,7 +61,7 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
             @switch (m.status) {
               @case ('abierto') { <span class="badge badge--open">Abierto</span> }
               @case ('cierra-pronto') { <span class="badge badge--soon">Cierra pronto</span> }
-              @case ('en-juego') { <span class="badge badge--live"><i class="ti ti-player-play"></i> En juego</span> }
+              @case ('en-juego') { <span class="badge badge--live"><span class="live-dot" aria-hidden="true"></span> En juego</span> }
               @case ('cerrado') { <span class="badge badge--done">Finalizado</span> }
             }
           </div>
@@ -68,12 +71,24 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
               <app-escudo [equipo]="m.homeTeam" [size]="26" />
               {{ m.homeTeam }}
             </span>
-            <span class="vs">vs</span>
+            @if (hayMarcadorVivo(m)) {
+              <span class="marcador-vivo">{{ m.vivoLocal }} - {{ m.vivoVisitante }}</span>
+            } @else {
+              <span class="vs">vs</span>
+            }
             <span class="team team--right">
               {{ m.awayTeam }}
               <app-escudo [equipo]="m.awayTeam" [size]="26" />
             </span>
           </div>
+
+          @if (m.status === 'en-juego' && m.vivoMinuto) {
+            <div class="minuto-vivo"><span class="live-dot" aria-hidden="true"></span> {{ minutoTexto(m.vivoMinuto) }}</div>
+          }
+
+          @if (fechaHora(m); as fh) {
+            <div class="fecha-partido"><i class="ti ti-calendar-event"></i> {{ fh }}</div>
+          }
 
           @if (aceptaPronosticos(m)) {
             <div class="meta">
@@ -129,8 +144,103 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
                 }
               </div>
             }
+
+            <!-- Complemento: aparece solo cuando ya cerraron los pronósticos
+                 (en juego o finalizado). Nota personalizada con TU pronóstico. -->
+            @if (m.status === 'en-juego' || m.status === 'cerrado') {
+              @if (miPremio(m); as prem) {
+                <p class="nota-reparto">
+                  <i class="ti ti-info-circle"></i>
+                  <span>
+                    Apostaste a <strong>{{ nombreResultado(m, prem.resultado) }}</strong>: ganas
+                    <strong>+{{ netoPor100(m, prem.resultado) | number }}</strong> por cada 100.
+                    La bolsa se reparte entre quienes acierten, según lo que apostó cada uno.
+                  </span>
+                </p>
+              } @else {
+                <p class="nota-reparto">
+                  <i class="ti ti-info-circle"></i>
+                  <span>
+                    La bolsa se reparte entre quienes acierten, según lo que apostó cada uno.
+                    El número de cada opción es la ganancia neta por cada 100 apostados.
+                  </span>
+                </p>
+              }
+            }
           }
         </article>
+      }
+
+      <!-- Modal estático: cómo se juega (mecánica de premios). -->
+      @if (verAyuda()) {
+        <div class="modal-fondo" (click)="verAyuda.set(false)">
+          <div class="modal" (click)="$event.stopPropagation()">
+            <div class="modal-cab">
+              <h2 class="modal-tit"><i class="ti ti-trophy"></i> ¿Cómo se gana?</h2>
+              <button class="modal-x" (click)="verAyuda.set(false)" aria-label="Cerrar">
+                <i class="ti ti-x"></i>
+              </button>
+            </div>
+
+            <div class="modal-cuerpo">
+              <p>
+                Cada partido tiene una <strong>bolsa</strong>: la suma de todo lo
+                que apostó la gente. Al cerrar, se reparte <strong>entre quienes
+                acertaron</strong>, según lo que puso cada uno. No es cuota fija.
+              </p>
+
+              <!-- Ejemplo visual: una tarjeta como las reales (simplificada). -->
+              <div class="ej-card">
+                <div class="ej-top">
+                  <span class="ej-comp">Ejemplo</span>
+                  <span class="ej-badge">Bolsa 400</span>
+                </div>
+                <div class="ej-vs">
+                  <span class="ej-eq ej-eq--gana">Local <i class="ti ti-trophy"></i></span>
+                  <span class="ej-x">vs</span>
+                  <span class="ej-eq">Visitante</span>
+                </div>
+                <div class="ej-premios">
+                  <div class="ej-cell ej-cell--gana">
+                    <div class="ej-lbl">Gana Local</div>
+                    <div class="ej-val">+300</div>
+                    <div class="ej-sub">1 apuesta</div>
+                  </div>
+                  <div class="ej-cell">
+                    <div class="ej-lbl">Empate</div>
+                    <div class="ej-val">+300</div>
+                    <div class="ej-sub">1 apuesta</div>
+                  </div>
+                  <div class="ej-cell">
+                    <div class="ej-lbl">Gana Visitante</div>
+                    <div class="ej-val">+100</div>
+                    <div class="ej-sub">2 apuestas</div>
+                  </div>
+                </div>
+                <p class="ej-apuestas">
+                  Apostaron 100 cada uno: <strong>Brian</strong> y <strong>Gio</strong> al Visitante ·
+                  <strong>Gabo</strong> al Empate · <strong>Erick</strong> al Local.
+                </p>
+              </div>
+
+              <p>
+                Ganó el <strong>Local</strong>. Solo <strong>Erick</strong> acertó,
+                así que se lleva toda la bolsa (400): recupera sus 100 y gana
+                <strong>300 más</strong> → <strong>“+300 por cada 100”</strong>.
+                Fíjate que al Visitante, donde apostaron más (200), el premio por
+                cada 100 era menor (+100): entre más gente va a un lado, menos toca
+                a cada uno.
+              </p>
+
+              <p class="ej-nota">
+                Mientras más gente falle, más grande es el premio de quien acierta.
+                El número se ajusta hasta que el partido inicia; ahí queda fijo.
+              </p>
+            </div>
+
+            <button class="modal-ok" (click)="verAyuda.set(false)">Entendido</button>
+          </div>
+        </div>
       }
     </div>
   `,
@@ -157,7 +267,14 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
       }
       :host { display: block; }
 
-      .filters { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 16px; }
+      .filters { display: flex; align-items: center; gap: 8px; overflow-x: auto; padding-bottom: 16px; }
+      .ayuda-btn {
+        flex-shrink: 0; margin-left: auto; width: 34px; height: 34px; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 1px solid var(--border); border-radius: 50%;
+        background: transparent; color: var(--text-muted); font-size: 18px;
+      }
+      .ayuda-btn:hover { color: var(--accent-text); border-color: var(--accent-fill); }
       .chip {
         font-size: 13px; padding: 7px 15px; border-radius: 999px; cursor: pointer;
         border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
@@ -187,7 +304,24 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
       }
       .badge--open { color: var(--success-text); background: var(--success-bg); }
       .badge--soon { color: var(--warning-text); background: var(--warning-bg); }
-      .badge--live { color: #fff; background: #d63b3b; }
+      .badge--live {
+        color: #fff; background: #d63b3b;
+        display: inline-flex; align-items: center; gap: 6px;
+      }
+      /* Punto blanco que late para reforzar el "en vivo". */
+      .live-dot {
+        width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+        background: #fff; box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
+        animation: latido-vivo 1.4s ease-out infinite;
+      }
+      @keyframes latido-vivo {
+        0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
+        70% { box-shadow: 0 0 0 6px rgba(255, 255, 255, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .live-dot { animation: none; }
+      }
       .badge--done { color: var(--text-muted); background: var(--surface-2); }
 
       /* Indicador visual de estado en la orilla de la tarjeta. */
@@ -206,6 +340,28 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
       }
       .team--right { justify-content: flex-end; }
       .vs { font-size: 13px; color: var(--text-muted); }
+      .marcador-vivo {
+        font-size: 20px; font-weight: 800; color: var(--text-primary);
+        font-variant-numeric: tabular-nums; white-space: nowrap;
+      }
+      .minuto-vivo {
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+        font-size: 12px; font-weight: 700; color: #d63b3b; margin: -8px 0 12px;
+      }
+      .minuto-vivo .live-dot {
+        width: 7px; height: 7px; border-radius: 50%; background: #d63b3b;
+        box-shadow: 0 0 0 0 rgba(214, 59, 59, 0.6);
+        animation: latido-vivo 1.4s ease-out infinite;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .minuto-vivo .live-dot { animation: none; }
+      }
+
+      .fecha-partido {
+        display: flex; align-items: center; justify-content: center; gap: 5px;
+        font-size: 12px; color: var(--text-muted); margin: -6px 0 12px;
+        text-transform: capitalize;
+      }
 
       .meta { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
       .closes { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 5px; }
@@ -241,6 +397,73 @@ import { Partido, TipoPartido, textoRestante, fechaCierre } from '../../core/mod
       .premio-val.soft { color: var(--text-muted); }
       .premio-sub { font-size: 10px; color: var(--text-muted); }
       .winner { color: var(--text-muted); }
+
+      /* Nota de reparto (complemento, solo cuando ya cerró). */
+      .nota-reparto {
+        display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 0; padding: 10px 12px;
+        font-size: 12px; line-height: 1.5; color: var(--text-secondary);
+        background: var(--surface-1); border-radius: var(--radius);
+      }
+      .nota-reparto i { flex-shrink: 0; margin-top: 2px; font-size: 15px; color: var(--accent-text); }
+      .nota-reparto span { flex: 1; }
+      .nota-reparto strong { color: var(--text-primary); white-space: nowrap; }
+
+      /* Modal "¿Cómo se gana?" */
+      .modal-fondo {
+        position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.55);
+        display: flex; align-items: center; justify-content: center; padding: 20px;
+      }
+      .modal {
+        width: 100%; max-width: 440px; max-height: 85vh; overflow-y: auto;
+        background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); padding: 18px 20px;
+      }
+      .modal-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+      .modal-tit { display: flex; align-items: center; gap: 8px; font-size: 18px; margin: 0; }
+      .modal-x {
+        flex-shrink: 0; background: transparent; border: none; cursor: pointer;
+        color: var(--text-muted); font-size: 20px; padding: 4px;
+      }
+      .modal-cuerpo p { font-size: 14px; line-height: 1.55; color: var(--text-secondary); margin: 0 0 12px; }
+      .ej-nota {
+        background: var(--accent-bg); color: var(--accent-text) !important;
+        border-radius: var(--radius); padding: 10px 12px; font-size: 13px !important;
+      }
+
+      /* Tarjeta de ejemplo (simplificada, imita una tarjeta de partido). */
+      .ej-card {
+        border: 1px solid var(--border); border-radius: 12px; padding: 12px;
+        margin: 0 0 14px; background: var(--surface-1);
+      }
+      .ej-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+      .ej-comp { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+      .ej-badge {
+        font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+        background: var(--surface-2); color: var(--success-text);
+      }
+      .ej-vs { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 12px; }
+      .ej-eq { font-size: 15px; font-weight: 700; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 5px; }
+      .ej-eq--gana { color: var(--text-primary); }
+      .ej-eq--gana i { color: #f1c40f; font-size: 14px; }
+      .ej-x { font-size: 11px; color: var(--text-muted); }
+      .ej-premios { display: flex; gap: 8px; }
+      .ej-cell {
+        flex: 1; text-align: center; background: var(--surface-2);
+        border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 4px;
+      }
+      .ej-cell--gana { border-color: color-mix(in srgb, var(--success-text) 45%, var(--border)); }
+      .ej-lbl { font-size: 11px; color: var(--text-muted); }
+      .ej-val { font-size: 16px; font-weight: 800; color: var(--success-text); }
+      .ej-val.soft { color: var(--text-muted); font-weight: 600; }
+      .ej-sub { font-size: 10px; color: var(--text-muted); }
+      .ej-apuestas {
+        font-size: 12px !important; color: var(--text-secondary); line-height: 1.5;
+        margin: 12px 0 0 !important; padding-top: 10px; border-top: 1px dashed var(--border);
+      }
+      .modal-ok {
+        width: 100%; padding: 12px; margin-top: 4px; cursor: pointer; font-weight: 600; font-size: 15px;
+        border: none; border-radius: var(--radius); background: var(--accent-fill); color: #fff;
+      }
     `,
   ],
 })
@@ -269,6 +492,8 @@ export class PartidosListComponent {
   readonly filtros = ['Abiertos', 'Todos', 'Finalizados'];
   /* Arranca en Todos: si no hay partidos abiertos, ver la lista vacía confunde. */
   readonly filtro = signal('Todos');
+  /** Modal estático "¿Cómo se gana?". */
+  readonly verAyuda = signal(false);
 
   /** True hasta que llegan los primeros partidos, para no ver la vista vacía. */
   readonly cargando = signal(true);
@@ -332,6 +557,33 @@ export class PartidosListComponent {
 
   restante(p: Partido): string {
     return textoRestante(p, this.ahora());
+  }
+
+  /** ¿El partido tiene marcador en vivo para mostrar? (solo en juego). */
+  hayMarcadorVivo(p: Partido): boolean {
+    return (
+      p.status === 'en-juego' &&
+      typeof p.vivoLocal === 'number' &&
+      typeof p.vivoVisitante === 'number'
+    );
+  }
+
+  /** Texto del minuto/estado en vivo, traducido al español. */
+  minutoTexto(min: string): string {
+    return minutoVivoTexto(min);
+  }
+
+  /** Fecha y hora del partido en zona MX, ej. "sáb 6 sep · 19:00". Null si no hay. */
+  fechaHora(p: Partido): string | null {
+    const f = fechaCierre(p);
+    if (!f) return null;
+    const fecha = f.toLocaleDateString('es-MX', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    });
+    const hora = f.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    return `${fecha} · ${hora}`;
   }
 
   /** Solo si sigue abierto y su hora de cierre aún no llega. */

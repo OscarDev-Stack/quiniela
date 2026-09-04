@@ -4,9 +4,13 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "build": "ng build",
+    "build": "ng build && node scripts/generar-sw.js prod",
+    "build:prod": "ng build --configuration production && node scripts/generar-sw.js prod",
+    "build:dev": "ng build --configuration development && node scripts/generar-sw.js dev",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "pruebas": "node scripts/run-pruebas.js",
+    "pruebas:limpiar": "node scripts/seed-dev.js limpiar"
   },
   "prettier": {
     "printWidth": 100,
@@ -31,8 +35,10 @@
     "@angular/router": "^20.3.0",
     "@angular/service-worker": "^20.3.26",
     "@tabler/icons-webfont": "^3.31.0",
+    "@types/qrcode": "^1.5.6",
     "firebase": "^11.10.0",
     "firebase-admin": "^14.3.0",
+    "qrcode": "^1.5.4",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },

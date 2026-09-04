@@ -15,6 +15,7 @@ import { PartidosService } from '../../core/services/partidos.service';
 import { TorneosService } from '../../core/services/torneos.service';
 import { BracketsService } from '../../core/services/brackets.service';
 import { UserService } from '../../core/services/user.service';
+import { StatsService } from '../../shared/stats.service';
 import { Partido, fechaCierre } from '../../core/models/partido.model';
 import { Torneo } from '../../core/models/torneo.model';
 import { Bracket } from '../../core/models/bracket.model';
@@ -272,6 +273,7 @@ export class InicioComponent {
   private readonly router = inject(Router);
   private readonly contexto = inject(ContextoService);
   private readonly gruposSrv = inject(GruposService);
+  private readonly stats = inject(StatsService);
 
   // undefined = todavía no cargó de Firestore; [] = cargó y no tiene grupos.
   // Distinguirlos evita resolver el contexto con la lista vacía inicial (que
@@ -282,6 +284,9 @@ export class InicioComponent {
   private readonly misGrupos = computed(() => this.misGruposRaw() ?? []);
 
   constructor() {
+    // Traza del embudo: el usuario llegó al hub de inicio.
+    this.stats.evento('hub_visto');
+
     // Al conocer los grupos del usuario, decide el contexto inicial:
     // si pertenece a un grupo, entra a un grupo (no a Global por defecto).
     // Solo resolvemos cuando los grupos YA cargaron (no en el estado inicial).

@@ -2,21 +2,23 @@ import { Component, NgZone, OnDestroy, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AccesoService } from '../../core/services/acceso.service';
+import { environment } from '../../../environments/environment';
 
 /**
  * Portón de acceso al sitio. Muestra el widget de Cloudflare Turnstile;
  * cuando el usuario lo resuelve, validamos el token en el servidor y, si es
  * correcto, entramos a la app. Solo aparece la primera vez por dispositivo.
  *
- * IMPORTANTE: reemplaza SITE_KEY_DE_TURNSTILE por tu Site Key pública de
- * Cloudflare Turnstile.
+ * La Site Key sale del environment (dev/prod), para usar la que corresponda
+ * a cada dominio; si el dominio no está permitido en Cloudflare, el widget
+ * sale en blanco.
  */
 declare const turnstile: {
   render: (el: HTMLElement, opciones: Record<string, unknown>) => string;
   reset: (id?: string) => void;
 } | undefined;
 
-const SITE_KEY = '0x4AAAAAAEdUWtaENzy8lzBw';
+const SITE_KEY = environment.turnstileSiteKey;
 
 @Component({
   selector: 'app-acceso',

@@ -8,6 +8,7 @@ import { StatsService } from '../../shared/stats.service';
 import { ToastService } from '../../shared/toast.service';
 import { ModoTorneo } from '../../core/models/torneo.model';
 import { UserService } from '../../core/services/user.service';
+import { guardarInvitacion, limpiarInvitacion } from '../../shared/invitacion.util';
 import { ReglasTorneoComponent } from './reglas-torneo.component';
 
 @Component({
@@ -241,8 +242,9 @@ export class UnirseComponent {
   readonly permiteRevivir = computed(() => this.info()?.permiteRevivir ?? false);
 
   constructor() {
-    // La invitación sobrevive al cierre del navegador y a la espera de validación.
-    if (this.codigo) localStorage.setItem('invitacion', this.codigo);
+    // La invitación solo se persiste cuando el usuario NO tiene sesión y va a
+    // login/registro (lo hace ir()). Guardarla aquí siempre dejaba un residuo
+    // en localStorage que reenviaba a "unirse" en cada login futuro.
 
     // Consulta el torneo para saber qué reglas mostrar.
     this.torneos
@@ -253,7 +255,7 @@ export class UnirseComponent {
 
   /** Guarda el código para retomar la invitación después de registrarse. */
   ir(destino: 'login' | 'registro'): void {
-    localStorage.setItem('invitacion', this.codigo);
+    guardarInvitacion('torneo', this.codigo);
     this.router.navigate(['/' + destino]);
   }
 
@@ -273,7 +275,7 @@ export class UnirseComponent {
     try {
       const r = await this.torneos.unirse(this.codigo);
       this.stats.evento('torneo_union');
-      localStorage.removeItem('invitacion');
+      limpiarInvitacion();
       if (r.costo > 0) {
         this.toast.exito(`Quedaste inscrito. Se descontaron ${r.costo} puntos de tu saldo.`);
       } else {

@@ -10,6 +10,7 @@ import { Competicion } from '../../core/models/competicion.model';
 import { CompeticionesService } from '../../core/services/competiciones.service';
 import { GruposService } from '../../core/services/grupos.service';
 import { ToastService } from '../../shared/toast.service';
+import { StatsService } from '../../shared/stats.service';
 import { NavComponent } from '../../shared/nav.component';
 
 /**
@@ -55,6 +56,11 @@ import { NavComponent } from '../../shared/nav.component';
           <label class="field">
             <span>Jornadas que dura</span>
             <input type="number" min="1" max="20" [(ngModel)]="form.jornadas" />
+            <small class="pista">
+              Empezando en la jornada {{ form.jornadaInicial || 1 }}, terminará en la
+              <strong>jornada {{ jornadaFinal() }}</strong>.
+              Ajusta la duración para que llegue hasta donde quieras que acabe la liga.
+            </small>
           </label>
         } @else {
           <label class="field">
@@ -108,6 +114,12 @@ import { NavComponent } from '../../shared/nav.component';
         <label class="field">
           <span>Jornada de inicio</span>
           <input type="number" min="1" [(ngModel)]="form.jornadaInicial" />
+          @if (form.modo === 'quiniela') {
+            <small class="pista">
+              El torneo tomará {{ form.jornadas || 1 }} jornada(s) desde aquí y terminará en la
+              <strong>jornada {{ jornadaFinal() }}</strong>.
+            </small>
+          }
         </label>
         <label class="field">
           <span>Cierre de inscripciones</span>
@@ -309,6 +321,7 @@ export class CrearTorneoComponent {
   private readonly competicionesSrv = inject(CompeticionesService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+  private readonly stats = inject(StatsService);
 
   /** Grupos donde soy admin (puedo crearles torneos). */
   readonly misGrupos = toSignal(this.gruposSrv.misGrupos(), { initialValue: [] as Grupo[] });
@@ -342,6 +355,17 @@ export class CrearTorneoComponent {
       this.form.grupoId = this.grupoUrl;
       this.grupoBloqueado.set(true);
     }
+  }
+
+  /**
+   * Jornada en la que TERMINARÁ el torneo según inicio + duración. Es un
+   * cálculo exacto (inicio + duración − 1) que no depende de conocer cuántas
+   * jornadas tiene la liga, así que sirve para cualquier competición.
+   */
+  jornadaFinal(): number {
+    const inicio = Math.max(1, Math.floor(Number(this.form.jornadaInicial) || 1));
+    const dura = Math.max(1, Math.floor(Number(this.form.jornadas) || 1));
+    return inicio + dura - 1;
   }
 
   /** Resumen de las reglas de supervivencia según lo elegido. */
@@ -392,6 +416,10 @@ export class CrearTorneoComponent {
         vidaCubre: this.form.vidaCubre,
         permiteRevivir: this.form.modo === 'supervivencia' && this.form.permiteRevivir,
         grupoId: this.form.grupoId || null,
+      });
+      this.stats.evento('torneo_creado', {
+        modo: this.form.modo,
+        es_grupo: this.form.grupoId ? 'si' : 'no',
       });
       this.toast.exito('Torneo creado. Comparte el enlace de invitación.');
       // Volver: al grupo si vino de un grupo, o a la gestión de torneos.

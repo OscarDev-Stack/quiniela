@@ -57,8 +57,12 @@ export class AdminService {
             if (!esAdmin) return of([0, 0] as [number, number]);
             return combineLatest([this.getPartidos(), this.getUsers()]).pipe(
                 map(([partidos, usuarios]): [number, number] => [
-                    partidos.filter((p) => !p.liquidado && (!!p.resultadoPropuesto || !!p.alertaApi))
-                        .length,
+                    partidos.filter(
+                        (p) =>
+                            !p.liquidado &&
+                            p.status !== 'cerrado' &&
+                            (!!p.resultadoPropuesto || !!p.alertaApi),
+                    ).length,
                     usuarios.filter((u) => !u.validada).length,
                 ]),
             );
@@ -90,7 +94,10 @@ export class AdminService {
                       map(
                           (partidos) =>
                               partidos.filter(
-                                  (p) => !p.liquidado && (!!p.resultadoPropuesto || !!p.alertaApi),
+                                  (p) =>
+                                      !p.liquidado &&
+                                      p.status !== 'cerrado' &&
+                                      (!!p.resultadoPropuesto || !!p.alertaApi),
                               ).length,
                       ),
                   )
@@ -123,6 +130,8 @@ export class AdminService {
         closesAtMs: number;
         porcentajeBote?: number;
         apiFixtureId?: number;
+        apiEventId?: string;
+        apiLigaId?: number;
     }): Promise<{ id: string }> {
         const fn = httpsCallable<typeof data, { ok: boolean; id: string }>(
             this.fns,
@@ -166,11 +175,54 @@ export class AdminService {
                     fecha: string;
                     homeTeam: string;
                     awayTeam: string;
+                    homeTeamId: number | null;
+                    awayTeamId: number | null;
                     competition: string;
                 }>;
             }
         >(this.fns, 'buscarFixtures');
         const res = await fn({ competicion, desde, hasta });
+        return res.data.partidos;
+    }
+
+    /**
+     * Trae la forma reciente (últimos 5) de dos equipos de football-data. Se
+     * llama UNA vez al crear el partido para guardarla; no cambia después.
+     */
+    async formaEquipos(
+        homeTeamId: number | null,
+        awayTeamId: number | null,
+    ): Promise<{ formaLocal: string; formaVisitante: string }> {
+        if (!homeTeamId && !awayTeamId) return { formaLocal: '', formaVisitante: '' };
+        const fn = httpsCallable<
+            { homeTeamId: number | null; awayTeamId: number | null },
+            { ok: boolean; formaLocal: string; formaVisitante: string }
+        >(this.fns, 'formaEquiposApi');
+        const res = await fn({ homeTeamId, awayTeamId });
+        return { formaLocal: res.data.formaLocal, formaVisitante: res.data.formaVisitante };
+    }
+
+    /** Busca próximos partidos de una liga en TheSportsDB. */
+    async buscarFixturesSportsDb(liga: string) {
+        const fn = httpsCallable<
+            { liga: string },
+            {
+                ok: boolean;
+                liga: string;
+                partidos: Array<{
+                    apiEventId: string;
+                    fecha: string;
+                    homeTeam: string;
+                    awayTeam: string;
+                    homeTeamId: string | null;
+                    awayTeamId: string | null;
+                    ronda: string;
+                    competition: string;
+                    apiLigaId: number;
+                }>;
+            }
+        >(this.fns, 'buscarFixturesSportsDb');
+        const res = await fn({ liga });
         return res.data.partidos;
     }
 

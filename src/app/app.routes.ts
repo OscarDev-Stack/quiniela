@@ -98,6 +98,14 @@ export const routes: Routes = [
         loadComponent: () => import('./features/torneos/unirse.component').then((m) => m.UnirseComponent),
     },
     {
+        path: 'unirse-grupo/:codigo',
+        loadComponent: () => import('./features/grupos/unirse-grupo.component').then((m) => m.UnirseGrupoComponent),
+    },
+    {
+        path: 'unirse-elim/:codigo',
+        loadComponent: () => import('./features/brackets/unirse-elim.component').then((m) => m.UnirseElimComponent),
+    },
+    {
         path: 'torneos',
         loadComponent: () => import('./features/torneos/torneos-list.component').then((m) => m.TorneosListComponent),
         canActivate: [authGuard],

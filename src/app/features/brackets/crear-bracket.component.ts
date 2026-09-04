@@ -7,6 +7,7 @@ import { BracketsService } from '../../core/services/brackets.service';
 import { GruposService } from '../../core/services/grupos.service';
 import { Grupo } from '../../core/models/grupo.model';
 import { ToastService } from '../../shared/toast.service';
+import { StatsService } from '../../shared/stats.service';
 import { nombreOficial } from '../../core/models/equipos-liga-mx';
 import { EquipoBracket } from '../../core/models/bracket.model';
 import { NavComponent } from '../../shared/nav.component';
@@ -325,6 +326,7 @@ export class CrearBracketComponent {
   private readonly gruposSrv = inject(GruposService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+  private readonly stats = inject(StatsService);
 
   readonly misGrupos = toSignal(this.gruposSrv.misGrupos(), { initialValue: [] as Grupo[] });
   readonly grupoBloqueado = signal(false);
@@ -395,6 +397,11 @@ export class CrearBracketComponent {
         cierraAt: this.nuevo.cierre ? new Date(this.nuevo.cierre) : null,
         publico: this.nuevo.publico,
         grupoId: this.nuevo.grupoId || null,
+      });
+      this.stats.evento('bracket_creado', {
+        modo: this.nuevo.modo,
+        equipos: Number(this.nuevo.equipos),
+        es_grupo: this.nuevo.grupoId ? 'si' : 'no',
       });
       this.toast.exito('Eliminatoria creada.');
       if (this.grupoUrl) {

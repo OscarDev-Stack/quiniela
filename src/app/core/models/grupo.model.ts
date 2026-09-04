@@ -11,8 +11,12 @@ export interface Grupo {
     icono: string;
     /* Código para unirse (ej. "BARRIO7"). */
     codigo: string;
-    /* Uid de quien lo administra (su creador, salvo transferencia). */
+    /* Uid del admin principal (su creador, salvo transferencia). Se conserva
+       por compatibilidad; los permisos usan adminUids si está presente. */
     adminUid: string;
+    /* Todos los administradores del grupo (incluye al principal). Un grupo
+       puede tener varios para repartir la responsabilidad. */
+    adminUids?: string[];
     /* Cuántos miembros tiene (lo mantiene una Cloud Function). */
     miembrosCount?: number;
     createdAt?: unknown;

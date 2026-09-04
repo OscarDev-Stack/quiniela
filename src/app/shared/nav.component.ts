@@ -9,6 +9,7 @@ import { UserService } from '../core/services/user.service';
 import { AdminService } from '../core/services/admin.service';
 import { TorneosService } from '../core/services/torneos.service';
 import { ConfirmarService } from './confirmar.service';
+import { StatsService } from './stats.service';
 
 @Component({
   selector: 'app-nav',
@@ -99,7 +100,6 @@ import { ConfirmarService } from './confirmar.service';
 
       <a routerLink="/torneos" routerLinkActive="on">
         <i class="ti ti-tournament"></i><span>Torneos</span>
-        @if (pendientesTorneos() > 0) { <span class="tab-badge"></span> }
       </a>
       <a routerLink="/perfil" routerLinkActive="on">
         <i class="ti ti-user"></i><span>Perfil</span>
@@ -260,6 +260,7 @@ export class NavComponent {
   private readonly router = inject(Router);
   private readonly location = inject(Location);
   private readonly confirmar = inject(ConfirmarService);
+  private readonly stats = inject(StatsService);
 
   /** Muestra flecha de regreso en vez del logo. */
   readonly back = input(false);
@@ -282,8 +283,6 @@ export class NavComponent {
   readonly usuariosPendientes = toSignal(this.admin.usuariosPendientes$, { initialValue: 0 });
   /** Solo partidos con resultado por confirmar: badge de "Partidos". */
   readonly partidosPendientes = toSignal(this.admin.partidosPendientes$, { initialValue: 0 });
-  /** Torneos donde falta elegir equipo. */
-  readonly pendientesTorneos = toSignal(this.torneos.pendientes$, { initialValue: 0 });
   /** La pestaña de torneos solo aparece si participo en alguno. */
   private readonly misTorneos = toSignal(this.torneos.misTorneos$, { initialValue: [] });
   readonly tengoTorneos = computed(() => this.misTorneos().length > 0);
@@ -321,6 +320,7 @@ export class NavComponent {
     });
     if (!ok) return;
 
+    this.stats.evento('logout', { origen: 'nav' });
     await this.auth.logout();
     this.router.navigate(['/login']);
   }
