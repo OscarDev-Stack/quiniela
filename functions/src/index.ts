@@ -111,6 +111,24 @@ const LIGAS_SPORTSDB: Record<string, { id: number; nombre: string; nombreApi: st
 const NFL_LIGA_ID = 4391;
 const NFL_SEMANAS_REGULAR = 18;
 
+/**
+ * Normaliza la temporada al formato que espera TheSportsDB SEGÚN la liga.
+ * El fútbol usa temporada de dos años ("2026-2027"); la NFL (y otras ligas de
+ * EE.UU.) usan el AÑO SIMPLE ("2026"). Si a una competición NFL le quedó
+ * configurada una temporada tipo "2026-2027", tomamos el primer año para que
+ * la consulta a la API no venga vacía. Así el admin no tiene que acordarse del
+ * formato exacto.
+ */
+function temporadaApiParaLiga(ligaId: number, temporada: string): string {
+    const t = (temporada ?? '').trim();
+    if (ligaId === NFL_LIGA_ID) {
+        // "2026-2027" -> "2026"; "2026" -> "2026".
+        const m = t.match(/^(\d{4})/);
+        return m ? m[1] : t;
+    }
+    return t;
+}
+
 /** Busca la config de una liga por su id de TheSportsDB. */
 function ligaPorId(ligaId: number): { id: number; nombre: string; nombreApi: string } | null {
     return Object.values(LIGAS_SPORTSDB).find((l) => l.id === ligaId) ?? null;
@@ -131,8 +149,10 @@ async function eventosRondaSportsDb(
 ): Promise<EventoSportsDb[]> {
     // V2 devuelve el calendario COMPLETO de la temporada (raíz `schedule`);
     // filtramos por la ronda pedida. Los campos internos son los mismos que V1.
+    // La temporada se normaliza según la liga (NFL usa año simple).
+    const temp = temporadaApiParaLiga(ligaId, temporada);
     const data = await fetchSportsDbV2<{ schedule?: EventoSportsDb[] | null }>(
-        `schedule/league/${ligaId}/${encodeURIComponent(temporada)}`,
+        `schedule/league/${ligaId}/${encodeURIComponent(temp)}`,
         key,
     );
     const todos = data.schedule ?? [];
@@ -186,8 +206,9 @@ async function tablaLigaSportsDb(
     // La tabla SÍ funciona en V1 con la key premium (devuelve los equipos
     // completos), así que aquí seguimos usando V1 — a diferencia de los
     // endpoints de calendario/eventos, que en V1 premium dan 404 y usan V2.
+    const temp = temporadaApiParaLiga(ligaId, temporada);
     const url =
-        `${sportsDbBase(key)}/lookuptable.php?l=${ligaId}&s=${encodeURIComponent(temporada)}`;
+        `${sportsDbBase(key)}/lookuptable.php?l=${ligaId}&s=${encodeURIComponent(temp)}`;
     const res = await fetch(url);
     if (!res.ok) {
         throw new HttpsError('internal', `TheSportsDB respondió ${res.status}.`);
