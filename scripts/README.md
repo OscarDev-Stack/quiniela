@@ -65,7 +65,35 @@ npx playwright install chromium
 
 ---
 
-## Cómo se usan
+## Atajo: correr TODAS las pruebas de un jalón
+
+```bash
+npm run pruebas
+```
+
+Esto hace, en orden: **seed** (crea los usuarios de prueba) → las 6 pruebas de
+flujo (partido, survivor, survivor NFL, quiniela, bracket pronóstico, bracket
+dueños) → un **resumen ✅/❌** al final.
+
+**No borra nada:** los datos quedan en dev para que los revises en la app / consola.
+Cuando termines de mirar:
+
+```bash
+npm run pruebas:limpiar     # borra todo lo marcado esPrueba
+```
+
+Si ya sembraste antes y solo quieres repetir las pruebas sin re-sembrar:
+
+```bash
+node scripts/run-pruebas.js --no-seed
+```
+
+> Requiere los dos archivos de credenciales (abajo). Si faltan, el runner se
+> detiene en el seed con un mensaje claro.
+
+---
+
+## Cómo se usan (paso a paso, manual)
 
 ### Paso 1 — Sembrar datos de prueba
 

@@ -8,7 +8,9 @@
     "build:prod": "ng build --configuration production && node scripts/generar-sw.js prod",
     "build:dev": "ng build --configuration development && node scripts/generar-sw.js dev",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "pruebas": "node scripts/run-pruebas.js",
+    "pruebas:limpiar": "node scripts/seed-dev.js limpiar"
   },
   "prettier": {
     "printWidth": 100,
