@@ -35,20 +35,24 @@ const EQUIPOS = [
 const PUNTAJE = { avanzaPorRonda: [1, 2], campeon: 5, finalista: 3, marcadorExacto: 3, marcadorResultado: 1 };
 
 // Pronósticos por usuario (avances por llave). El campeón real es América.
+// OJO con el puntaje: con 4 equipos hay 2 rondas (R0, R1). En calificarBk,
+// "semifinal" es la ronda totalRondas-2, que aquí es R0. Así que cada acierto
+// en R0 suma avanzaPorRonda[0] (1) + finalista (3) = 4. En R1 (final) suma
+// avanzaPorRonda[1] (2) + campeon (5) = 7.
 const JUGADORES = [
   {
     // A acierta todo: R0-L0 América, R0-L1 Cruz Azul, final América.
-    // R0: 2 aciertos ×1 = 2 ; R1(final): avanza(2) + campeon(5) = 7 ; total 9.
+    // R0: 2 aciertos ×(1+3)=8 ; R1(final): (2+5)=7 ; total 15.
     email: 'prueba_a@quiniela.test',
     avances: { 'R0-L0': 'América', 'R0-L1': 'Cruz Azul', 'R1-L0': 'América' },
-    puntos: 9,
+    puntos: 15,
   },
   {
-    // B: R0-L0 América (1), R0-L1 Guadalajara (falla), final América (avanza 2 + campeon 5 = 7).
-    // total = 1 + 0 + 7 = 8.
+    // B: R0-L0 América (1+3=4), R0-L1 Guadalajara (falla, 0), final América (2+5=7).
+    // total = 4 + 0 + 7 = 11.
     email: 'prueba_b@quiniela.test',
     avances: { 'R0-L0': 'América', 'R0-L1': 'Guadalajara', 'R1-L0': 'América' },
-    puntos: 8,
+    puntos: 11,
   },
 ];
 
