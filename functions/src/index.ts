@@ -1,101 +1,29 @@
 import { onCall, onRequest, HttpsError } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { defineSecret } from 'firebase-functions/params';
-import { setGlobalOptions } from 'firebase-functions/v2';
 import * as logger from 'firebase-functions/logger';
-import { initializeApp } from 'firebase-admin/app';
-import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { getMessaging } from 'firebase-admin/messaging';
 import { nombreOficial as nombreOficialEquipo } from './equipos';
-
-initializeApp();
-
-/* ============================================================
-   Entorno: en dev los schedulers corren al DOBLE del intervalo de
-   prod (más espaciados, para no saturar el proyecto de pruebas),
-   pero siguen corriendo. En prod usan su intervalo normal.
-   ============================================================ */
-const PROYECTO_PROD = 'quinelav1-e23eb';
-const esProd = process.env.GCLOUD_PROJECT === PROYECTO_PROD;
-
-/**
- * Devuelve el schedule de un job: en prod, cada `minutos`; en dev, cada
- * `minutos * 2`. Así el mismo código sirve para ambos entornos sin tener
- * intervalos fijos regados por el archivo.
- */
-const cada = (minutos: number): string => {
-    const m = esProd ? minutos : minutos * 2;
-    return `every ${m} minutes`;
-};
-
-const db = getFirestore();
-
-const APUESTA_BASE = 100;
-const TOPE_INFERIOR = -1000;
-const MULTIPLICADOR_MAX = 5;
-/** Pronósticos por lote (el límite de Firestore es 500 operaciones). */
-const PRONOSTICOS_POR_LOTE = 150;
-/** Mínimo de pronósticos resueltos para calificar al ranking por %. */
-const MIN_RESUELTOS = 1;
-
-/**
- * Calcula cuánto de un cobro se va al "bote" acumulado (sistema/reserva),
- * según el porcentaje configurado en el torneo/partido. El % SALE de la
- * bolsa: el jugador paga igual, pero esta parte no engorda la bolsa del
- * torneo, sino el bote global que luego se jugará aparte.
- *
- * Devuelve el monto que va al bote (para restarlo de la bolsa). Escribir
- * en la reserva y el ledger es responsabilidad de quien llama, con
- * registrarBote().
- */
-function calcularBote(monto: number, porcentaje: unknown): number {
-    const pct = Number(porcentaje ?? 0);
-    if (!pct || pct <= 0 || monto <= 0) return 0;
-    return Math.floor((monto * pct) / 100);
-}
-
-/** Suma al bote (fuera de transacción) y deja constancia en el ledger. */
-async function registrarBote(monto: number, origen: string): Promise<void> {
-    if (monto <= 0) return;
-    await db.doc('sistema/reserva').set({ total: FieldValue.increment(monto) }, { merge: true });
-    await db.collection('ledger').add({
-        uid: 'reserva',
-        tipo: 'bote',
-        monto,
-        detalle: origen,
-        createdAt: FieldValue.serverTimestamp(),
-    });
-}
-
-/**
- * Techo de instancias simultáneas por función. Evita que un pico
- * (o un abuso) escale a cientos de contenedores y dispare el costo.
- */
-setGlobalOptions({ maxInstances: 10 });
-
-/**
- * Exigir App Check en las funciones que llama el navegador.
- * Ponlo en true DESPUÉS de configurar App Check y comprobar que
- * la app funciona; si lo activas antes, dejará de responder.
- */
-const EXIGIR_APP_CHECK = false;
-const opcionesCall = { enforceAppCheck: EXIGIR_APP_CHECK };
-/** Minutos tras el inicio antes de empezar a consultar la API. */
-const MINUTOS_ANTES_DE_CONSULTAR = 100;
-
-/** Llave de football-data.org. Se configura con:
- *  firebase functions:secrets:set FOOTBALL_DATA_KEY */
-const footballDataKey = defineSecret('FOOTBALL_DATA_KEY');
-const telegramToken = defineSecret('TELEGRAM_TOKEN');
-const telegramWebhookSecret = defineSecret('TELEGRAM_WEBHOOK_SECRET');
-/** Secret Key de Cloudflare Turnstile. Se configura con:
- *  firebase functions:secrets:set TURNSTILE_SECRET_KEY */
-const turnstileSecret = defineSecret('TURNSTILE_SECRET_KEY');
-/** Key de TheSportsDB (premium). Se configura con:
- *  firebase functions:secrets:set SPORTSDB_KEY
- *  Debe declararse en cada función que consulte TheSportsDB. */
-const sportsDbKey = defineSecret('SPORTSDB_KEY');
+// Base común (inicializa Firebase Admin, Firestore, constantes, secrets, bote).
+import {
+    db,
+    cada,
+    APUESTA_BASE,
+    TOPE_INFERIOR,
+    MULTIPLICADOR_MAX,
+    PRONOSTICOS_POR_LOTE,
+    MIN_RESUELTOS,
+    MINUTOS_ANTES_DE_CONSULTAR,
+    opcionesCall,
+    footballDataKey,
+    telegramToken,
+    telegramWebhookSecret,
+    turnstileSecret,
+    sportsDbKey,
+    calcularBote,
+    registrarBote,
+} from './comun';
 
 const API_BASE = 'https://api.football-data.org/v4';
 
