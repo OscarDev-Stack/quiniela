@@ -18,6 +18,32 @@ jobs:
     steps:
       - name: Descargar código
         uses: actions/checkout@v4
+        with:
+          # Necesitamos el commit anterior para saber qué cambió.
+          fetch-depth: 2
+
+      # Detecta si el push tocó las Cloud Functions o las reglas de Firestore.
+      # Así solo desplegamos lo que de verdad cambió y evitamos el 429 de quota
+      # por redesplegar las ~65 funciones cuando el cambio fue solo de front.
+      - name: Detectar cambios
+        id: cambios
+        run: |
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            DIFF=$(git diff --name-only HEAD~1 HEAD)
+          else
+            DIFF=$(git diff --name-only HEAD)
+          fi
+          echo "Archivos cambiados:"; echo "$DIFF"
+          if echo "$DIFF" | grep -q '^functions/'; then
+            echo "functions=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "functions=false" >> "$GITHUB_OUTPUT"
+          fi
+          if echo "$DIFF" | grep -q '^firestore.rules'; then
+            echo "reglas=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "reglas=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Configurar Node.js
         uses: actions/setup-node@v4
@@ -45,21 +71,43 @@ jobs:
           echo '${{ github.ref == 'refs/heads/master' && secrets.FIREBASE_SA_PROD || secrets.FIREBASE_SA_DEV }}' > "$RUNNER_TEMP/sa.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
 
-      # Instala deps de las funciones (ajusta la ruta si tu carpeta no es 'functions')
+      # Deps de funciones: solo si el push tocó functions/.
       - name: Instalar dependencias de funciones
+        if: steps.cambios.outputs.functions == 'true'
         run: npm ci
         working-directory: functions
 
       - name: Instalar Firebase CLI
+        if: steps.cambios.outputs.functions == 'true' || steps.cambios.outputs.reglas == 'true'
         run: npm install -g firebase-tools@15.22.1
 
-      # Despliega funciones: mismo comando en ambas ramas.
-      # Que se registre cada funcion lo decide el codigo segun el proyecto.
+      # Despliega SOLO las funciones si cambió functions/. Reintenta ante el 429
+      # "Per project mutation requests per minute" (transitorio; el deploy es
+      # idempotente y retoma las que faltan).
       - name: Deploy funciones
+        if: steps.cambios.outputs.functions == 'true'
         run: |
-          firebase deploy --only functions,firestore:rules \
-            --project ${{ github.ref == 'refs/heads/master' && 'quinelav1-e23eb' || 'quiniela-dev-d203d' }} \
-            --non-interactive
+          PROY=${{ github.ref == 'refs/heads/master' && 'quinelav1-e23eb' || 'quiniela-dev-d203d' }}
+          for intento in 1 2 3; do
+            echo "Deploy de funciones (intento $intento)..."
+            if firebase deploy --only functions --project "$PROY" --non-interactive; then
+              echo "Deploy de funciones OK."
+              break
+            fi
+            if [ "$intento" -eq 3 ]; then
+              echo "Deploy de funciones fallo tras 3 intentos."
+              exit 1
+            fi
+            echo "Fallo (posible quota 429). Esperando 60s antes de reintentar..."
+            sleep 60
+          done
+
+      # Despliega las reglas de Firestore solo si cambiaron.
+      - name: Deploy reglas de Firestore
+        if: steps.cambios.outputs.reglas == 'true'
+        run: |
+          PROY=${{ github.ref == 'refs/heads/master' && 'quinelav1-e23eb' || 'quiniela-dev-d203d' }}
+          firebase deploy --only firestore:rules --project "$PROY" --non-interactive
 
       # Despliega hosting al proyecto que corresponde a la rama
       - name: Deploy hosting
