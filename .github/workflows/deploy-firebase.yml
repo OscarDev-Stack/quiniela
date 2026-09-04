@@ -50,6 +50,11 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          # Cachea las deps de la raíz Y de functions/. Antes solo se cacheaba
+          # la raíz, así que la instalación de funciones bajaba todo cada vez.
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
 
       - name: Instalar dependencias
         run: npm ci --legacy-peer-deps
@@ -77,9 +82,25 @@ jobs:
         run: npm ci
         working-directory: functions
 
-      - name: Instalar Firebase CLI
+      # Cachea la CLI de Firebase (es grande) para no bajarla en cada corrida.
+      # La clave incluye la versión: si se sube firebase-tools, la caché se
+      # invalida sola y se reinstala.
+      - name: Cachear Firebase CLI
         if: steps.cambios.outputs.functions == 'true' || steps.cambios.outputs.reglas == 'true'
-        run: npm install -g firebase-tools@15.22.1
+        id: cache-firebase
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm-global
+          key: firebase-tools-15.22.1-${{ runner.os }}
+
+      - name: Instalar Firebase CLI
+        if: (steps.cambios.outputs.functions == 'true' || steps.cambios.outputs.reglas == 'true') && steps.cache-firebase.outputs.cache-hit != 'true'
+        run: npm install --prefix ~/.npm-global -g firebase-tools@15.22.1
+
+      # Deja la CLI cacheada en el PATH (haya venido de caché o recién instalada).
+      - name: Firebase CLI en PATH
+        if: steps.cambios.outputs.functions == 'true' || steps.cambios.outputs.reglas == 'true'
+        run: echo "$HOME/.npm-global/bin" >> "$GITHUB_PATH"
 
       # Despliega SOLO las funciones si cambió functions/. Reintenta ante el 429
       # "Per project mutation requests per minute" (transitorio; el deploy es
