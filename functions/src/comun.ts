@@ -98,6 +98,61 @@ export async function registrarBote(monto: number, origen: string): Promise<void
     });
 }
 
+/* --- Ranking (helper transversal) --- */
+/**
+ * Actualiza las filas del ranking de los usuarios indicados. Lo usan casi
+ * todos los dominios (partidos, torneos, brackets, usuarios), por eso vive
+ * en la base común. Reescribe la fila `ranking/{uid}` a partir del doc del
+ * usuario; borra la fila si la cuenta no está validada o no participa.
+ */
+export async function actualizarRanking(uids: string[]): Promise<void> {
+    const unicos = [...new Set(uids)];
+    for (let i = 0; i < unicos.length; i += 100) {
+        const refs = unicos.slice(i, i + 100).map((u) => db.doc(`users/${u}`));
+        if (refs.length === 0) continue;
+        const snaps = await db.getAll(...refs);
+        const batch = db.batch();
+        for (const sn of snaps) {
+            const rankRef = db.doc(`ranking/${sn.id}`);
+            // Fuera del ranking: cuentas sin validar y cuentas de puro
+            // administrador que no compiten (marcadas noParticipa).
+            if (
+                !sn.exists ||
+                sn.data()?.['validada'] !== true ||
+                sn.data()?.['noParticipa'] === true
+            ) {
+                batch.delete(rankRef);
+                continue;
+            }
+            const u = sn.data() as Record<string, unknown>;
+            const resueltos = Number(u['resueltos'] ?? 0);
+            const aciertos = Number(u['aciertos'] ?? 0);
+            const email = String(u['email'] ?? '');
+            const totalGastado = Number(u['totalGastado'] ?? 0);
+            const totalGanado = Number(u['totalGanado'] ?? 0);
+            batch.set(rankRef, {
+                alias: String(u['alias'] ?? '').trim() || email.split('@')[0] || 'jugador',
+                // Histórico: no lo afecta el reinicio de saldo del administrador.
+                puntos: Number(u['puntosHistoricos'] ?? u['puntos'] ?? 0),
+                saldo: Number(u['puntos'] ?? 0),
+                torneosGanados: Number(u['torneosGanados'] ?? 0),
+                aciertos,
+                resueltos,
+                porcentaje: resueltos > 0 ? Math.round((aciertos / resueltos) * 100) : 0,
+                calificado: resueltos >= MIN_RESUELTOS,
+                racha: Number(u['racha'] ?? 0),
+                mejorRacha: Number(u['mejorRacha'] ?? 0),
+                // Totales para la tabla de histórico (solo admin).
+                totalGastado,
+                totalGanado,
+                balance: totalGanado - totalGastado,
+                actualizado: FieldValue.serverTimestamp(),
+            });
+        }
+        await batch.commit();
+    }
+}
+
 // Re-exportamos lo de firestore que usan todos, para que los módulos importen
 // desde un solo lugar.
 export { FieldValue, Timestamp, HttpsError };
