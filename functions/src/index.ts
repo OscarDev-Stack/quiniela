@@ -98,9 +98,18 @@ const LIGAS_SPORTSDB: Record<string, { id: number; nombre: string; nombreApi: st
     SA: { id: 4332, nombre: 'Serie A', nombreApi: 'Italian Serie A' },
     BL1: { id: 4331, nombre: 'Bundesliga', nombreApi: 'German Bundesliga' },
     FL1: { id: 4334, nombre: 'Ligue 1', nombreApi: 'French Ligue 1' },
+    // NFL: fútbol americano. Solo para modo supervivencia (survivor). La
+    // temporada regular son las rondas (intRound) 1..18; la pretemporada (500) y
+    // los playoffs (150/160/200) quedan fuera solo con pedir jornadas 1..18.
+    // OJO: su "apiTemporada" es el año simple ("2026"), NO "2026-2027".
+    NFL: { id: 4391, nombre: 'NFL', nombreApi: 'NFL' },
     // EC (Eurocopa): torneo de selecciones inactivo la mayor parte del tiempo;
     // se deja fuera hasta poder confirmar su id cuando haya edición en curso.
 };
+
+/** Rondas (intRound) de temporada regular de la NFL: 1..18 (18 semanas). */
+const NFL_LIGA_ID = 4391;
+const NFL_SEMANAS_REGULAR = 18;
 
 /** Busca la config de una liga por su id de TheSportsDB. */
 function ligaPorId(ligaId: number): { id: number; nombre: string; nombreApi: string } | null {
@@ -1838,6 +1847,16 @@ export const traerJornadaApi = onCall({ ...opcionesCall, secrets: [sportsDbKey] 
         throw new HttpsError(
             'failed-precondition',
             'Esta competición no tiene configurada la liga y temporada de la API.',
+        );
+    }
+
+    // NFL: solo temporada regular (semanas 1..18). Así nunca se traen por error
+    // la pretemporada (ronda 500) ni los playoffs (150/160/200), que tienen otro
+    // formato y no encajan con el survivor.
+    if (ligaId === NFL_LIGA_ID && numeroJornada > NFL_SEMANAS_REGULAR) {
+        throw new HttpsError(
+            'invalid-argument',
+            `La NFL solo tiene ${NFL_SEMANAS_REGULAR} semanas de temporada regular.`,
         );
     }
 

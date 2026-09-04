@@ -585,9 +585,13 @@ export class AdminCompeticionesComponent {
     { id: 4332, nombre: 'Serie A' },
     { id: 4331, nombre: 'Bundesliga' },
     { id: 4334, nombre: 'Ligue 1' },
+    { id: 4391, nombre: 'NFL' },
   ];
-  /** Temporadas elegibles (formato de la API). La más reciente primero. */
-  readonly temporadasApi: string[] = ['2026-2027', '2025-2026', '2024-2025'];
+  /**
+   * Temporadas elegibles (formato de la API). La más reciente primero.
+   * Fútbol usa "2026-2027"; la NFL usa el año simple ("2026").
+   */
+  readonly temporadasApi: string[] = ['2026-2027', '2025-2026', '2024-2025', '2026', '2025'];
 
   private readonly apiPanel = signal<string[]>([]);
   private readonly apiCfgMap: Record<string, { ligaId: number | null; temporada: string }> = {};

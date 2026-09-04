@@ -375,6 +375,7 @@ export class CrearPartidoComponent {
     { code: 'SA', label: 'Serie A' },
     { code: 'BL1', label: 'Bundesliga' },
     { code: 'FL1', label: 'Ligue 1' },
+    { code: 'NFL', label: 'NFL' },
   ];
 
   busqueda = {

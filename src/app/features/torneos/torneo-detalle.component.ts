@@ -354,6 +354,18 @@ import { StatsService } from '../../shared/stats.service';
                   }
                 </div>
               }
+
+              @if (descansanEstaJornada().length > 0) {
+                <p class="descansan">
+                  <i class="ti ti-zzz"></i>
+                  Descansan esta jornada (no puedes elegirlos):
+                  @for (e of descansanEstaJornada(); track e) {
+                    <span class="descansa-chip">
+                      <app-escudo [equipo]="e" [size]="16" /> {{ e }}
+                    </span>
+                  }
+                </p>
+              }
             }
           </section>
         }
@@ -684,6 +696,16 @@ import { StatsService } from '../../shared/stats.service';
       h3 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
       .cierra { font-size: 12px; color: var(--text-secondary); }
       .ayuda { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; }
+      .descansan {
+        font-size: 12px; color: var(--text-muted); margin: 12px 0 0;
+        display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+      }
+      .descansa-chip {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 2px 8px; border-radius: 999px;
+        background: var(--surface-2, rgba(127,127,127,0.12));
+        opacity: 0.75;
+      }
 
       .restantes { font-size: 12px; color: var(--text-muted); }
       .panel-head--boton {
@@ -1354,6 +1376,21 @@ export class TorneoDetalleComponent {
     const bloqueados = this.comprometidos().filter((e) => e !== actual);
     return equipos
       .filter((e) => !bloqueados.includes(e))
+      .sort((a, b) => a.localeCompare(b));
+  });
+
+  /**
+   * Equipos que TODAVÍA podría usar (no comprometidos) pero que NO juegan esta
+   * jornada: descansan. En la NFL es la "bye week". Se listan aparte para que el
+   * jugador entienda por qué su equipo no aparece entre los elegibles, en vez
+   * de creer que ya lo usó o que hay un error.
+   */
+  readonly descansanEstaJornada = computed(() => {
+    const juganEstaJornada = new Set(equiposDeJornada(this.jornadaActual()));
+    const actual = this.miPick()?.equipo;
+    const comprometidos = this.comprometidos().filter((e) => e !== actual);
+    return this.disponiblesTotales()
+      .filter((e) => !comprometidos.includes(e) && !juganEstaJornada.has(e))
       .sort((a, b) => a.localeCompare(b));
   });
 
