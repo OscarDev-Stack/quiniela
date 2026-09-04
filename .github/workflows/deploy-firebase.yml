@@ -49,14 +49,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          # Cachea las deps de la raíz Y de functions/. Antes solo se cacheaba
-          # la raíz, así que la instalación de funciones bajaba todo cada vez.
-          cache-dependency-path: |
-            package-lock.json
-            functions/package-lock.json
+
+      # Cachea node_modules ENTERO (no solo el cache de npm). Si el lockfile no
+      # cambió, se restaura tal cual y nos saltamos el `npm ci` completo.
+      - name: Cachear node_modules (raíz)
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          # Clave atada a SO, versión de Node y lockfile: si algo cambia, reinstala.
+          key: node-modules-${{ runner.os }}-node20-${{ hashFiles('package-lock.json') }}
 
       - name: Instalar dependencias
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm ci --legacy-peer-deps
 
       # Compila con la config segun la rama (dev o produccion). build:prod y
@@ -76,9 +81,19 @@ jobs:
           echo '${{ github.ref == 'refs/heads/master' && secrets.FIREBASE_SA_PROD || secrets.FIREBASE_SA_DEV }}' > "$RUNNER_TEMP/sa.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
 
-      # Deps de funciones: solo si el push tocó functions/.
-      - name: Instalar dependencias de funciones
+      # Deps de funciones: solo si el push tocó functions/. Cachea
+      # functions/node_modules entero; si el lockfile no cambió, se restaura y
+      # se salta el `npm ci`.
+      - name: Cachear node_modules (functions)
         if: steps.cambios.outputs.functions == 'true'
+        id: cache-node-modules-functions
+        uses: actions/cache@v4
+        with:
+          path: functions/node_modules
+          key: node-modules-functions-${{ runner.os }}-node20-${{ hashFiles('functions/package-lock.json') }}
+
+      - name: Instalar dependencias de funciones
+        if: steps.cambios.outputs.functions == 'true' && steps.cache-node-modules-functions.outputs.cache-hit != 'true'
         run: npm ci
         working-directory: functions
 
