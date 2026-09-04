@@ -10,6 +10,7 @@ Estos scripts prueban la app en el proyecto **dev** (`quiniela-dev-d203d`), nunc
 | `_prueba-comun.js` | Helpers compartidos por los scripts de flujo (login, saldos, crear competición/jornada, arrancar torneo/bracket). No se corre solo. |
 | `prueba-partido.js` | Flujo completo de un partido individual (lógica y reparto de puntos). |
 | `prueba-survivor.js` | Flujo completo de un torneo de supervivencia. |
+| `prueba-survivor-nfl.js` | Survivor con equipos NFL: valida escudos, bye week y empate. |
 | `prueba-quiniela.js` | Flujo completo de un torneo de quiniela por puntos. |
 | `prueba-bracket-pronostico.js` | Flujo completo de una eliminatoria modo pronóstico. |
 | `prueba-bracket-duenos.js` | Flujo completo de una eliminatoria modo dueños. |
@@ -102,6 +103,7 @@ el ciclo completo con funciones reales y verifica el reparto:
 
 ```bash
 node scripts/prueba-survivor.js            # supervivencia
+node scripts/prueba-survivor-nfl.js        # supervivencia NFL (bye week + empate)
 node scripts/prueba-quiniela.js            # quiniela por puntos
 node scripts/prueba-bracket-pronostico.js  # eliminatoria pronóstico
 node scripts/prueba-bracket-duenos.js      # eliminatoria dueños
