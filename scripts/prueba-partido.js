@@ -27,7 +27,6 @@
  * SEGURIDAD: se niega a correr si el projectId no contiene 'dev'.
  */
 
-const admin = require('firebase-admin');
 const { initializeApp: initializeAdminApp, cert } = require('firebase-admin/app');
 const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
 const { getAuth: getAdminAuth } = require('firebase-admin/auth');
@@ -164,6 +163,15 @@ async function correr() {
 
   // 4. Verificaciones del reparto.
   console.log('4) Verificando el reparto de puntos...');
+
+  // Guarda contra falso verde: si el seed no dejó a los usuarios validados,
+  // todos caen en el catch (apostado=0) y no se verificaría nada.
+  const participaron = Object.values(apostado).filter((a) => a > 0).length;
+  if (!ok(participaron >= 2, `Al menos 2 usuarios pronosticaron (fueron ${participaron})`)) {
+    console.log('\n❌ PRUEBA FALLÓ: casi nadie pudo pronosticar. ¿Corriste el seed y están validados?\n');
+    process.exit(1);
+  }
+
   const bolsa = Object.values(apostado).reduce((a, b) => a + b, 0);
   const apostadoGanadores = JUGADORES
     .filter((j) => j.resultado === RESULTADO_OFICIAL && apostado[j.email] > 0)

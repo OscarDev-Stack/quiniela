@@ -6,9 +6,19 @@ Estos scripts prueban la app en el proyecto **dev** (`quiniela-dev-d203d`), nunc
 
 | Archivo | Qué hace |
 |---|---|
-| `seed-dev.js` | Crea (o borra) datos de prueba: usuarios, partidos, torneos. |
-| `prueba-partido.js` | Prueba el flujo completo de un partido llamando a las funciones reales (lógica y reparto de puntos). |
+| `seed-dev.js` | Crea (o borra) datos de prueba: usuarios, partidos, torneos, competiciones. |
+| `_prueba-comun.js` | Helpers compartidos por los scripts de flujo (login, saldos, crear competición/jornada, arrancar torneo/bracket). No se corre solo. |
+| `prueba-partido.js` | Flujo completo de un partido individual (lógica y reparto de puntos). |
+| `prueba-survivor.js` | Flujo completo de un torneo de supervivencia. |
+| `prueba-quiniela.js` | Flujo completo de un torneo de quiniela por puntos. |
+| `prueba-bracket-pronostico.js` | Flujo completo de una eliminatoria modo pronóstico. |
+| `prueba-bracket-duenos.js` | Flujo completo de una eliminatoria modo dueños. |
 | `prueba-partido-ui.spec.js` | Prueba la interfaz con un navegador real (Playwright). |
+| `PLAN-DE-PRUEBAS.md` | Checklist manual dev → prod. |
+
+Todos los scripts de flujo (`prueba-*.js`, menos el `.spec.js`) llaman a las Cloud
+Functions reales autenticándose como cada usuario y verifican el reparto de puntos.
+Comparten el candado anti-producción y los helpers de `_prueba-comun.js`.
 
 ---
 
@@ -85,6 +95,23 @@ Qué hace:
 
 Necesita que antes hayas corrido `seed` (usa los usuarios de prueba).
 
+### Paso 2b — Probar torneos y eliminatorias (lógica y dinero)
+
+Cada uno crea sus propios datos (competición + jornada, torneo o bracket), corre
+el ciclo completo con funciones reales y verifica el reparto:
+
+```bash
+node scripts/prueba-survivor.js            # supervivencia
+node scripts/prueba-quiniela.js            # quiniela por puntos
+node scripts/prueba-bracket-pronostico.js  # eliminatoria pronóstico
+node scripts/prueba-bracket-duenos.js      # eliminatoria dueños
+```
+
+También requieren `seed` antes (usan los usuarios de prueba a/b/c/d y admin).
+Fuerzan el estado a `en-curso` por Admin SDK para no esperar los schedulers.
+Al terminar, `node scripts/seed-dev.js limpiar` borra todo (incluidas las
+competiciones/jornadas que crearon, marcadas `esPrueba`).
+
 ### Paso 3 — Probar la interfaz (navegador)
 
 ```bash
@@ -98,9 +125,12 @@ Qué hace: abre un navegador, cada usuario hace login real y pronostica con clic
 
 ---
 
-## Requisito importante: funciones abiertas en Cloud Run (dev)
+## Funciones abiertas en Cloud Run (dev)
 
-Para que `prueba-partido.js` funcione, las funciones `onCall` que llama deben estar accesibles en el proyecto dev. Si te da error de permisos, revisa que `crearPronostico` y `liquidarPartido` estén desplegadas y abiertas en dev.
+Ya no hay que abrirlas a mano: todas las `onCall` usan `invoker: 'public'`
+(en `functions/src/comun.ts`), así que cada deploy las deja públicas a nivel de
+red. La seguridad real la da `req.auth` dentro de cada función. Si un script da
+error de permisos de red, confirma que el deploy de esa función tomó ese cambio.
 
 ---
 

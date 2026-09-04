@@ -8,15 +8,42 @@ Guía para validar la app en **dev** antes de promover a **prod** vía merge a m
 
 ---
 
+## Pruebas automatizadas (rápidas, sin navegador)
+
+Antes del checklist manual conviene correr los scripts de flujo: llaman a las
+Cloud Functions reales autenticándose como cada usuario y **verifican el reparto
+de puntos**. Validan la LÓGICA y el DINERO (no la interfaz). Todos tienen candado
+anti-producción (se niegan a correr si el projectId no contiene `dev`).
+
+Requisitos: `scripts/service-account-dev.json`, `scripts/config-dev.json`, y correr
+antes el seed: `node scripts/seed-dev.js seed`.
+
+```bash
+node scripts/prueba-partido.js             # pronóstico de partido individual
+node scripts/prueba-survivor.js            # torneo supervivencia
+node scripts/prueba-quiniela.js            # torneo quiniela por puntos
+node scripts/prueba-bracket-pronostico.js  # eliminatoria modo pronóstico
+node scripts/prueba-bracket-duenos.js      # eliminatoria modo dueños
+node scripts/seed-dev.js limpiar           # borra todo lo marcado esPrueba
+```
+
+Cada script crea sus propios datos (competición + jornada, torneo o bracket),
+los deja marcados `esPrueba: true`, y al final imprime `✅ PRUEBA PASÓ` / `❌ FALLÓ`.
+Los scripts de torneo/bracket fuerzan el estado a `en-curso` por Admin SDK para no
+esperar los schedulers. Si todos pasan, la lógica de negocio está sana y el
+checklist manual se enfoca en UI, notificaciones y casos borde.
+
+---
+
 ## Paso 0 — Prerrequisitos en dev (una sola vez)
 
 Sin esto, varias pruebas fallarán con errores de permisos.
 
-- [ ] **Funciones onCall abiertas en Cloud Run (proyecto dev).** Abrir con `allUsers` + rol *Cloud Run Invoker*:
-  - [ ] `asignarDuenoBracket`
-  - [ ] `aceptarDuenoBracket`
-  - [ ] `rechazarDuenoBracket`
-  - [ ] (revisar que las demás onCall que ya usabas sigan abiertas)
+- [x] **Funciones onCall abiertas en Cloud Run** — YA NO es manual. Todas las
+  onCall usan `opcionesCall` con `invoker: 'public'` (en `functions/src/comun.ts`),
+  así que cada deploy las deja públicas solas. Si ves "PERMISSION_DENIED" a nivel
+  de red en alguna, confirma que su deploy tomó ese cambio (no que haya que abrirla
+  a mano). La seguridad real la da `req.auth` dentro de cada función.
 - [ ] **IAM Cloud Scheduler** — la cuenta de servicio de GitHub Actions tiene rol *Cloud Scheduler Admin* en dev (ya resuelto si el deploy de schedulers pasó).
 - [ ] **Secretos configurados en dev**: `TELEGRAM_TOKEN` (bot de dev), `TELEGRAM_WEBHOOK_SECRET`, `FOOTBALL_DATA_KEY`.
 - [ ] **Webhook de Telegram dev** conectado (pendiente: el 502, se retomará aparte).
@@ -80,6 +107,17 @@ Confirmar que la app arranca y lo básico responde.
 - [ ] (Si aplica) probar **revivir**: se cobra, aparece `torneo-revivir`, vuelve con sus vidas.
 - [ ] Al quedar un ganador: recibe la bolsa (`torneo-premio`), trofeo, `torneosGanados` +1.
 - [ ] % del bote llegó a la reserva.
+
+### Survivor de NFL (deporte nuevo)
+- [ ] Conectar una competición a la API con liga **NFL (4391)** y temporada **`2026`**
+      (año simple, NO `2026-2027`).
+- [ ] Traer una jornada (semana 1-18): trae los enfrentamientos NFL; pedir semana
+      >18 debe rechazarse ("solo 18 semanas de temporada regular").
+- [ ] Crear survivor NFL, inscribir usuarios, elegir equipo: los escudos NFL se ven.
+- [ ] Un equipo en **bye week** no aparece entre los elegibles y se muestra el aviso
+      "descansa esta jornada".
+- [ ] Resolver la jornada: sobrevive quien eligió al ganador; el empate NFL (raro)
+      resta vida según `vidaCubre`.
 
 ---
 

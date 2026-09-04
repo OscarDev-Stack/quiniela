@@ -198,18 +198,23 @@ async function seed() {
 async function limpiar() {
   console.log(`\n🧹 Limpiando datos de prueba en ${projectId}...\n`);
 
-  const colecciones = ['partidos', 'torneos', 'brackets', 'ranking', 'admins', 'bolsas', 'ledger', 'trofeos'];
+  const colecciones = ['partidos', 'torneos', 'brackets', 'competiciones', 'ranking', 'admins', 'bolsas', 'ledger', 'trofeos'];
   let total = 0;
 
   for (const col of colecciones) {
     const snap = await db.collection(col).where('esPrueba', '==', true).get();
     for (const d of snap.docs) {
-      // Borra subcolecciones conocidas de torneos/brackets.
+      // Borra subcolecciones conocidas de torneos/brackets/competiciones.
       if (col === 'torneos' || col === 'brackets') {
         for (const sub of ['participantes', 'picks', 'quinielas', 'pronosticos']) {
           const subs = await d.ref.collection(sub).get();
           for (const s of subs.docs) await s.ref.delete();
         }
+      }
+      if (col === 'competiciones') {
+        // Las jornadas viven en la subcolección `jornadas`.
+        const subs = await d.ref.collection('jornadas').get();
+        for (const s of subs.docs) await s.ref.delete();
       }
       await d.ref.delete();
       total++;
