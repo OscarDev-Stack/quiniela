@@ -168,6 +168,51 @@ export async function actualizarRanking(uids: string[]): Promise<void> {
     }
 }
 
+/* --- Helpers compartidos entre torneos y brackets --- */
+
+/**
+ * Deja constancia de un torneo/eliminatoria ganado: un trofeo por persona y
+ * el contador en su perfil. La usan torneos (al cerrar) y brackets (al
+ * calificar), por eso vive en la base común.
+ */
+export async function registrarTrofeos(
+    ganadores: Array<{ uid: string; alias: string }>,
+    torneoId: string,
+    nombreTorneo: string,
+    competicion: string,
+    premio: number,
+    compartido: boolean,
+): Promise<void> {
+    if (ganadores.length === 0) return;
+
+    const batch = db.batch();
+    for (const g of ganadores) {
+        batch.set(db.doc(`trofeos/${g.uid}_${torneoId}`), {
+            uid: g.uid,
+            alias: g.alias,
+            torneoId,
+            torneo: nombreTorneo,
+            competicion,
+            premio,
+            compartido,
+            ganadoEn: FieldValue.serverTimestamp(),
+        });
+        batch.set(
+            db.doc(`users/${g.uid}`),
+            { torneosGanados: FieldValue.increment(1) },
+            { merge: true },
+        );
+    }
+    await batch.commit();
+}
+
+/** Genera un código corto de invitación (6 caracteres, sin ambiguos). Lo usan
+ * torneos y brackets. */
+export function codigoBracket(): string {
+    const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    return Array.from({ length: 6 }, () => letras.charAt(Math.floor(Math.random() * letras.length))).join('');
+}
+
 // Re-exportamos lo de firestore que usan todos, para que los módulos importen
 // desde un solo lugar.
 export { FieldValue, Timestamp, HttpsError };
