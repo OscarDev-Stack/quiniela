@@ -5,6 +5,14 @@ on:
     branches:
       - develop   # -> proyecto de desarrollo
       - master    # -> produccion (con aprobacion manual)
+    # No arrancar el workflow cuando el push no aporta al deploy: docs, README
+    # y cambios al propio YAML. Si el push mezcla estos con código real, igual
+    # corre (basta un archivo fuera de la lista).
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.kiro/**'
+      - '.github/**'
 
 permissions:
   contents: read
@@ -63,6 +71,17 @@ jobs:
       - name: Instalar dependencias
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm ci --legacy-peer-deps
+
+      # Cachea el build incremental de Angular (.angular/cache). La clave lleva
+      # el sha para guardar por commit; restore-keys reusa el build previo más
+      # cercano, así el compilador reaprovecha lo que no cambió.
+      - name: Cachear build de Angular
+        uses: actions/cache@v4
+        with:
+          path: .angular/cache
+          key: angular-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            angular-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
 
       # Compila con la config segun la rama (dev o produccion). build:prod y
       # build:dev tambien generan el service worker de messaging con el
