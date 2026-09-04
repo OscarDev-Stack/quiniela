@@ -46,7 +46,7 @@ const PUNTOS_RESULTADO = 3;
         </div>
 
         <div class="partidos">
-          @for (p of jornada().partidos; track $index) {
+          @for (p of jornada().partidos; track $index; let iPartido = $index) {
             <div class="match">
               <div class="match-head">
                 <span class="lado">
@@ -77,7 +77,7 @@ const PUNTOS_RESULTADO = 3;
                 @for (c of cartones(); track c.id) {
                   <div class="pick" [class.pick--yo]="c.uid === miUid()">
                     <span class="pick-alias">{{ c.uid === miUid() ? 'Tú' : c.alias }}</span>
-                    @if (c.marcadores[$index]; as m) {
+                    @if (c.marcadores[iPartido]; as m) {
                       <span class="pick-marca" [class]="'pick-marca--' + acierto(p, m)">
                         {{ m.local }}-{{ m.visitante }}
                       </span>
