@@ -54,6 +54,13 @@ if (!cfg.apiKey || !cfg.projectId || !cfg.messagingSenderId) {
     process.exit(1);
 }
 
+// Dominio de hosting de ESTA app (para los deep links de las push). Debe ser el
+// dominio real desde donde se sirve la PWA en cada entorno, para que el clic en
+// la notificación enfoque la ventana correcta en vez de abrir otra.
+const APP_URL = esDev
+    ? 'https://quiniela-dev-d203d.web.app'
+    : 'https://automatepowerv1.web.app';
+
 // El SW ya fue copiado a dist/ por `ng build`. Detectamos la carpeta de salida.
 const candidatos = [
     path.join(raiz, 'dist', 'quiniela', 'browser', 'firebase-messaging-sw.js'),
@@ -72,7 +79,8 @@ sw = sw
     .replace(/projectId:\s*'TU_PROYECTO'/, `projectId: '${cfg.projectId}'`)
     .replace(/storageBucket:\s*'TU_PROYECTO\.appspot\.com'/, `storageBucket: '${cfg.storageBucket}'`)
     .replace(/messagingSenderId:\s*'TU_SENDER_ID'/, `messagingSenderId: '${cfg.messagingSenderId}'`)
-    .replace(/appId:\s*'TU_APP_ID'/, `appId: '${cfg.appId}'`);
+    .replace(/appId:\s*'TU_APP_ID'/, `appId: '${cfg.appId}'`)
+    .replace(/const APP_URL = 'TU_APP_URL'/, `const APP_URL = '${APP_URL}'`);
 
 fs.writeFileSync(destino, sw, 'utf8');
 console.log(`[generar-sw] Service worker generado para ${esDev ? 'DEV' : 'PROD'} (${cfg.projectId}).`);

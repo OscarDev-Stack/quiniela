@@ -26,6 +26,12 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// Dominio de ESTA app. Es un placeholder que `scripts/generar-sw.js` reemplaza
+// por el dominio real según el entorno (prod o dev), igual que el firebaseConfig.
+// Así en dev la notificación enfoca la app de dev, y en prod la de prod, sin
+// abrir el dominio equivocado en una pestaña nueva.
+const APP_URL = 'TU_APP_URL';
+
 // Notificación recibida con la app en segundo plano o cerrada.
 messaging.onBackgroundMessage((payload) => {
     const titulo = payload.notification?.title ?? 'Quiniela';
@@ -33,7 +39,7 @@ messaging.onBackgroundMessage((payload) => {
         body: payload.notification?.body ?? '',
         icon: '/icons/icon-192.png',
         badge: '/icons/icon-192.png',
-        data: { url: payload.fcmOptions?.link ?? 'https://automatepowerv1.web.app' },
+        data: { url: payload.fcmOptions?.link ?? APP_URL },
     };
     self.registration.showNotification(titulo, opciones);
 });
@@ -42,11 +48,11 @@ messaging.onBackgroundMessage((payload) => {
 // ya abierta y la LLEVA a esa pantalla, no solo la enfoca donde estaba).
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    const url = event.notification.data?.url ?? 'https://automatepowerv1.web.app';
+    const url = event.notification.data?.url ?? APP_URL;
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then((lista) => {
             for (const c of lista) {
-                if (c.url.includes('automatepowerv1.web.app') && 'focus' in c) {
+                if (c.url.startsWith(APP_URL) && 'focus' in c) {
                     // Navega la ventana existente al destino y la enfoca.
                     if ('navigate' in c) {
                         return c.navigate(url).then((cl) => (cl || c).focus());

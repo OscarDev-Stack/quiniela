@@ -6,7 +6,7 @@
    ============================================================ */
 import * as logger from 'firebase-functions/logger';
 import { getMessaging } from 'firebase-admin/messaging';
-import { db, FieldValue, telegramToken } from './comun';
+import { db, FieldValue, telegramToken, esProd } from './comun';
 
 /** Manda un mensaje de Telegram. Nunca revienta: si falla, solo lo anota. */
 export async function enviarTelegram(chatId: string, texto: string): Promise<boolean> {
@@ -46,8 +46,15 @@ export function limpiarHtml(texto: string): string {
         .trim();
 }
 
-/** Base del sitio para armar los enlaces de las notificaciones push. */
-export const APP_URL = 'https://automatepowerv1.web.app';
+/**
+ * Base del sitio para armar los enlaces de las notificaciones push. Depende del
+ * entorno: en prod apunta al dominio de producción; en dev, al de desarrollo.
+ * Así el deep link de la push abre la app correcta según dónde corre la función
+ * (si no, dev mandaba links a prod y el clic abría el dominio equivocado).
+ */
+export const APP_URL = esProd
+    ? 'https://automatepowerv1.web.app'
+    : 'https://quiniela-dev-d203d.web.app';
 
 /**
  * Construye el enlace absoluto al que lleva la notificación al tocarla.
