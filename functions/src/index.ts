@@ -37,6 +37,7 @@ export {
     actualizarMarcadoresEnVivo,
     traerJornadaApi,
     traerResultadosApi,
+    completarFechasJornadaApi,
     refrescarTablaApi,
     importarEquiposApi,
     revisarJornadas,

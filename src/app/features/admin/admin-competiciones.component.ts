@@ -244,7 +244,7 @@ import { ToastService } from '../../shared/toast.service';
               </div>
             }
 
-            <div class="acciones">
+            <div class="acciones-jornada">
               <button class="btn sm" (click)="agregarFila(c.id)">
                 <i class="ti ti-plus"></i> Agregar partido
               </button>
@@ -254,7 +254,7 @@ import { ToastService } from '../../shared/toast.service';
               </button>
               @if (b(c.id).filas.length === 0) {
                 <button class="btn sm" (click)="llenarJornada(c)">
-                  Armar jornada completa
+                  <i class="ti ti-layout-grid-add"></i> Armar jornada completa
                 </button>
               }
               @if (c.apiLigaId) {
@@ -264,7 +264,7 @@ import { ToastService } from '../../shared/toast.service';
                 </button>
               }
               <button class="btn sm btn--primary" (click)="agregarJornada(c)">
-                Guardar jornada
+                <i class="ti ti-device-floppy"></i> Guardar jornada
               </button>
             </div>
           }
@@ -362,6 +362,10 @@ import { ToastService } from '../../shared/toast.service';
                     <button class="btn sm" [disabled]="trayendo()" (click)="traerResultados(c, j)">
                       <i class="ti ti-cloud-download"></i>
                       {{ trayendo() ? 'Trayendo…' : 'Traer resultados de la API' }}
+                    </button>
+                    <button class="btn sm" [disabled]="trayendo()" (click)="completarFechas(c, j)">
+                      <i class="ti ti-calendar-plus"></i>
+                      {{ trayendo() ? 'Trayendo…' : 'Completar fechas faltantes' }}
                     </button>
                   }
                   <button class="btn sm" (click)="guardar(c, j)">Guardar resultados</button>
@@ -537,6 +541,14 @@ import { ToastService } from '../../shared/toast.service';
       }
       .acciones { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 
+      /* Acciones del borrador de jornada: todas del mismo ancho en una grilla
+         de dos columnas, para que no queden con tamaños dispares al envolverse. */
+      .acciones-jornada {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;
+      }
+      .acciones-jornada .btn { width: 100%; }
+      @media (max-width: 420px) { .acciones-jornada { grid-template-columns: 1fr; } }
+
       /* Dos acciones uniformes de la API (equipos + tabla), mismo tamaño. */
       .acciones-api {
         display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;
@@ -559,11 +571,38 @@ import { ToastService } from '../../shared/toast.service';
       }
       .reconectar:hover { color: var(--text-secondary); }
 
-      .btn { padding: 9px 16px; cursor: pointer; border: 1px solid var(--border-strong);
-        border-radius: var(--radius); background: transparent; font-size: 14px; }
+      .btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+        padding: 9px 16px; cursor: pointer; line-height: 1.2; white-space: nowrap;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-2); color: var(--text-primary);
+        font-size: 14px; font-weight: 500;
+        transition: background 0.15s ease, border-color 0.15s ease,
+          transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      .btn i { font-size: 15px; flex-shrink: 0; color: var(--text-muted); }
+      .btn:hover {
+        background: var(--surface-1); border-color: var(--border-strong);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+      }
+      .btn:active { transform: translateY(0); box-shadow: none; }
       .btn.sm { padding: 7px 13px; font-size: 13px; }
-      .btn--primary { background: var(--accent-fill); color: #fff; border-color: transparent; font-weight: 600; }
-      .btn:disabled { opacity: 0.6; cursor: default; }
+      .btn--primary {
+        background: var(--accent-fill); color: #fff;
+        border-color: transparent; font-weight: 600;
+        box-shadow: 0 1px 3px rgba(55, 138, 221, 0.35);
+      }
+      .btn--primary i { color: rgba(255, 255, 255, 0.85); }
+      .btn--primary:hover {
+        background: var(--accent); border-color: transparent;
+        box-shadow: 0 4px 12px rgba(55, 138, 221, 0.4);
+      }
+      .btn:disabled {
+        opacity: 0.55; cursor: default; transform: none; box-shadow: none;
+        background: var(--surface-2); border-color: var(--border);
+      }
+      .btn--primary:disabled { background: var(--accent-fill); }
 
       @media (max-width: 620px) {
         .grid { grid-template-columns: 1fr; }
@@ -790,6 +829,28 @@ export class AdminCompeticionesComponent {
       );
     } catch (e: unknown) {
       this.toast.error((e as Error)?.message ?? 'No se pudieron traer los resultados.');
+    } finally {
+      this.trayendo.set(false);
+    }
+  }
+
+  /**
+   * Rellena las fechas/idEvent que faltaban en los partidos de una jornada ya
+   * guardada (útil cuando la jornada ya empezó y la API ya publicó horas que
+   * antes venían vacías). No toca resultados ni pronósticos.
+   */
+  async completarFechas(c: Competicion, j: Jornada): Promise<void> {
+    this.trayendo.set(true);
+    try {
+      const r = await this.service.completarFechasJornadaApi(c.id, j.id);
+      j.partidos = r.partidos;
+      this.avisar(
+        r.completados > 0
+          ? `${r.completados} partido(s) con fecha completada desde la API.`
+          : 'No había fechas faltantes que completar (o la API aún no las publica).',
+      );
+    } catch (e: unknown) {
+      this.toast.error((e as Error)?.message ?? 'No se pudieron completar las fechas.');
     } finally {
       this.trayendo.set(false);
     }

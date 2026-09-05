@@ -679,6 +679,119 @@ export const traerResultadosApi = onCall({ ...opcionesCall, secrets: [sportsDbKe
 });
 
 /* ============================================================
+   TheSportsDB — completar fechas/idEvent faltantes de una jornada
+   Cuando se trajo una jornada antes de que TheSportsDB publicara la
+   hora de algunos partidos, esos quedaron con fechaInicio null (y a
+   veces sin apiEventId). Esta función vuelve a consultar la ronda y
+   RELLENA SOLO los huecos: no toca resultado, ni pronósticos, ni la
+   hora de los que ya la tenían. Empareja por par de equipos
+   normalizados (misma lógica que cruzarResultadosJornada). Guarda el
+   array actualizado y devuelve cuántos partidos se completaron.
+   ============================================================ */
+export const completarFechasJornadaApi = onCall(
+    { ...opcionesCall, secrets: [sportsDbKey] },
+    async (req) => {
+        const uid = req.auth?.uid;
+        if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+        const competicionId = String(req.data?.competicionId ?? '');
+        const jornadaId = String(req.data?.jornadaId ?? '');
+        if (!competicionId || !jornadaId) {
+            throw new HttpsError('invalid-argument', 'Faltan la competición o la jornada.');
+        }
+
+        const compRef = db.doc(`competiciones/${competicionId}`);
+        const jornadaRef = compRef.collection('jornadas').doc(jornadaId);
+        const [adminSnap, compSnap, jornadaSnap] = await Promise.all([
+            db.doc(`admins/${uid}`).get(),
+            compRef.get(),
+            jornadaRef.get(),
+        ]);
+        if (!compSnap.exists || !jornadaSnap.exists) {
+            throw new HttpsError('not-found', 'Competición o jornada inexistente.');
+        }
+        const comp = compSnap.data() as Record<string, unknown>;
+        const gestores = (comp['gestores'] as string[]) ?? [];
+        if (!adminSnap.exists && !gestores.includes(uid)) {
+            throw new HttpsError('permission-denied', 'No gestionas esta competición.');
+        }
+
+        const ligaId = Number(comp['apiLigaId'] ?? 0);
+        const temporada = String(comp['apiTemporada'] ?? '');
+        if (!ligaId || !temporada) {
+            throw new HttpsError(
+                'failed-precondition',
+                'Esta competición no tiene configurada la liga y temporada de la API.',
+            );
+        }
+
+        // La jornada guardada: preservamos TODOS los campos de cada partido
+        // (resultado, marcadores, etc.); solo tocamos fechaInicio/apiEventId.
+        const jornada = jornadaSnap.data() as {
+            numero: number;
+            partidos: Array<Record<string, unknown>>;
+        };
+        const guardados = jornada.partidos ?? [];
+
+        const eventos = await eventosRondaSportsDb(
+            ligaId,
+            jornada.numero,
+            temporada,
+            sportsDbKey.value(),
+        );
+        if (eventos.length === 0) {
+            throw new HttpsError(
+                'not-found',
+                `La API no tiene la jornada ${jornada.numero} para la temporada ${temporada}.`,
+            );
+        }
+
+        // Índice de eventos por par de equipos normalizados.
+        const clave = (local: string, visitante: string) =>
+            `${nombreOficialEquipo(local)}|${nombreOficialEquipo(visitante)}`;
+        const porPar = new Map<string, EventoSportsDb>();
+        for (const e of eventos) {
+            porPar.set(clave(e.strHomeTeam ?? '', e.strAwayTeam ?? ''), e);
+        }
+
+        let completados = 0;
+        const actualizados = guardados.map((p) => {
+            const local = String(p['local'] ?? '');
+            const visitante = String(p['visitante'] ?? '');
+            const e = porPar.get(clave(local, visitante));
+            if (!e) return p;
+
+            const fechaActual = p['fechaInicio'];
+            const idActual = p['apiEventId'];
+            const tieneFecha = typeof fechaActual === 'string' && fechaActual.trim() !== '';
+            const tieneId = typeof idActual === 'string' && idActual.trim() !== '';
+
+            const fechaApi = tsUtcSportsDb(e.strTimestamp);
+            const idApi = String(e.idEvent ?? '');
+
+            const nuevo = { ...p };
+            let cambio = false;
+            if (!tieneFecha && fechaApi) {
+                nuevo['fechaInicio'] = fechaApi;
+                cambio = true;
+            }
+            if (!tieneId && idApi) {
+                nuevo['apiEventId'] = idApi;
+                cambio = true;
+            }
+            if (cambio) completados++;
+            return nuevo;
+        });
+
+        if (completados > 0) {
+            await jornadaRef.update({ partidos: actualizados });
+        }
+
+        return { ok: true, numero: jornada.numero, completados, partidos: actualizados };
+    },
+);
+
+/* ============================================================
    TheSportsDB — refrescar la tabla de posiciones (manual)
    El admin/gestor fuerza la descarga de la tabla oficial. Se
    refresca sola al resolver cada jornada; esto cubre el arranque

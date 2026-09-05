@@ -22,16 +22,19 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
     <div class="screen">
       <app-nav title="Partidos" />
 
-      <nav class="filters">
-        @for (f of filtros; track f) {
-          <button class="chip" [class.chip--on]="filtro() === f" (click)="filtro.set(f)">
-            {{ f }}
-          </button>
-        }
+      <section class="lista-panel">
+      <div class="filtros-fila">
+        <nav class="filters">
+          @for (f of filtros; track f) {
+            <button class="chip" [class.chip--on]="filtro() === f" (click)="filtro.set(f)">
+              {{ f }}
+            </button>
+          }
+        </nav>
         <button class="ayuda-btn" (click)="verAyuda.set(true)" aria-label="Cómo se juega" title="Cómo se juega">
           <i class="ti ti-help-circle"></i>
         </button>
-      </nav>
+      </div>
 
       @if (cargando()) {
         <app-cargando texto="Cargando partidos" />
@@ -170,6 +173,7 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
           }
         </article>
       }
+      </section>
 
       <!-- Modal estático: cómo se juega (mecánica de premios). -->
       @if (verAyuda()) {
@@ -267,23 +271,33 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
       }
       :host { display: block; }
 
-      .filters { display: flex; align-items: center; gap: 8px; overflow-x: auto; padding-bottom: 16px; }
+      /* Panel contenedor: envuelve filtros + tarjetas, igual que la vista de
+         Torneos, para que no queden "volando" sueltos sobre el fondo. */
+      .lista-panel {
+        background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); padding: 14px 14px 4px; margin-bottom: 16px;
+      }
+      .lista-panel .card { background: var(--surface-1); }
+      .lista-panel .card--dim { background: var(--surface-2); }
+
+      /* Fila de filtros dentro del panel: botones + botón de ayuda a la derecha. */
+      .filtros-fila { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+      .filters { flex: 1; display: flex; gap: 6px; }
       .ayuda-btn {
-        flex-shrink: 0; margin-left: auto; width: 34px; height: 34px; cursor: pointer;
+        flex-shrink: 0; width: 34px; height: 34px; cursor: pointer;
         display: inline-flex; align-items: center; justify-content: center;
         border: 1px solid var(--border); border-radius: 50%;
         background: transparent; color: var(--text-muted); font-size: 18px;
       }
       .ayuda-btn:hover { color: var(--accent-text); border-color: var(--accent-fill); }
+      /* Botones rectangulares, activo en azul de acento (idéntico a Torneos). */
       .chip {
-        font-size: 13px; padding: 7px 15px; border-radius: 999px; cursor: pointer;
-        border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
-        white-space: nowrap;
+        flex: 1; display: inline-flex; align-items: center; justify-content: center;
+        font-size: 13px; font-weight: 600; padding: 9px 6px; cursor: pointer;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-1); color: var(--text-secondary); white-space: nowrap;
       }
-      .chip--on {
-        background: var(--text-primary); color: var(--surface-0);
-        border-color: var(--text-primary); font-weight: 600;
-      }
+      .chip--on { background: var(--accent-fill); color: #fff; border-color: var(--accent-fill); }
 
       .empty { text-align: center; color: var(--text-muted); padding: 48px 0; }
       .empty i { font-size: 36px; opacity: 0.5; }
