@@ -187,6 +187,13 @@ const EMOJIS = ['⚽', '🏆', '🔥', '🎯', '🥅', '🏅', '🎮', '👑', '
       .uniendo i { font-size: 18px; animation: gira 1s linear infinite; }
       @keyframes gira { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) { .uniendo i { animation: none; } }
+      /* El escaner (app-escaner-qr) trae su propio bloque; le damos aire antes
+         del boton Cerrar para que no queden pegados. */
+      .dialogo--ancho .dialogo-acciones {
+        margin-top: 18px;
+        padding-top: 14px;
+        border-top: 1px solid var(--border);
+      }
       .campo { display: block; margin-bottom: 14px; }
       .campo span { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
       .campo input {

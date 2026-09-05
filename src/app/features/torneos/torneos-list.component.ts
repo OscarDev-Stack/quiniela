@@ -187,7 +187,11 @@ import { Bracket } from '../../core/models/bracket.model';
       .uniendo i { font-size: 18px; animation: gira 1s linear infinite; }
       @keyframes gira { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) { .uniendo i { animation: none; } }
-      .dialogo-acciones { display: flex; gap: 8px; margin-top: 16px; }
+      .dialogo-acciones {
+        display: flex; gap: 8px;
+        margin-top: 18px; padding-top: 14px;
+        border-top: 1px solid var(--border);
+      }
 
       /* Tabs de filtro por estado (mismo patrón que la vista de Partidos). */
       .tabs { display: flex; gap: 6px; margin-top: 8px; margin-bottom: 18px; }
