@@ -1,7 +1,7 @@
 import { Component, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { EscudoComponent } from '../../shared/escudo.component';
-import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
+import { Jornada, PartidoJornada, horaPartido } from '../../core/models/competicion.model';
 
 /**
  * Los enfrentamientos de la jornada, como referencia de "¿contra quién juega
@@ -38,6 +38,10 @@ import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
             <app-escudo [equipo]="p.visitante" [size]="22" />
             <span class="nom">{{ p.visitante }}</span>
           </span>
+
+          @if (hora(p); as h) {
+            <span class="hora"><i class="ti ti-clock"></i> {{ h }}</span>
+          }
         </div>
       }
     </section>
@@ -56,9 +60,15 @@ import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
       .restantes { font-size: 12px; color: var(--text-muted); }
 
       .encuentro {
-        display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px;
+        display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+        gap: 8px 8px;
         padding: 9px 8px; border-bottom: 1px solid var(--border); font-size: 13px;
         border-radius: var(--radius);
+      }
+      .encuentro .hora {
+        grid-column: 1 / -1; justify-self: center;
+        display: inline-flex; align-items: center; gap: 4px;
+        font-size: 11px; color: var(--text-muted); text-transform: capitalize;
       }
       .encuentro:last-child { border-bottom: none; }
       .encuentro--mio { background: var(--accent-bg); }
@@ -87,5 +97,10 @@ export class PartidosJornadaComponent {
   esMio(p: PartidoJornada): boolean {
     const mio = this.miEquipo();
     return !!mio && (p.local === mio || p.visitante === mio);
+  }
+
+  /** Hora de inicio legible del partido, o '' si no hay. */
+  hora(p: PartidoJornada): string {
+    return horaPartido(p.fechaInicio);
   }
 }

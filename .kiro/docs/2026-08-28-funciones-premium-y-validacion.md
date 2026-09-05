@@ -77,18 +77,18 @@ competiciones (torneos).
 ## LISTA DE VALIDACIÓN (en dev, tras el deploy del CI)
 
 ### Tabla de posiciones
-- [ ] admin -> competiciones -> Conexión API -> "Actualizar tabla": debe
+- [x] admin -> competiciones -> Conexión API -> "Actualizar tabla": debe
       decir "18 equipos" (no 5). Confirma que la key premium funciona.
-- [ ] En un torneo de esa liga, panel "Tabla de la liga": se ven todos los
+- [x] En un torneo de esa liga, panel "Tabla de la liga": se ven todos los
       equipos, con racha (puntitos) y zonas coloreadas.
-- [ ] Si la tabla luce incompleta, NO se muestra al jugador y el admin ve el
+- [x] Si la tabla luce incompleta, NO se muestra al jugador y el admin ve el
       banner de alerta (contingencia).
 
 ### Crear partidos por TheSportsDB
-- [ ] Crear partido -> Buscar por API -> Fuente TheSportsDB -> liga (ej.
+- [x] Crear partido -> Buscar por API -> Fuente TheSportsDB -> liga (ej.
       Liga MX): lista los próximos partidos.
-- [ ] "Crear" en uno: se crea global y de grupo; guarda apiEventId/apiLigaId.
-- [ ] Los equipos calzan con los escudos del catálogo (ojo con ligas nuevas
+- [x] "Crear" en uno: se crea global y de grupo; guarda apiEventId/apiLigaId.
+- [x] Los equipos calzan con los escudos del catálogo (ojo con ligas nuevas
       europeas: revisar nombres/escudos).
 
 ### Resolución automática (partidos sueltos)

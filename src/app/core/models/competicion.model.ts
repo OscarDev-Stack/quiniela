@@ -55,6 +55,25 @@ export interface PartidoJornada {
     vivoLocal?: number;
     vivoVisitante?: number;
     vivoMinuto?: string;
+    /* Fecha/hora de inicio del partido (ISO UTC). En jornadas traídas de la API
+       viene del calendario oficial; en jornadas manuales el admin la captura y
+       es solo informativa. Opcional: puede no estar. */
+    fechaInicio?: string | null;
+}
+
+/** Formatea la hora de inicio de un partido para mostrarla al jugador (hora MX). */
+export function horaPartido(fechaInicio: string | null | undefined): string {
+    const iso = (fechaInicio ?? '').trim();
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('es-MX', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
 }
 
 /** Deduce quién ganó a partir del marcador. */

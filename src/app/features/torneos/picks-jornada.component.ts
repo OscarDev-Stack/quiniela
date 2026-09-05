@@ -1,7 +1,7 @@
 import { Component, computed, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { EscudoComponent } from '../../shared/escudo.component';
-import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
+import { Jornada, PartidoJornada, horaPartido } from '../../core/models/competicion.model';
 import { Pick } from '../../core/models/torneo.model';
 import { minutoVivoTexto } from '../../core/models/partido.model';
 
@@ -71,6 +71,10 @@ interface TarjetaPartido {
               </span>
             </div>
 
+            @if (hora(t.partido); as h) {
+              <div class="match-hora"><i class="ti ti-clock"></i> {{ h }}</div>
+            }
+
             @if (t.elecciones.length > 0) {
               <div class="picks">
                 @for (e of t.elecciones; track e.pick.id) {
@@ -129,6 +133,12 @@ interface TarjetaPartido {
         border-bottom: 1px solid var(--border);
       }
       .match-head--vivo { background: var(--accent-bg); }
+      .match-hora {
+        display: flex; align-items: center; justify-content: center; gap: 4px;
+        padding: 5px 12px; background: var(--surface-2);
+        border-bottom: 1px solid var(--border);
+        font-size: 11px; color: var(--text-muted); text-transform: capitalize;
+      }
       .lado { display: flex; align-items: center; gap: 8px; min-width: 0; }
       .lado--der { justify-content: flex-end; }
       .eq {
@@ -217,6 +227,11 @@ export class PicksJornadaComponent {
   /** Texto del minuto/estado en vivo, traducido al español. */
   minutoTexto(min: string): string {
     return minutoVivoTexto(min);
+  }
+
+  /** Hora de inicio legible del partido, o '' si no hay. */
+  hora(p: PartidoJornada): string {
+    return horaPartido(p.fechaInicio);
   }
 
   /** ¿Cómo le va al equipo elegido? gana / empate / pierde / sin (sin dato). */
