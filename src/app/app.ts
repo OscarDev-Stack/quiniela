@@ -75,6 +75,13 @@ export class App {
       )
       .subscribe(() => this.novedades.revisarAlEntrar());
 
+    // Limpieza de un SW de messaging registrado por error en la raíz '/'
+    // (versiones previas lo hacían). Ese registro compite con ngsw-worker.js
+    // por el control de la página y rompe la detección de versiones. Lo
+    // desregistramos si su scope es exactamente el origen '/', sin tocar el
+    // registro de Angular ni el de messaging en su scope aislado.
+    this.limpiarSwMessagingEnRaiz();
+
     if (!this.updates.isEnabled) return;
 
     const sub = this.updates.versionUpdates
@@ -99,5 +106,28 @@ export class App {
   /** Activa la versión nueva y reinicia la app. */
   recargar(): void {
     this.updates.activateUpdate().then(() => location.reload());
+  }
+
+  /**
+   * Desregistra el SW de messaging si quedó registrado en el scope raíz '/'
+   * (bug de versiones anteriores). Ese registro le disputaba el control de la
+   * página a ngsw-worker.js de Angular, dejando SwUpdate sin detectar
+   * versiones. El SW de Angular y el de messaging en su scope propio no se
+   * tocan. Es defensivo: cualquier fallo se ignora.
+   */
+  private limpiarSwMessagingEnRaiz(): void {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((regs) => {
+        for (const r of regs) {
+          const url = r.active?.scriptURL ?? r.installing?.scriptURL ?? r.waiting?.scriptURL ?? '';
+          const scopeRaiz = r.scope === location.origin + '/';
+          if (url.includes('firebase-messaging-sw.js') && scopeRaiz) {
+            r.unregister().catch(() => undefined);
+          }
+        }
+      })
+      .catch(() => undefined);
   }
 }

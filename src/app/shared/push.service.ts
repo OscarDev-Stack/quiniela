@@ -42,9 +42,16 @@ export class PushService {
             throw new Error('No diste permiso para notificaciones.');
         }
 
-        // El service worker de messaging tiene que estar registrado.
-        const registro = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js')
-            ?? await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        // El service worker de messaging tiene que estar registrado, pero en
+        // su PROPIO scope. Si se registra en la raíz '/' compite con el
+        // ngsw-worker.js de Angular por el control de la página: el último en
+        // registrarse gana, desplaza al SW de Angular y entonces SwUpdate deja
+        // de detectar versiones nuevas (el botón "Actualizar" nunca aparece).
+        // Con un scope aislado ambos SW conviven sin pisarse.
+        const SCOPE = '/firebase-cloud-messaging-push-scope';
+        const registro =
+            (await navigator.serviceWorker.getRegistration(SCOPE)) ??
+            (await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: SCOPE }));
 
         const token = await getToken(this.messaging, {
             vapidKey: environment.vapidKey,
