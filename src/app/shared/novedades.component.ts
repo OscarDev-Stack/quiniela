@@ -10,10 +10,13 @@ interface Diapositiva {
 }
 
 /**
- * Presentación de novedades como carrusel: una diapositiva por
- * característica, con icono grande, título y detalle. Se navega con botones
- * o deslizando con el dedo. La bienvenida de primera vez abre con el logo.
- * Si solo hay una novedad, se muestra como pantalla única sin navegación.
+ * Presentación de novedades en dos formatos según el modo:
+ *
+ *  - bienvenida / novedades → carrusel: una diapositiva por característica,
+ *    con icono grande, título y detalle. Se navega con botones o deslizando.
+ *    La bienvenida de primera vez abre con el logo.
+ *  - historial (abierto desde el perfil) → modal con la lista completa de
+ *    mejoras agrupadas por versión y fecha, más fácil de leer de un vistazo.
  */
 @Component({
   selector: 'app-novedades',
@@ -21,6 +24,47 @@ interface Diapositiva {
   imports: [CommonModule],
   template: `
     @if (novedades.mostrando(); as lista) {
+      @if (esHistorial()) {
+        <div class="fondo" (click)="novedades.cerrar()">
+          <div
+            class="hoja hoja--lista"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Historial de novedades"
+            (click)="$event.stopPropagation()"
+          >
+            <header class="lista-cabecera">
+              <h2 class="lista-titulo">Novedades</h2>
+              <button class="cerrar" (click)="novedades.cerrar()" aria-label="Cerrar">
+                <i class="ti ti-x"></i>
+              </button>
+            </header>
+
+            <div class="lista-scroll">
+              @for (n of lista; track n.version) {
+                <section class="version-bloque">
+                  <div class="version-encabezado">
+                    <span class="version-etiqueta">v{{ n.version }}</span>
+                    <span class="version-fecha">{{ n.fecha }}</span>
+                  </div>
+                  <p class="version-resumen">{{ n.resumen }}</p>
+                  <ul class="mejoras">
+                    @for (p of n.puntos; track p.titulo) {
+                      <li class="mejora">
+                        <span class="mejora-icono"><i class="ti" [class]="'ti ' + p.icono"></i></span>
+                        <div class="mejora-texto">
+                          <span class="mejora-titulo">{{ p.titulo }}</span>
+                          <span class="mejora-detalle">{{ p.detalle }}</span>
+                        </div>
+                      </li>
+                    }
+                  </ul>
+                </section>
+              }
+            </div>
+          </div>
+        </div>
+      } @else {
       <div class="fondo" (click)="novedades.cerrar()">
         <div
           class="hoja"
@@ -91,6 +135,7 @@ interface Diapositiva {
           }
         </div>
       </div>
+      }
     }
   `,
   styles: [
@@ -186,6 +231,66 @@ interface Diapositiva {
       .btn--pri { flex: 2; border: none; background: var(--accent-fill); color: #fff; }
       .btn--sec { border: 1px solid var(--border); background: var(--surface-2); color: var(--text-primary); }
 
+      /* ---- Vista de historial: lista por versión ---- */
+      .hoja--lista {
+        min-height: 0;
+        max-height: min(80vh, 680px);
+        max-width: 440px;
+        padding: 0;
+      }
+
+      .lista-cabecera {
+        position: relative; z-index: 1;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 18px 20px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      .lista-titulo { font-size: 20px; font-weight: 800; margin: 0; letter-spacing: -0.3px; }
+      .cerrar {
+        border: none; cursor: pointer;
+        background: var(--surface-2); color: var(--text-secondary);
+        width: 36px; height: 36px; border-radius: 999px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px;
+      }
+
+      .lista-scroll {
+        position: relative; z-index: 1;
+        overflow-y: auto;
+        padding: 8px 20px 20px;
+        padding-bottom: calc(20px + env(safe-area-inset-bottom));
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .version-bloque { padding: 18px 0; }
+      .version-bloque + .version-bloque { border-top: 1px solid var(--border); }
+
+      .version-encabezado { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+      .version-etiqueta {
+        font-size: 13px; font-weight: 700; color: var(--accent-text);
+        background: rgba(55, 138, 221, 0.14);
+        padding: 3px 10px; border-radius: 999px;
+      }
+      .version-fecha { font-size: 12px; color: var(--text-secondary); font-weight: 600; }
+
+      .version-resumen {
+        font-size: 13px; color: var(--text-secondary); margin: 0 0 14px;
+        line-height: 1.5;
+      }
+
+      .mejoras { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+      .mejora { display: flex; gap: 12px; align-items: flex-start; }
+      .mejora-icono {
+        flex-shrink: 0;
+        width: 40px; height: 40px; border-radius: 12px;
+        background: var(--surface-2); border: 1px solid rgba(55, 138, 221, 0.3);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 20px; color: var(--accent-text);
+      }
+      .mejora-texto { display: flex; flex-direction: column; gap: 3px; }
+      .mejora-titulo { font-size: 14px; font-weight: 700; line-height: 1.3; }
+      .mejora-detalle { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+
       @keyframes aparecer { from { opacity: 0; } }
       @keyframes aparecer-modal { from { transform: scale(0.94); opacity: 0; } }
       @media (prefers-reduced-motion: reduce) {
@@ -222,6 +327,7 @@ export class NovedadesComponent {
   readonly varias = computed(() => this.slides().length > 1);
   readonly esUltima = computed(() => this.indice() >= this.slides().length - 1);
   readonly esBienvenida = computed(() => this.novedades.modo() === 'bienvenida');
+  readonly esHistorial = computed(() => this.novedades.modo() === 'historial');
 
   private touchX = 0;
 
