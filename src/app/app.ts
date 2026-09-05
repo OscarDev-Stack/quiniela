@@ -119,13 +119,25 @@ export class App {
     if (!('serviceWorker' in navigator)) return;
     navigator.serviceWorker
       .getRegistrations()
-      .then((regs) => {
+      .then(async (regs) => {
+        let desregistrado = false;
         for (const r of regs) {
           const url = r.active?.scriptURL ?? r.installing?.scriptURL ?? r.waiting?.scriptURL ?? '';
           const scopeRaiz = r.scope === location.origin + '/';
           if (url.includes('firebase-messaging-sw.js') && scopeRaiz) {
-            r.unregister().catch(() => undefined);
+            const ok = await r.unregister().catch(() => false);
+            desregistrado = desregistrado || ok;
           }
+        }
+
+        // Si limpiamos un registro roto, recargamos UNA sola vez para que el
+        // SW de Angular retome el control de inmediato (si no, tardaría hasta
+        // que el usuario cierre todas las pestañas). El flag en sessionStorage
+        // evita cualquier bucle de recarga.
+        const YA = 'sw-messaging-limpiado';
+        if (desregistrado && !sessionStorage.getItem(YA)) {
+          sessionStorage.setItem(YA, '1');
+          location.reload();
         }
       })
       .catch(() => undefined);
