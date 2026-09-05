@@ -1,11 +1,12 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { tap } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
 import { CargandoComponent } from '../../shared/cargando.component';
+import { EscanerQrComponent } from '../../shared/escaner-qr.component';
+import { InvitacionPendiente } from '../../shared/invitacion.util';
 import { apagarCargando } from '../../shared/cargando.util';
 import { TorneosService } from '../../core/services/torneos.service';
 import { BracketsService } from '../../core/services/brackets.service';
@@ -17,7 +18,7 @@ import { Bracket } from '../../core/models/bracket.model';
 @Component({
   selector: 'app-torneos-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, NavComponent, CargandoComponent],
+  imports: [CommonModule, NavComponent, CargandoComponent, EscanerQrComponent],
   template: `
     <div class="screen">
       <app-nav title="Torneos" />
@@ -126,33 +127,24 @@ import { Bracket } from '../../core/models/bracket.model';
       }
       </section>
 
-      <!-- Diálogo: unirse con código (torneo o eliminatoria) -->
+      <!-- Diálogo: unirse con código (escanear QR o escribir el código) -->
       @if (mostrarUnirse()) {
         <div class="overlay" (click)="cerrarUnirse()">
           <div class="dialogo" (click)="$event.stopPropagation()">
             <h3>Unirme con código</h3>
             <p class="dialogo-ayuda">
-              Escribe el código de invitación del torneo o la eliminatoria.
+              Escanea el QR de la invitación o escribe el código del torneo o la
+              eliminatoria.
             </p>
-            <label class="campo">
-              <span>Código de invitación</span>
-              <input
-                [(ngModel)]="codigo"
-                placeholder="ABC123"
-                maxlength="8"
-                autocapitalize="characters"
-                style="text-transform:uppercase"
-              />
-            </label>
+
+            <app-escaner-qr [autoNavegar]="false" (leido)="onEscaneado($event)" />
+
+            @if (ocupado()) {
+              <div class="uniendo"><i class="ti ti-loader-2"></i> Uniéndote…</div>
+            }
+
             <div class="dialogo-acciones">
-              <button class="btn" (click)="cerrarUnirse()">Cancelar</button>
-              <button
-                class="btn btn--primary"
-                [disabled]="ocupado() || !codigo.trim()"
-                (click)="unirse()"
-              >
-                {{ ocupado() ? 'Uniéndome…' : 'Unirme' }}
-              </button>
+              <button class="btn" (click)="cerrarUnirse()">Cerrar</button>
             </div>
           </div>
         </div>
@@ -182,14 +174,20 @@ import { Bracket } from '../../core/models/bracket.model';
         display: flex; align-items: center; justify-content: center; padding: 20px;
       }
       .dialogo {
-        width: 100%; max-width: 360px; background: var(--surface-2);
+        width: 100%; max-width: 400px; background: var(--surface-2);
         border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px;
+        max-height: 90vh; overflow-y: auto;
       }
       .dialogo h3 { margin: 0 0 6px; font-size: 17px; }
       .dialogo-ayuda { margin: 0 0 14px; font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
-      .campo { display: block; margin-bottom: 16px; }
-      .campo span { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
-      .dialogo-acciones { display: flex; gap: 8px; }
+      .uniendo {
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+        font-size: 13px; color: var(--text-muted); margin: 14px 0 0;
+      }
+      .uniendo i { font-size: 18px; animation: gira 1s linear infinite; }
+      @keyframes gira { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .uniendo i { animation: none; } }
+      .dialogo-acciones { display: flex; gap: 8px; margin-top: 16px; }
 
       /* Tabs de filtro por estado (mismo patrón que la vista de Partidos). */
       .tabs { display: flex; gap: 6px; margin-top: 8px; margin-bottom: 18px; }
@@ -264,17 +262,35 @@ export class TorneosListComponent {
      Arranca en 'Abiertos', igual que Partidos. */
   readonly filtro = signal<'En juego' | 'Abiertos' | 'Cerrados'>('Abiertos');
 
-  /* --- Unirme con código (torneo o eliminatoria) --- */
+  /* --- Unirme con código (escanear QR o escribir el código) --- */
   readonly mostrarUnirse = signal(false);
   readonly ocupado = signal(false);
-  codigo = '';
 
   abrirUnirse(): void {
-    this.codigo = '';
     this.mostrarUnirse.set(true);
   }
   cerrarUnirse(): void {
     this.mostrarUnirse.set(false);
+  }
+
+  /**
+   * El escáner (QR o código escrito a mano) devolvió una invitación. Si trae un
+   * tipo explícito (grupo o eliminatoria por el deep-link), respetamos su ruta.
+   * Para un código suelto de torneo, lo resolvemos como antes: primero como
+   * torneo (pantalla de reglas), y si no existe, como eliminatoria.
+   */
+  onEscaneado(inv: InvitacionPendiente): void {
+    if (inv.tipo === 'grupo') {
+      this.cerrarUnirse();
+      this.router.navigate(['/unirse-grupo', inv.valor]);
+      return;
+    }
+    if (inv.tipo === 'bracket') {
+      this.cerrarUnirse();
+      this.router.navigate(['/unirse-elim', inv.valor]);
+      return;
+    }
+    this.unirse(inv.valor);
   }
 
   /**
@@ -283,8 +299,8 @@ export class TorneosListComponent {
    * reglas /unirse/:codigo, que muestra el costo antes de aceptar) y, si no
    * existe como torneo, lo intentamos como eliminatoria.
    */
-  async unirse(): Promise<void> {
-    const codigo = this.codigo.trim().toUpperCase();
+  async unirse(codigoEntrada: string): Promise<void> {
+    const codigo = (codigoEntrada ?? '').trim().toUpperCase();
     if (!codigo) return;
 
     this.ocupado.set(true);
