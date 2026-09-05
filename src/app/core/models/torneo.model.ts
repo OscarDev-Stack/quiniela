@@ -40,6 +40,9 @@ export interface Torneo {
 
     codigo: string;
     estado: EstadoTorneo;
+    /* Público: aparece en el inicio y la lista, y cualquiera puede unirse
+       sin invitación (mismo patrón que las eliminatorias). */
+    publico?: boolean;
     /* Grupo al que pertenece. null/ausente = torneo Global. */
     grupoId?: string | null;
     ganadorAlias?: string;

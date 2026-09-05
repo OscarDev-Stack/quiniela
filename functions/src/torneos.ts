@@ -1633,6 +1633,9 @@ export const crearTorneo = onCall(opcionesCall, async (req) => {
         porcentajeBote: Number(d.porcentajeBote) || 0,
         cierreInscripcion: cierre,
         modo,
+        // Público: aparece en el inicio y la lista, y cualquiera puede unirse
+        // sin invitación (mismo patrón que las eliminatorias).
+        publico: d.publico === true,
         grupoId,
         codigo,
         estado: 'inscripcion',

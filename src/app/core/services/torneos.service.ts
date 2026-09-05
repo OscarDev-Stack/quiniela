@@ -14,7 +14,7 @@ import {
 } from '@angular/fire/firestore';
 import { Functions, httpsCallable } from '@angular/fire/functions';
 import { Observable, of, combineLatest } from 'rxjs';
-import { switchMap, map, distinctUntilChanged, shareReplay } from 'rxjs/operators';
+import { switchMap, map, distinctUntilChanged, shareReplay, catchError } from 'rxjs/operators';
 import { Torneo, Participante, Pick, Quiniela, ModoTorneo } from '../models/torneo.model';
 import { fechaJornada } from '../models/competicion.model';
 import { CompeticionesService } from './competiciones.service';
@@ -48,6 +48,21 @@ export class TorneosService {
     return collectionData(collection(this.db, 'torneos'), {
       idField: 'id',
     }) as Observable<Torneo[]>;
+  }
+
+  /**
+   * Torneos públicos abiertos a inscripción, para mostrarlos en el inicio y
+   * la lista. Cualquiera puede verlos y unirse sin invitación.
+   */
+  torneosPublicos(): Observable<Torneo[]> {
+    const q = query(
+      collection(this.db, 'torneos'),
+      where('publico', '==', true),
+      where('estado', '==', 'inscripcion'),
+    );
+    return (collectionData(q, { idField: 'id' }) as Observable<Torneo[]>).pipe(
+      catchError(() => of([] as Torneo[])),
+    );
   }
 
   torneo(id: string): Observable<Torneo | null> {
@@ -198,6 +213,7 @@ export class TorneosService {
     jornadas: number;
     vidaCubre: 'empate' | 'tropiezo';
     permiteRevivir: boolean;
+    publico: boolean;
     grupoId?: string | null;
   }): Promise<{ id: string; codigo: string }> {
     // El payload sustituye la fecha por su versión ISO (Omit reemplaza el campo,

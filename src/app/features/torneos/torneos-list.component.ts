@@ -83,6 +83,9 @@ import { Bracket } from '../../core/models/bracket.model';
                 <i class="ti ti-coins"></i> Bolsa {{ t.bolsa | number }} pts
               </span>
             }
+            @if (esPublicoNoMioTorneo(t)) {
+              <span class="unete"><i class="ti ti-door-enter"></i> Únete</span>
+            }
             @if (t.ganadorAlias) {
               <span class="ganador"><i class="ti ti-trophy"></i> {{ t.ganadorAlias }}</span>
             }
@@ -334,11 +337,17 @@ export class TorneosListComponent {
   readonly cargando = signal(true);
   private readonly inicioCarga = Date.now();
   private readonly listoTorneos = signal(false);
+  private readonly listoTorneosPublicos = signal(false);
   private readonly listoBrackets = signal(false);
   private readonly listoBracketsPublicos = signal(false);
 
   private readonly torneos = toSignal(
     this.service.misTorneos$.pipe(tap(() => this.listoTorneos.set(true))),
+    { initialValue: [] as Torneo[] },
+  );
+  /** Torneos públicos abiertos (para unirse aunque no participes aún). */
+  private readonly torneosPublicos = toSignal(
+    this.service.torneosPublicos().pipe(tap(() => this.listoTorneosPublicos.set(true))),
     { initialValue: [] as Torneo[] },
   );
   readonly brackets = toSignal(
@@ -353,7 +362,12 @@ export class TorneosListComponent {
 
   /** Apaga el loading cuando las fuentes de la vista ya emitieron. */
   private readonly apagar = effect(() => {
-    if (this.listoTorneos() && this.listoBrackets() && this.listoBracketsPublicos()) {
+    if (
+      this.listoTorneos() &&
+      this.listoTorneosPublicos() &&
+      this.listoBrackets() &&
+      this.listoBracketsPublicos()
+    ) {
       apagarCargando(this.cargando, this.inicioCarga);
     }
   });
@@ -390,10 +404,19 @@ export class TorneosListComponent {
     return this.caeEnFiltro(estado, this.filtro());
   }
 
-  /** Torneos del contexto activo, sin filtrar por el chip (base del conteo). */
+  /**
+   * Torneos del contexto activo: los MÍOS más los PÚBLICOS abiertos donde aún
+   * no estoy (sin duplicar), para descubrirlos y unirse desde aquí. Base sin
+   * filtrar por chip, usada por la lista visible y por el conteo.
+   */
   private readonly torneosContexto = computed(() => {
     const ctx = this.contexto.grupoId(); // null = Global
-    return this.torneos().filter((t) => (t.grupoId ?? null) === ctx);
+    const mios = this.torneos().filter((t) => (t.grupoId ?? null) === ctx);
+    const idsMios = new Set(mios.map((t) => t.id));
+    const publicosNuevos = this.torneosPublicos().filter(
+      (t) => (t.grupoId ?? null) === ctx && !idsMios.has(t.id),
+    );
+    return [...mios, ...publicosNuevos];
   });
 
   /**
@@ -441,6 +464,13 @@ export class TorneosListComponent {
   }
 
   abrir(t: Torneo): void {
+    // Si es un torneo público donde aún no estoy, lo mando a la pantalla de
+    // reglas /unirse/:codigo (muestra el costo antes de aceptar). Si ya estoy,
+    // abro el detalle normal.
+    if (this.esPublicoNoMioTorneo(t)) {
+      this.router.navigate(['/unirse', t.codigo]);
+      return;
+    }
     this.router.navigate(['/torneos', t.id]);
   }
 
@@ -451,6 +481,11 @@ export class TorneosListComponent {
   /** ¿Es una eliminatoria pública abierta en la que aún no participo? */
   esPublicoNoMio(b: Bracket): boolean {
     return !this.brackets().some((m) => m.id === b.id);
+  }
+
+  /** ¿Es un torneo público abierto en el que aún no participo? */
+  esPublicoNoMioTorneo(t: Torneo): boolean {
+    return !this.torneos().some((m) => m.id === t.id);
   }
 
   /** Describe el tipo de eliminatoria: formato y cruces. */
