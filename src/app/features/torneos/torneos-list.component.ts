@@ -28,13 +28,32 @@ import { Bracket } from '../../core/models/bracket.model';
         </button>
       </div>
 
+      <section class="lista-panel">
+      <nav class="tabs">
+        <button class="tab" [class.tab--on]="filtro() === 'En juego'" (click)="filtro.set('En juego')">
+          En juego <span class="tab-num">{{ conteo('En juego') }}</span>
+        </button>
+        <button class="tab" [class.tab--on]="filtro() === 'Abiertos'" (click)="filtro.set('Abiertos')">
+          Abiertos <span class="tab-num">{{ conteo('Abiertos') }}</span>
+        </button>
+        <button class="tab" [class.tab--on]="filtro() === 'Cerrados'" (click)="filtro.set('Cerrados')">
+          Cerrados <span class="tab-num">{{ conteo('Cerrados') }}</span>
+        </button>
+      </nav>
+
       @if (cargando()) {
         <app-cargando texto="Cargando torneos" />
       } @else if (visibles().length === 0 && bracketsVisibles().length === 0) {
         <div class="vacio">
           <i class="ti ti-tournament"></i>
-          <p>No participas en ningún torneo.</p>
-          <p class="pista">Los torneos y eliminatorias son por invitación: únete con el código que te compartan.</p>
+          @if (filtro() === 'En juego') {
+            <p>No hay torneos ni eliminatorias en juego ahora mismo.</p>
+          } @else if (filtro() === 'Abiertos') {
+            <p>No hay torneos ni eliminatorias abiertos a inscripción.</p>
+            <p class="pista">Los torneos y eliminatorias son por invitación: únete con el código que te compartan.</p>
+          } @else {
+            <p>Todavía no hay torneos ni eliminatorias finalizados.</p>
+          }
         </div>
       }
 
@@ -105,6 +124,7 @@ import { Bracket } from '../../core/models/bracket.model';
           </article>
         }
       }
+      </section>
 
       <!-- Diálogo: unirse con código (torneo o eliminatoria) -->
       @if (mostrarUnirse()) {
@@ -171,6 +191,31 @@ import { Bracket } from '../../core/models/bracket.model';
       .campo span { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
       .dialogo-acciones { display: flex; gap: 8px; }
 
+      /* Tabs de filtro por estado (mismo patrón que la vista de Partidos). */
+      .tabs { display: flex; gap: 6px; margin-top: 8px; margin-bottom: 18px; }
+      .tab {
+        flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+        padding: 9px 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-2); color: var(--text-secondary);
+      }
+      .tab--on { background: var(--accent-fill); color: #fff; border-color: var(--accent-fill); }
+      .tab-num {
+        flex-shrink: 0; width: 22px; height: 22px; box-sizing: border-box;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11px; border-radius: 999px; background: rgba(0, 0, 0, 0.12);
+      }
+      .tab--on .tab-num { background: rgba(255, 255, 255, 0.25); }
+
+      /* Panel contenedor: agrupa pestañas, torneos y eliminatorias para que
+         no queden "volando" sueltos sobre el fondo. */
+      .lista-panel {
+        background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); padding: 14px 14px 4px; margin-bottom: 16px;
+      }
+      .lista-panel .card { background: var(--surface-1); }
+      .lista-panel .seccion { margin-top: 18px; }
+
       .card {
         background: var(--surface-2); border: 1px solid var(--border);
         border-radius: var(--radius-lg); padding: 15px; margin-bottom: 12px; cursor: pointer;
@@ -214,6 +259,10 @@ export class TorneosListComponent {
   private readonly router = inject(Router);
   private readonly contexto = inject(ContextoService);
   private readonly toast = inject(ToastService);
+
+  /* Filtro por estado, mismas tres pestañas que la vista de Partidos.
+     Arranca en 'Abiertos', igual que Partidos. */
+  readonly filtro = signal<'En juego' | 'Abiertos' | 'Cerrados'>('Abiertos');
 
   /* --- Unirme con código (torneo o eliminatoria) --- */
   readonly mostrarUnirse = signal(false);
@@ -301,29 +350,77 @@ export class TorneosListComponent {
     return 2; // finalizado y cualquier otro
   }
 
-  readonly visibles = computed(() => {
+  /**
+   * ¿El estado (de torneo o eliminatoria) cae dentro del chip activo?
+   * Mapea las etiquetas a los estados compartidos por ambos modelos:
+   *  En juego → en-curso · Abiertos → inscripcion (y armando) · Cerrados → finalizado.
+   * 'Todos' no filtra nada.
+   */
+  private pasaFiltro(estado: string): boolean {
+    switch (this.filtro()) {
+      case 'En juego':
+        return estado === 'en-curso';
+      case 'Abiertos':
+        return estado === 'inscripcion' || estado === 'armando';
+      default: // 'Cerrados'
+        return estado === 'finalizado';
+    }
+  }
+
+  /** Torneos del contexto activo, sin filtrar por el chip (base del conteo). */
+  private readonly torneosContexto = computed(() => {
     const ctx = this.contexto.grupoId(); // null = Global
-    return [...this.torneos()]
-      .filter((t) => (t.grupoId ?? null) === ctx)
-      .sort((a, b) => this.rangoEstado(a.estado) - this.rangoEstado(b.estado));
+    return this.torneos().filter((t) => (t.grupoId ?? null) === ctx);
   });
 
   /**
-   * Brackets del contexto activo: los MÍOS más las eliminatorias PÚBLICAS
-   * abiertas donde aún no estoy (sin duplicar), para que se puedan descubrir
-   * y unir desde aquí. Mismo orden por estado.
+   * Eliminatorias del contexto activo: las MÍAS más las PÚBLICAS abiertas
+   * donde aún no estoy (sin duplicar), para descubrirlas y unirse desde aquí.
+   * Base sin filtrar por chip, usada por la lista visible y por el conteo.
    */
-  readonly bracketsVisibles = computed(() => {
+  private readonly bracketsContexto = computed(() => {
     const ctx = this.contexto.grupoId();
     const mios = this.brackets().filter((b) => (b.grupoId ?? null) === ctx);
     const idsMios = new Set(mios.map((b) => b.id));
     const publicasNuevas = this.bracketsPublicos().filter(
       (b) => (b.grupoId ?? null) === ctx && !idsMios.has(b.id),
     );
-    return [...mios, ...publicasNuevas].sort(
-      (a, b) => this.rangoEstado(a.estado) - this.rangoEstado(b.estado),
-    );
+    return [...mios, ...publicasNuevas];
   });
+
+  readonly visibles = computed(() =>
+    [...this.torneosContexto()]
+      .filter((t) => this.pasaFiltro(t.estado))
+      .sort((a, b) => this.rangoEstado(a.estado) - this.rangoEstado(b.estado)),
+  );
+
+  readonly bracketsVisibles = computed(() =>
+    [...this.bracketsContexto()]
+      .filter((b) => this.pasaFiltro(b.estado))
+      .sort((a, b) => this.rangoEstado(a.estado) - this.rangoEstado(b.estado)),
+  );
+
+  /**
+   * Conteo combinado (torneos + eliminatorias) para el badge de cada chip.
+   * Cuenta según la etiqueta del chip, no según el filtro activo.
+   */
+  conteo(etiqueta: string): number {
+    const estados = [
+      ...this.torneosContexto().map((t) => t.estado),
+      ...this.bracketsContexto().map((b) => b.estado),
+    ];
+    const cae = (e: string): boolean => {
+      switch (etiqueta) {
+        case 'En juego':
+          return e === 'en-curso';
+        case 'Abiertos':
+          return e === 'inscripcion' || e === 'armando';
+        default: // 'Cerrados'
+          return e === 'finalizado';
+      }
+    };
+    return estados.filter(cae).length;
+  }
 
   /** ¿Está finalizado? Para atenuarlo visualmente. */
   finalizado(estado: string): boolean {

@@ -53,7 +53,22 @@ import { CodigoInvitarComponent } from '../../shared/codigo-invitar.component';
       <i class="ti ti-plus"></i> Crear torneo
     </a>
 
-    @for (t of torneos(); track t.id) {
+    <section class="panel panel--lista">
+      <h2 class="panel-title">Torneos</h2>
+
+      <nav class="tabs">
+        <button class="tab" [class.tab--on]="filtro() === 'En juego'" (click)="filtro.set('En juego')">
+          En juego <span class="tab-num">{{ conteo('En juego') }}</span>
+        </button>
+        <button class="tab" [class.tab--on]="filtro() === 'Abiertos'" (click)="filtro.set('Abiertos')">
+          Abiertos <span class="tab-num">{{ conteo('Abiertos') }}</span>
+        </button>
+        <button class="tab" [class.tab--on]="filtro() === 'Cerrados'" (click)="filtro.set('Cerrados')">
+          Cerrados <span class="tab-num">{{ conteo('Cerrados') }}</span>
+        </button>
+      </nav>
+
+    @for (t of torneosFiltrados(); track t.id) {
       <section class="panel">
         <button class="cab cab--boton" (click)="alternar(t.id)">
           <i class="ti chevron" [class.ti-chevron-down]="!abierto(t.id)"
@@ -167,7 +182,18 @@ import { CodigoInvitarComponent } from '../../shared/codigo-invitar.component';
         </div>
         }
       </section>
+    } @empty {
+      <p class="empty">
+        @if (filtro() === 'En juego') {
+          No hay torneos en juego ahora mismo.
+        } @else if (filtro() === 'Abiertos') {
+          No hay torneos abiertos a inscripción.
+        } @else {
+          Todavía no hay torneos finalizados.
+        }
+      </p>
     }
+    </section>
 
   `,
     styles: [
@@ -229,6 +255,24 @@ import { CodigoInvitarComponent } from '../../shared/codigo-invitar.component';
     border-radius: var(--radius-lg);
     padding: 16px;
     margin-bottom: 16px;
+  }
+
+  /* Panel contenedor de la lista: agrupa las pestañas y las tarjetas
+     para que no queden "volando" sueltas sobre el fondo. */
+  .panel--lista {
+    padding: 16px 16px 6px;
+  }
+  .panel-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 14px;
+  }
+  /* Tarjetas internas: fondo más tenue para distinguirlas del contenedor. */
+  .panel--lista .panel {
+    background: var(--surface-1);
+  }
+  .panel--lista .panel:last-of-type {
+    margin-bottom: 10px;
   }
 
   h2 {
@@ -641,6 +685,59 @@ import { CodigoInvitarComponent } from '../../shared/codigo-invitar.component';
     margin-bottom: 18px;
   }
 
+  /* Tabs de filtro por estado (mismo patrón que la vista de Partidos). */
+  .tabs {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    margin-bottom: 18px;
+  }
+
+  .tab {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 9px 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text-secondary);
+  }
+
+  .tab--on {
+    background: var(--accent-fill);
+    color: #fff;
+    border-color: var(--accent-fill);
+  }
+
+  .tab-num {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.12);
+  }
+
+  .tab--on .tab-num {
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  .empty {
+    color: var(--text-muted);
+    font-size: 14px;
+    padding: 8px 0;
+  }
+
   .btn:disabled {
     opacity: 0.6;
     cursor: default;
@@ -671,6 +768,48 @@ export class GestionarTorneosComponent {
         const ctx = this.contexto.grupoId();
         return this.todos().filter((t) => (t.grupoId ?? null) === ctx);
     });
+
+    /* Filtro por estado, mismas tres pestañas que la vista de Partidos.
+       Arranca en 'Abiertos', igual que Partidos. */
+    readonly filtro = signal<'En juego' | 'Abiertos' | 'Cerrados'>('Abiertos');
+
+    /**
+     * ¿El estado del torneo entra en la pestaña activa?
+     *  En juego → en-curso · Abiertos → inscripcion · Cerrados → finalizado.
+     */
+    private pasaFiltro(estado: string): boolean {
+        switch (this.filtro()) {
+            case 'En juego':
+                return estado === 'en-curso';
+            case 'Abiertos':
+                return estado === 'inscripcion';
+            default: // 'Cerrados'
+                return estado === 'finalizado';
+        }
+    }
+
+    /**
+     * Lista visible según el chip. Se deriva de torneos() (no lo reemplaza)
+     * para que las estadísticas de arriba sigan contando el total real.
+     */
+    readonly torneosFiltrados = computed(() =>
+        this.torneos().filter((t) => this.pasaFiltro(t.estado)),
+    );
+
+    /** Cuántos torneos hay para una etiqueta de chip (para el badge del chip). */
+    conteo(etiqueta: string): number {
+        const lista = this.torneos();
+        switch (etiqueta) {
+            case 'En juego':
+                return lista.filter((t) => t.estado === 'en-curso').length;
+            case 'Abiertos':
+                return lista.filter((t) => t.estado === 'inscripcion').length;
+            case 'Cerrados':
+                return lista.filter((t) => t.estado === 'finalizado').length;
+            default:
+                return lista.length;
+        }
+    }
 
 
     /** Participantes por torneo. Suscripciones creadas una sola vez. */
