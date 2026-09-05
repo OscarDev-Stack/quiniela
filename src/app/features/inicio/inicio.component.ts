@@ -110,7 +110,7 @@ import { Bracket } from '../../core/models/bracket.model';
               <span class="bloque-tit"><i class="ti ti-activity-heartbeat"></i> Survivor</span>
             </div>
             @for (t of survivors(); track t.id) {
-              <button class="fila" (click)="ir('/torneos/' + t.id)">
+              <button class="fila" (click)="irTorneo(t)">
                 <span class="fila-txt">
                   <span class="fila-nom">{{ t.nombre }}</span>
                   <span class="fila-sub">
@@ -132,7 +132,7 @@ import { Bracket } from '../../core/models/bracket.model';
               <span class="bloque-tit"><i class="ti ti-list-check"></i> Quinielas</span>
             </div>
             @for (t of quinielas(); track t.id) {
-              <button class="fila fila--col" (click)="ir('/torneos/' + t.id)">
+              <button class="fila fila--col" (click)="irTorneo(t)">
                 <span class="fila-top">
                   <span class="fila-txt">
                     <span class="fila-nom">{{ t.nombre }}</span>
@@ -309,6 +309,7 @@ export class InicioComponent {
   private readonly listoMe = signal(false);
   private readonly listoPartidos = signal(false);
   private readonly listoTorneos = signal(false);
+  private readonly listoTorneosPublicos = signal(false);
   private readonly listoMisBrackets = signal(false);
   private readonly listoBracketsPublicos = signal(false);
 
@@ -330,6 +331,10 @@ export class InicioComponent {
     this.torneosSrv.misTorneos$.pipe(tap(() => this.listoTorneos.set(true))),
     { initialValue: [] as Torneo[] },
   );
+  private readonly torneosPublicos = toSignal(
+    this.torneosSrv.torneosPublicos().pipe(tap(() => this.listoTorneosPublicos.set(true))),
+    { initialValue: [] as Torneo[] },
+  );
   private readonly misBrackets = toSignal(
     this.bracketsSrv.misBrackets().pipe(tap(() => this.listoMisBrackets.set(true))),
     { initialValue: [] as Bracket[] },
@@ -345,6 +350,7 @@ export class InicioComponent {
       this.listoMe() &&
       this.listoPartidos() &&
       this.listoTorneos() &&
+      this.listoTorneosPublicos() &&
       this.listoMisBrackets() &&
       this.listoBracketsPublicos()
     ) {
@@ -367,21 +373,38 @@ export class InicioComponent {
         return fa - fb;
       });
   });
-  readonly survivors = computed(() => {
+  private readonly idsMiosTorneos = computed(() => new Set(this.torneos().map((t) => t.id)));
+
+  /** Torneos del contexto: los míos (activos) + públicos abiertos donde aún no estoy. */
+  private readonly torneosVista = computed(() => {
     const ctx = this.contexto.grupoId();
-    return this.torneos().filter(
-      (t) =>
-        (t.grupoId ?? null) === ctx &&
-        (t.modo ?? 'supervivencia') === 'supervivencia' &&
-        t.estado !== 'finalizado',
+    const mios = this.torneos().filter(
+      (t) => (t.grupoId ?? null) === ctx && t.estado !== 'finalizado',
     );
-  });
-  readonly quinielas = computed(() => {
-    const ctx = this.contexto.grupoId();
-    return this.torneos().filter(
-      (t) => (t.grupoId ?? null) === ctx && t.modo === 'quiniela' && t.estado !== 'finalizado',
+    const publicosNuevos = this.torneosPublicos().filter(
+      (t) => (t.grupoId ?? null) === ctx && !this.idsMiosTorneos().has(t.id),
     );
+    return [...mios, ...publicosNuevos];
   });
+
+  readonly survivors = computed(() =>
+    this.torneosVista().filter((t) => (t.modo ?? 'supervivencia') === 'supervivencia'),
+  );
+  readonly quinielas = computed(() => this.torneosVista().filter((t) => t.modo === 'quiniela'));
+
+  /** ¿Es un torneo público abierto en el que aún no participo? */
+  esPublicoNoMioTorneo(t: Torneo): boolean {
+    return !this.idsMiosTorneos().has(t.id);
+  }
+
+  /** Abre el torneo: si es público y no estoy, va a la pantalla de unirse. */
+  irTorneo(t: Torneo): void {
+    if (this.esPublicoNoMioTorneo(t)) {
+      this.router.navigate(['/unirse', t.codigo]);
+      return;
+    }
+    this.router.navigate(['/torneos', t.id]);
+  }
 
   private readonly idsMios = computed(() => new Set(this.misBrackets().map((b) => b.id)));
 

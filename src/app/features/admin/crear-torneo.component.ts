@@ -45,6 +45,19 @@ import { NavComponent } from '../../shared/nav.component';
             <small class="pista">Global lo ven todos; un grupo, solo sus miembros.</small>
           }
         </label>
+
+        <label class="switch">
+          <span class="switch-texto">
+            Público
+            <small class="pista">
+              Aparece en el inicio y la lista, y cualquiera puede unirse sin
+              necesitar el código. Si lo dejas apagado, solo entra quien tenga
+              el enlace o el código.
+            </small>
+          </span>
+          <input type="checkbox" class="switch-input" [(ngModel)]="form.publico" />
+          <span class="switch-pista" aria-hidden="true"></span>
+        </label>
         <label class="field">
           <span>Modo de juego</span>
           <select [(ngModel)]="form.modo">
@@ -345,6 +358,7 @@ export class CrearTorneoComponent {
     costoEntrada: 0,
     porcentajeBote: 0,
     cierreInscripcion: '',
+    publico: false,
     grupoId: '' as string,
   };
 
@@ -415,6 +429,7 @@ export class CrearTorneoComponent {
         vidas: this.form.modo === 'supervivencia' ? Number(this.form.vidas) : 0,
         vidaCubre: this.form.vidaCubre,
         permiteRevivir: this.form.modo === 'supervivencia' && this.form.permiteRevivir,
+        publico: this.form.publico,
         grupoId: this.form.grupoId || null,
       });
       this.stats.evento('torneo_creado', {
