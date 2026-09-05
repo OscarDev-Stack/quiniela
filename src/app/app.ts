@@ -7,6 +7,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ConfirmarDialogComponent } from './shared/confirmar-dialog.component';
 import { NovedadesComponent } from './shared/novedades.component';
 import { ToastsComponent } from './shared/toasts.component';
+import { CargandoComponent } from './shared/cargando.component';
 import { NovedadesService } from './shared/novedades.service';
 import { limpiarInvitacion } from './shared/invitacion.util';
 import { UserService } from './core/services/user.service';
@@ -14,7 +15,13 @@ import { StatsService } from './shared/stats.service';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, ConfirmarDialogComponent, NovedadesComponent, ToastsComponent],
+  imports: [
+    RouterOutlet,
+    ConfirmarDialogComponent,
+    NovedadesComponent,
+    ToastsComponent,
+    CargandoComponent,
+  ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
@@ -29,6 +36,9 @@ export class App {
 
   /** Hay una versión nueva descargada y lista para usarse. */
   readonly hayActualizacion = signal(false);
+
+  /** Estamos aplicando la versión nueva: mostramos el overlay "Actualizando". */
+  readonly actualizando = signal(false);
 
   constructor() {
     // Propiedades categóricas del usuario para segmentar Analytics (sin PII):
@@ -136,15 +146,34 @@ export class App {
    */
   private aplicarActualizacion(): void {
     if (!this.puedeRecargarSinCiclar('sw-version-aplicada')) return;
-    this.updates
-      .activateUpdate()
-      .then(() => location.reload())
-      .catch(() => undefined);
+    this.recargarConOverlay();
   }
 
-  /** Activa la versión nueva y reinicia la app (respaldo manual del banner). */
+  /** Activa la versión nueva y reinicia la app (invocado desde el fallback). */
   recargar(): void {
-    this.updates.activateUpdate().then(() => location.reload());
+    this.recargarConOverlay();
+  }
+
+  /** Duración mínima del overlay "Actualizando" para que no sea un parpadeo. */
+  private static readonly OVERLAY_MIN_MS = 800;
+
+  /**
+   * Muestra el overlay "Actualizando", activa la versión nueva y recarga.
+   * Garantiza que el overlay se vea al menos OVERLAY_MIN_MS aunque la
+   * activación termine antes, para que la animación no aparezca y desaparezca
+   * de golpe. Si algo falla, recarga igual (el SW se resuelve al reiniciar).
+   */
+  private recargarConOverlay(): void {
+    if (this.actualizando()) return; // Ya en curso: no dispares dos veces.
+    this.actualizando.set(true);
+
+    const inicio = Date.now();
+    const recargarTrasMinimo = () => {
+      const restante = App.OVERLAY_MIN_MS - (Date.now() - inicio);
+      setTimeout(() => location.reload(), Math.max(0, restante));
+    };
+
+    this.updates.activateUpdate().then(recargarTrasMinimo).catch(recargarTrasMinimo);
   }
 
   /**
