@@ -4,10 +4,10 @@ import { ToastService } from './toast.service';
 import QRCode from 'qrcode';
 
 /**
- * Bloque para compartir por código: muestra el código grande, un botón que
- * copia SOLO el código (no la URL) y un QR de la URL de invitación para
- * escanear. El QR se genera en el propio dispositivo (librería local), sin
- * mandar el código a terceros.
+ * Bloque para compartir por código: muestra el código grande y tres botones de
+ * icono del mismo tamaño: copiar el código, copiar el enlace completo y ver el
+ * QR de la URL de invitación. El QR se genera en el propio dispositivo (librería
+ * local), sin mandar el código a terceros.
  *
  * Inputs:
  *  - codigo: el código de invitación (lo que se copia).
@@ -24,13 +24,31 @@ import QRCode from 'qrcode';
       <div class="codigo">{{ codigo() }}</div>
 
       <div class="acciones">
-        <button class="btn-copiar" (click)="copiar()">
+        <button
+          class="ico ico--primary"
+          (click)="copiar()"
+          [attr.title]="copiado() ? '¡Código copiado!' : 'Copiar código'"
+          [attr.aria-label]="copiado() ? '¡Código copiado!' : 'Copiar código'"
+        >
           <i class="ti" [class.ti-copy]="!copiado()" [class.ti-check]="copiado()"></i>
-          {{ copiado() ? '¡Copiado!' : 'Copiar código' }}
         </button>
         @if (soportaQr()) {
-          <button class="btn-qr" (click)="verQr.set(!verQr())">
-            <i class="ti ti-qrcode"></i> {{ verQr() ? 'Ocultar QR' : 'Ver QR' }}
+          <button
+            class="ico"
+            (click)="copiarEnlace()"
+            [attr.title]="enlaceCopiado() ? '¡Enlace copiado!' : 'Copiar enlace'"
+            [attr.aria-label]="enlaceCopiado() ? '¡Enlace copiado!' : 'Copiar enlace'"
+          >
+            <i class="ti" [class.ti-link]="!enlaceCopiado()" [class.ti-check]="enlaceCopiado()"></i>
+          </button>
+          <button
+            class="ico"
+            [class.ico--on]="verQr()"
+            (click)="verQr.set(!verQr())"
+            [attr.title]="verQr() ? 'Ocultar QR' : 'Ver QR'"
+            [attr.aria-label]="verQr() ? 'Ocultar QR' : 'Ver QR'"
+          >
+            <i class="ti ti-qrcode"></i>
           </button>
         }
       </div>
@@ -52,18 +70,24 @@ import QRCode from 'qrcode';
       .etq { font-size: 11px; color: var(--text-secondary); letter-spacing: 1px; text-transform: uppercase; }
       .codigo {
         font-size: 26px; font-weight: 800; letter-spacing: 4px;
-        color: var(--accent-text); margin: 4px 0 12px;
+        color: var(--accent-text); margin: 6px 0 18px;
       }
-      .acciones { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-      .btn-copiar, .btn-qr {
-        display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
-        font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 999px;
+      .acciones { display: flex; gap: 14px; justify-content: center; align-items: center; }
+      .ico {
+        display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+        width: 48px; height: 48px; padding: 0; border-radius: 14px; font-size: 20px;
         border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
+        transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, filter 0.15s ease;
       }
-      .btn-copiar { background: var(--accent-fill); color: #fff; border-color: var(--accent-fill); }
-      .btn-copiar:hover { filter: brightness(1.06); }
-      .btn-qr:hover { border-color: var(--accent-fill); color: var(--accent-text); }
-      .qr-wrap { margin-top: 14px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+      .ico:hover { border-color: var(--accent-fill); color: var(--accent-text); }
+      .ico--primary {
+        background: var(--accent-fill); color: #fff; border-color: var(--accent-fill);
+      }
+      .ico--primary:hover { filter: brightness(1.06); color: #fff; }
+      .ico--on { border-color: var(--accent-fill); color: var(--accent-text); background: var(--accent-bg); }
+      .ico:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+      @media (prefers-reduced-motion: reduce) { .ico { transition: none; } }
+      .qr-wrap { margin-top: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
       .qr-wrap img {
         border-radius: 12px; background: #fff; padding: 10px;
         box-shadow: 0 4px 16px -6px rgba(0, 0, 0, 0.4);
@@ -81,6 +105,7 @@ export class CodigoInvitarComponent {
 
   readonly verQr = signal(false);
   readonly copiado = signal(false);
+  readonly enlaceCopiado = signal(false);
   readonly qrDataUrl = signal<string | null>(null);
 
   /** El QR se puede generar si tenemos una URL válida. */
@@ -110,6 +135,20 @@ export class CodigoInvitarComponent {
         setTimeout(() => this.copiado.set(false), 1500);
       },
       () => this.toast.error('No se pudo copiar.'),
+    );
+  }
+
+  copiarEnlace(): void {
+    // Copiamos la URL completa de invitación (para compartir por chat, etc.).
+    const enlace = this.url();
+    if (!enlace) return;
+    navigator.clipboard?.writeText(enlace).then(
+      () => {
+        this.enlaceCopiado.set(true);
+        this.toast.exito('Enlace copiado.');
+        setTimeout(() => this.enlaceCopiado.set(false), 1500);
+      },
+      () => this.toast.error('No se pudo copiar el enlace.'),
     );
   }
 }

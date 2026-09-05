@@ -464,6 +464,7 @@ import { CodigoInvitarComponent } from '../../shared/codigo-invitar.component';
   .invitacion-acciones {
     display: flex;
     gap: 8px;
+    margin-top: 14px;
   }
 
   .invitacion-acciones .btn {
