@@ -14,6 +14,7 @@ import { ReglasTorneoComponent } from './reglas-torneo.component';
 import { PartidosJornadaComponent } from './partidos-jornada.component';
 import { TablaPosicionesComponent } from './tabla-posiciones.component';
 import { CartonesJornadaComponent } from './cartones-jornada.component';
+import { PicksJornadaComponent } from './picks-jornada.component';
 import { TablaLigaComponent } from './tabla-liga.component';
 import { CelebracionVictoriaComponent } from '../../shared/celebracion-victoria.component';
 import { TorneosService } from '../../core/services/torneos.service';
@@ -37,6 +38,7 @@ import { StatsService } from '../../shared/stats.service';
     PartidosJornadaComponent,
     TablaPosicionesComponent,
     CartonesJornadaComponent,
+    PicksJornadaComponent,
     TablaLigaComponent,
     CargandoComponent,
     EscudoComponent,
@@ -489,6 +491,18 @@ import { StatsService } from '../../shared/stats.service';
           </section>
         }
 
+        <!-- Survivor: tarjetas de juego (marcador + quién eligió cada equipo),
+             homologadas con los cartones de la quiniela. Solo al cerrar la
+             jornada, cuando ya se pueden revelar las elecciones. -->
+        @if (!esQuiniela() && revelarPicks() && jornadaActual(); as j) {
+          <app-picks-jornada
+            class="p-cartones"
+            [jornada]="j"
+            [picks]="picksJornada()"
+            [miUid]="miUid()"
+          />
+        }
+
         @if (esQuiniela()) {
           <app-tabla-posiciones
             class="p-jugadores"
@@ -597,8 +611,11 @@ import { StatsService } from '../../shared/stats.service';
         </section>
         }
 
-        <!-- Partidos de la jornada: al final, como contexto de consulta. -->
-        @if (t.estado === 'en-curso' && jornadaActual(); as j) {
+        <!-- Partidos de la jornada (solo survivor, mientras eliges): sirve para
+             saber contra quién juega cada equipo. Es solo referencia, no se
+             actualiza con marcadores. Al cerrar la jornada desaparece: los
+             resultados se ven en las tarjetas de juego. -->
+        @if (!esQuiniela() && puedeElegir() && jornadaActual(); as j) {
           <app-partidos-jornada
             class="p-partidos"
             [jornada]="j"
@@ -639,6 +656,8 @@ import { StatsService } from '../../shared/stats.service';
       .flujo > .hero-pick { order: 1; }
       .flujo > .p-jornada { order: 2; }
       .flujo > .p-equipos { order: 3; }
+      /* Tarjetas de juego (survivor): al cerrar la jornada, tras los participantes. */
+      .flujo > .p-cartones { order: 6; }
       .flujo > .p-jugadores { order: 6; }
       /* Partidos de la jornada: al final, como contexto de consulta. */
       .flujo > .p-partidos { order: 7; }
@@ -647,10 +666,11 @@ import { StatsService } from '../../shared/stats.service';
       .flujo > .p-final { order: 0; }
       .flujo--cerrada > .p-final { order: 0; }
 
-      /* Jornada cerrada: participantes primero, partidos al final. */
+      /* Jornada cerrada: participantes primero, luego las tarjetas de juego. */
       .flujo--cerrada > .p-jugadores { order: 2; }
-      .flujo--cerrada > .p-jornada { order: 3; }
-      .flujo--cerrada > .p-equipos { order: 4; }
+      .flujo--cerrada > .p-cartones { order: 3; }
+      .flujo--cerrada > .p-jornada { order: 4; }
+      .flujo--cerrada > .p-equipos { order: 5; }
       .flujo--cerrada > .p-partidos { order: 7; }
 
       .franja {
@@ -1329,7 +1349,7 @@ export class TorneoDetalleComponent {
   }
 
   /** Elecciones de la jornada en curso, una vez cerrada. */
-  private readonly picksJornada = signal<Pick[]>([]);
+  readonly picksJornada = signal<Pick[]>([]);
 
   /** Qué eligió alguien en la jornada en curso. */
   eligio(uid: string): string | null {
