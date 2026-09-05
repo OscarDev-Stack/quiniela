@@ -22,12 +22,19 @@ const noSeed = process.argv.includes('--no-seed');
 const pasos = [];
 if (!noSeed) pasos.push({ nombre: 'Seed de datos', archivo: 'seed-dev.js', args: ['seed'] });
 pasos.push(
+  // ── Flujo (happy path): confirma que cada modo funciona de punta a punta ──
   { nombre: 'Partido individual', archivo: 'prueba-partido.js' },
   { nombre: 'Survivor', archivo: 'prueba-survivor.js' },
   { nombre: 'Survivor NFL', archivo: 'prueba-survivor-nfl.js' },
   { nombre: 'Quiniela por puntos', archivo: 'prueba-quiniela.js' },
   { nombre: 'Bracket pronóstico', archivo: 'prueba-bracket-pronostico.js' },
   { nombre: 'Bracket dueños', archivo: 'prueba-bracket-duenos.js' },
+  // ── Avanzadas (casos difíciles): validaciones, aritmética, idempotencia ──
+  { nombre: 'Partido (avanzado)', archivo: 'prueba-partido-avanzado.js' },
+  { nombre: 'Survivor (avanzado)', archivo: 'prueba-survivor-avanzado.js' },
+  { nombre: 'Quiniela (avanzado)', archivo: 'prueba-quiniela-avanzado.js' },
+  { nombre: 'Brackets (avanzado)', archivo: 'prueba-brackets-avanzado.js' },
+  { nombre: 'Seguridad', archivo: 'prueba-seguridad.js' },
 );
 
 const resultados = [];
@@ -70,6 +77,8 @@ if (fallaron === 0) {
 }
 
 console.log('\nLos datos de prueba quedaron en dev para que los revises.');
-console.log('Cuando termines de mirar:  node scripts/seed-dev.js limpiar\n');
+console.log('Nota: las pruebas avanzadas ajustan saldos de algunos jugadores.');
+console.log('  Restaurar saldos:  node scripts/seed-dev.js seed');
+console.log('  Borrar todo:       node scripts/seed-dev.js limpiar\n');
 
 process.exit(fallaron === 0 ? 0 : 1);
