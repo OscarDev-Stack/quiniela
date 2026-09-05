@@ -30,16 +30,12 @@ import { Bracket } from '../../core/models/bracket.model';
       </div>
 
       <section class="lista-panel">
-      <nav class="tabs">
-        <button class="tab" [class.tab--on]="filtro() === 'En juego'" (click)="filtro.set('En juego')">
-          En juego <span class="tab-num">{{ conteo('En juego') }}</span>
-        </button>
-        <button class="tab" [class.tab--on]="filtro() === 'Abiertos'" (click)="filtro.set('Abiertos')">
-          Abiertos <span class="tab-num">{{ conteo('Abiertos') }}</span>
-        </button>
-        <button class="tab" [class.tab--on]="filtro() === 'Cerrados'" (click)="filtro.set('Cerrados')">
-          Cerrados <span class="tab-num">{{ conteo('Cerrados') }}</span>
-        </button>
+      <nav class="filters">
+        @for (f of filtros; track f) {
+          <button class="chip" [class.chip--on]="filtro() === f" (click)="filtro.set(f)">
+            {{ f }} <span class="chip-num">{{ conteo(f) }}</span>
+          </button>
+        }
       </nav>
 
       @if (cargando()) {
@@ -47,13 +43,14 @@ import { Bracket } from '../../core/models/bracket.model';
       } @else if (visibles().length === 0 && bracketsVisibles().length === 0) {
         <div class="vacio">
           <i class="ti ti-tournament"></i>
-          @if (filtro() === 'En juego') {
-            <p>No hay torneos ni eliminatorias en juego ahora mismo.</p>
-          } @else if (filtro() === 'Abiertos') {
-            <p>No hay torneos ni eliminatorias abiertos a inscripción.</p>
+          @if (filtro() === 'Abiertos') {
+            <p>No hay torneos ni eliminatorias abiertos o en juego ahora mismo.</p>
             <p class="pista">Los torneos y eliminatorias son por invitación: únete con el código que te compartan.</p>
-          } @else {
+          } @else if (filtro() === 'Cerrados') {
             <p>Todavía no hay torneos ni eliminatorias finalizados.</p>
+          } @else {
+            <p>No hay torneos ni eliminatorias todavía.</p>
+            <p class="pista">Los torneos y eliminatorias son por invitación: únete con el código que te compartan.</p>
           }
         </div>
       }
@@ -193,21 +190,22 @@ import { Bracket } from '../../core/models/bracket.model';
         border-top: 1px solid var(--border);
       }
 
-      /* Tabs de filtro por estado (mismo patrón que la vista de Partidos). */
-      .tabs { display: flex; gap: 6px; margin-top: 8px; margin-bottom: 18px; }
-      .tab {
+      /* Filtros por estado dentro del panel: botones rectangulares, el activo
+         en azul de acento. Mismo estilo que la vista de Partidos. */
+      .filters { display: flex; gap: 6px; margin-top: 2px; margin-bottom: 14px; }
+      .chip {
         flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
         padding: 9px 6px; font-size: 13px; font-weight: 600; cursor: pointer;
         border: 1px solid var(--border); border-radius: var(--radius);
-        background: var(--surface-2); color: var(--text-secondary);
+        background: var(--surface-1); color: var(--text-secondary); white-space: nowrap;
       }
-      .tab--on { background: var(--accent-fill); color: #fff; border-color: var(--accent-fill); }
-      .tab-num {
-        flex-shrink: 0; width: 22px; height: 22px; box-sizing: border-box;
+      .chip--on { background: var(--accent-fill); color: #fff; border-color: var(--accent-fill); }
+      .chip-num {
+        flex-shrink: 0; min-width: 22px; height: 22px; box-sizing: border-box; padding: 0 6px;
         display: inline-flex; align-items: center; justify-content: center;
-        font-size: 11px; border-radius: 999px; background: rgba(0, 0, 0, 0.12);
+        font-size: 11px; border-radius: 999px; background: rgba(128, 128, 128, 0.22);
       }
-      .tab--on .tab-num { background: rgba(255, 255, 255, 0.25); }
+      .chip--on .chip-num { background: rgba(255, 255, 255, 0.25); }
 
       /* Panel contenedor: agrupa pestañas, torneos y eliminatorias para que
          no queden "volando" sueltos sobre el fondo. */
@@ -262,9 +260,10 @@ export class TorneosListComponent {
   private readonly contexto = inject(ContextoService);
   private readonly toast = inject(ToastService);
 
-  /* Filtro por estado, mismas tres pestañas que la vista de Partidos.
-     Arranca en 'Abiertos', igual que Partidos. */
-  readonly filtro = signal<'En juego' | 'Abiertos' | 'Cerrados'>('Abiertos');
+  /* Filtro por estado, mismas pastillas que la vista de Partidos. 'Abiertos'
+     agrupa lo que está en juego y lo abierto a inscripción. Arranca en 'Todos'. */
+  readonly filtros = ['Todos', 'Abiertos', 'Cerrados'];
+  readonly filtro = signal('Todos');
 
   /* --- Unirme con código (escanear QR o escribir el código) --- */
   readonly mostrarUnirse = signal(false);
@@ -371,20 +370,24 @@ export class TorneosListComponent {
   }
 
   /**
-   * ¿El estado (de torneo o eliminatoria) cae dentro del chip activo?
+   * ¿El estado (de torneo o eliminatoria) cae dentro de la etiqueta dada?
    * Mapea las etiquetas a los estados compartidos por ambos modelos:
-   *  En juego → en-curso · Abiertos → inscripcion (y armando) · Cerrados → finalizado.
-   * 'Todos' no filtra nada.
+   *  Abiertos → en juego + abierto a inscripción (en-curso, inscripcion, armando)
+   *  Cerrados → finalizado · Todos → cualquiera.
    */
-  private pasaFiltro(estado: string): boolean {
-    switch (this.filtro()) {
-      case 'En juego':
-        return estado === 'en-curso';
+  private caeEnFiltro(estado: string, etiqueta: string): boolean {
+    switch (etiqueta) {
       case 'Abiertos':
-        return estado === 'inscripcion' || estado === 'armando';
-      default: // 'Cerrados'
+        return estado === 'en-curso' || estado === 'inscripcion' || estado === 'armando';
+      case 'Cerrados':
         return estado === 'finalizado';
+      default: // 'Todos'
+        return true;
     }
+  }
+
+  private pasaFiltro(estado: string): boolean {
+    return this.caeEnFiltro(estado, this.filtro());
   }
 
   /** Torneos del contexto activo, sin filtrar por el chip (base del conteo). */
@@ -429,17 +432,7 @@ export class TorneosListComponent {
       ...this.torneosContexto().map((t) => t.estado),
       ...this.bracketsContexto().map((b) => b.estado),
     ];
-    const cae = (e: string): boolean => {
-      switch (etiqueta) {
-        case 'En juego':
-          return e === 'en-curso';
-        case 'Abiertos':
-          return e === 'inscripcion' || e === 'armando';
-        default: // 'Cerrados'
-          return e === 'finalizado';
-      }
-    };
-    return estados.filter(cae).length;
+    return estados.filter((e) => this.caeEnFiltro(e, etiqueta)).length;
   }
 
   /** ¿Está finalizado? Para atenuarlo visualmente. */

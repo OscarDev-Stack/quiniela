@@ -1,6 +1,6 @@
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { RouterOutlet, Router, NavigationEnd } from '@angular/router';
-import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
+import { SwUpdate, VersionReadyEvent, UnrecoverableStateEvent } from '@angular/service-worker';
 import { combineLatest } from 'rxjs';
 import { filter, take } from 'rxjs/operators';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -84,11 +84,34 @@ export class App {
 
     if (!this.updates.isEnabled) return;
 
-    const sub = this.updates.versionUpdates
+    // Cuando Angular termina de descargar la versión nueva en segundo plano
+    // (VERSION_READY), la aplicamos y recargamos SOLOS, sin esperar a que el
+    // usuario toque un botón. En iOS/Android con la PWA instalada casi nadie
+    // ve (ni toca) el banner, así que se quedaban pegados en la versión vieja.
+    //
+    // El banner se mantiene como respaldo visible: si por lo que sea la recarga
+    // automática no ocurre (storage no confiable, anti-bucle activo), el
+    // usuario todavía puede forzarla a mano.
+    const subVersion = this.updates.versionUpdates
       .pipe(filter((e): e is VersionReadyEvent => e.type === 'VERSION_READY'))
-      .subscribe(() => this.hayActualizacion.set(true));
+      .subscribe(() => {
+        this.hayActualizacion.set(true);
+        this.aplicarActualizacion();
+      });
 
-    // Busca actualizaciones al abrir y cada vez que se vuelve a la app.
+    // Estado irrecuperable del SW (cache corrupta, frecuente en iOS): la única
+    // salida es recargar para que el navegador reinstale el SW desde cero.
+    const subUnrec = this.updates.unrecoverable
+      .pipe(filter((e): e is UnrecoverableStateEvent => !!e))
+      .subscribe(() => {
+        if (this.puedeRecargarSinCiclar('sw-unrecoverable')) {
+          location.reload();
+        }
+      });
+
+    // Busca actualizaciones al abrir, al volver el foco a la app y de forma
+    // periódica (cada 30 min). El check por foco no es confiable en iOS cuando
+    // la PWA se congela en segundo plano; el intervalo cubre ese hueco.
     const buscar = () => {
       if (document.visibilityState === 'visible') {
         this.updates.checkForUpdate().catch(() => undefined);
@@ -96,14 +119,30 @@ export class App {
     };
     buscar();
     document.addEventListener('visibilitychange', buscar);
+    const intervalo = setInterval(buscar, 30 * 60 * 1000);
 
     inject(DestroyRef).onDestroy(() => {
-      sub.unsubscribe();
+      subVersion.unsubscribe();
+      subUnrec.unsubscribe();
       document.removeEventListener('visibilitychange', buscar);
+      clearInterval(intervalo);
     });
   }
 
-  /** Activa la versión nueva y reinicia la app. */
+  /**
+   * Aplica la versión nueva y recarga la app automáticamente. Usa el guardián
+   * anti-bucle para no entrar en un ciclo de recargas si algo sale mal (p. ej.
+   * el SW reporta VERSION_READY una y otra vez sin llegar a activarse).
+   */
+  private aplicarActualizacion(): void {
+    if (!this.puedeRecargarSinCiclar('sw-version-aplicada')) return;
+    this.updates
+      .activateUpdate()
+      .then(() => location.reload())
+      .catch(() => undefined);
+  }
+
+  /** Activa la versión nueva y reinicia la app (respaldo manual del banner). */
   recargar(): void {
     this.updates.activateUpdate().then(() => location.reload());
   }
@@ -137,7 +176,7 @@ export class App {
         // Anti-bucle: solo recargamos si puedeRecargarSinCiclar() confirma que
         // logró dejar (y releer) una marca en sessionStorage. Si el storage no
         // es confiable, NO recargamos, para no arriesgar un ciclo.
-        if (desregistrado && this.puedeRecargarSinCiclar()) {
+        if (desregistrado && this.puedeRecargarSinCiclar('sw-messaging-limpiado')) {
           location.reload();
         }
       })
@@ -145,20 +184,26 @@ export class App {
   }
 
   /**
-   * Decide si es seguro recargar tras limpiar el SW roto, sin riesgo de bucle.
-   * Devuelve true SOLO si logramos dejar la marca en sessionStorage (y no
-   * estaba ya puesta). Si el storage falla o ya recargamos antes, devuelve
-   * false: preferimos NO recargar (el usuario se recupera igual al reabrir)
-   * antes que arriesgar un ciclo de recargas.
+   * Decide si es seguro recargar sin riesgo de bucle, para la `clave` dada.
+   * Devuelve true SOLO si no hubo otra recarga con esa clave en los últimos
+   * VENTANA_MS. En vez de bloquear para siempre, guarda una marca de tiempo:
+   * así una actualización legítima más tarde en la misma sesión sí puede
+   * recargar, pero dos recargas seguidas (síntoma de bucle) se cortan.
+   *
+   * Si el storage no es confiable (modo privado, etc.), devuelve false:
+   * preferimos NO recargar automáticamente antes que arriesgar un ciclo. El
+   * usuario se recupera igual con el banner manual o al reabrir la app.
    */
-  private puedeRecargarSinCiclar(): boolean {
-    const YA = 'sw-messaging-limpiado';
+  private puedeRecargarSinCiclar(clave: string): boolean {
+    const VENTANA_MS = 60 * 1000; // 1 minuto de guarda entre recargas por clave.
+    const ahora = Date.now();
     try {
-      if (sessionStorage.getItem(YA)) return false;
-      sessionStorage.setItem(YA, '1');
-      // Verificamos que de verdad quedó escrito (algunos navegadores en modo
+      const previo = Number(sessionStorage.getItem(clave));
+      if (previo && ahora - previo < VENTANA_MS) return false;
+      sessionStorage.setItem(clave, String(ahora));
+      // Confirmamos que de verdad quedó escrito (algunos navegadores en modo
       // privado aceptan setItem pero no persisten).
-      return sessionStorage.getItem(YA) === '1';
+      return sessionStorage.getItem(clave) === String(ahora);
     } catch {
       // Sin storage confiable, no arriesgamos recarga automática.
       return false;
