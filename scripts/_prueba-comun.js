@@ -70,16 +70,31 @@ async function uidDe(email) {
   return (await authAdmin.getUserByEmail(email)).uid;
 }
 
-/** Llama a una función autenticándose como el usuario dado. */
+/**
+ * Llama a una función autenticándose como el usuario dado.
+ *
+ * Cachea la sesión: solo hace signIn cuando CAMBIA el usuario respecto a la
+ * llamada anterior. Así el suite completo hace ~1 login por usuario en vez de
+ * uno por llamada, evitando 'auth/quota-exceeded' (Firebase limita cuántas
+ * verificaciones de contraseña acepta por ventana de tiempo).
+ */
+let _emailActual = null;
 async function comoUsuario(email, nombreFn, datos) {
-  await signInWithEmailAndPassword(authCliente, email, PASSWORD);
-  try {
-    const fn = httpsCallable(functions, nombreFn);
-    const res = await fn(datos);
-    return res.data;
-  } finally {
-    await signOut(authCliente);
+  if (_emailActual !== email) {
+    // Cambiamos de usuario: cerramos la sesión anterior (si había) y entramos.
+    if (authCliente.currentUser) await signOut(authCliente).catch(() => undefined);
+    await signInWithEmailAndPassword(authCliente, email, PASSWORD);
+    _emailActual = email;
   }
+  const fn = httpsCallable(functions, nombreFn);
+  const res = await fn(datos);
+  return res.data;
+}
+
+/** Cierra la sesión cacheada. Útil al final de una prueba (opcional). */
+async function cerrarSesion() {
+  if (authCliente.currentUser) await signOut(authCliente).catch(() => undefined);
+  _emailActual = null;
 }
 
 /** Aserción con log. Devuelve el booleano para poder acumular. */
@@ -147,6 +162,187 @@ async function marcarPrueba(coleccion, id) {
   await db.doc(`${coleccion}/${id}`).set({ esPrueba: true }, { merge: true });
 }
 
+// ── Helpers para pruebas AVANZADAS (casos difíciles / negativos) ───────
+
+/**
+ * Espera que `fn()` LANCE un HttpsError con el código dado (p. ej.
+ * 'failed-precondition', 'permission-denied', 'invalid-argument',
+ * 'not-found', 'unauthenticated'). Devuelve true si el error llegó con
+ * el código correcto; false si no hubo error o el código no coincide.
+ *
+ * El SDK cliente envuelve el error de la función: el código llega como
+ * `functions/<codigo>` en err.code, así que comparamos por sufijo.
+ */
+async function esperarError(fn, codigoEsperado, etiqueta) {
+  try {
+    await fn();
+    console.log(`  ❌ ${etiqueta}: se esperaba error "${codigoEsperado}" pero NO falló.`);
+    return false;
+  } catch (e) {
+    const code = String(e?.code ?? '');
+    // httpsCallable devuelve p.ej. 'functions/failed-precondition'.
+    const coincide = code === codigoEsperado || code.endsWith(`/${codigoEsperado}`);
+    if (coincide) {
+      console.log(`  ✅ ${etiqueta}: falló como se esperaba (${codigoEsperado}).`);
+    } else {
+      console.log(
+        `  ❌ ${etiqueta}: falló pero con código "${code}" (esperaba "${codigoEsperado}"). ` +
+        `Mensaje: ${e?.message ?? e}`,
+      );
+    }
+    return coincide;
+  }
+}
+
+/** Crea un partido individual de prueba directamente (Admin SDK), abierto. */
+async function crearPartido({
+  local = 'América',
+  visitante = 'Guadalajara',
+  porcentajeBote = 0,
+  minutosParaCerrar = 60,
+  type = '1x2',
+} = {}) {
+  const ref = await db.collection('partidos').add({
+    competition: 'Prueba Avanzada (auto)',
+    homeTeam: local,
+    awayTeam: visitante,
+    type,
+    status: 'abierto',
+    closesAt: Timestamp.fromMillis(Date.now() + minutosParaCerrar * 60 * 1000),
+    porcentajeBote,
+    liquidado: false,
+    createdAt: FieldValue.serverTimestamp(),
+    esPrueba: true,
+  });
+  return ref.id;
+}
+
+/** Fija el saldo (puntos y puntosHistoricos) de un usuario por email. Útil para
+ *  probar el tope inferior sin depender del saldo con el que quedó de otra prueba. */
+async function fijarSaldo(email, puntos) {
+  const uid = await uidDe(email);
+  await db.doc(`users/${uid}`).set(
+    { puntos, puntosHistoricos: puntos, bloqueado: puntos - 100 < -1000 },
+    { merge: true },
+  );
+  return uid;
+}
+
+/** Fuerza el estado / hora de cierre de un partido (para simular cierre o liquidado). */
+async function ajustarPartido(partidoId, campos) {
+  await db.doc(`partidos/${partidoId}`).set(campos, { merge: true });
+}
+
+/** Total acumulado en el bote del sistema (sistema/reserva.total). */
+async function leerReserva() {
+  const snap = await db.doc('sistema/reserva').get();
+  return Number(snap.data()?.['total'] ?? 0);
+}
+
+/** Cuenta cuántos movimientos de un tipo tiene un usuario en el ledger.
+ *  Si se pasa `filtros` (p. ej. { bracketId } o { torneoId }), acota a esos. */
+async function contarLedger(uid, tipo, filtros = {}) {
+  let q = db.collection('ledger').where('uid', '==', uid).where('tipo', '==', tipo);
+  for (const [campo, valor] of Object.entries(filtros)) {
+    q = q.where(campo, '==', valor);
+  }
+  const snap = await q.get();
+  return snap.size;
+}
+
+/** Lee el documento de participante de un torneo. */
+async function participanteDe(torneoId, uid) {
+  const snap = await db.doc(`torneos/${torneoId}/participantes/${uid}`).get();
+  return snap.exists ? snap.data() : null;
+}
+
+/** Fuerza la jornada actual de un torneo (para simular la ventana de revivir). */
+async function fijarJornadaTorneo(torneoId, jornadaActual) {
+  await db.doc(`torneos/${torneoId}`).update({ jornadaActual });
+}
+
+/** Crea un bracket de prueba directamente (Admin SDK). Devuelve su id.
+ *  Pensado para pruebas de modo dueños: llaves mínimas de 2 equipos. */
+async function crearBracketDuenos({
+  nombre = 'Bracket Dueños (auto)',
+  costoEntrada = 100,
+  porcentajeBote = 0,
+  equipos = ['América', 'Guadalajara'],
+} = {}) {
+  // Un cuadro mínimo: una sola llave (final) con dos equipos.
+  const llaves = [
+    {
+      id: 'r0p0',
+      ronda: 0,
+      posicion: 0,
+      local: { nombre: equipos[0] },
+      visitante: { nombre: equipos[1] },
+      partidos: [{ golesLocal: null, golesVisitante: null }],
+      ganador: null,
+    },
+  ];
+  const ref = await db.collection('brackets').add({
+    nombre,
+    modo: 'duenos',
+    estado: 'inscripcion',
+    config: { equipos: 2, avance: 'fijo', reparto: [100], armado: 'manual', desempateFinal: 'penales', desempateRondas: 'penales' },
+    puntaje: { avanzaPorRonda: [10], campeon: 20, finalista: 10, marcadorExacto: 5, marcadorResultado: 3 },
+    llaves,
+    equipos: equipos.map((n) => ({ nombre: n })),
+    duenos: [],
+    costoEntrada,
+    porcentajeBote,
+    bolsa: 0,
+    gestores: [],
+    codigo: Math.random().toString(36).slice(2, 8).toUpperCase(),
+    creadoPor: 'seed-prueba',
+    cierraAt: Timestamp.fromMillis(Date.now() + 3 * 60 * 60 * 1000),
+    createdAt: FieldValue.serverTimestamp(),
+    esPrueba: true,
+  });
+  return ref.id;
+}
+
+/** Lee un bracket. */
+async function leerBracket(bracketId) {
+  const snap = await db.doc(`brackets/${bracketId}`).get();
+  return snap.exists ? snap.data() : null;
+}
+
+/**
+ * Crea (o reusa) un usuario de Auth de prueba SIN validar (validada:false),
+ * con la contraseña estándar, para probar la guarda de cuenta no validada.
+ * Marcado esPrueba para que el limpiar lo borre. Devuelve { uid, email }.
+ */
+async function crearUsuarioSinValidar(sufijo = 'sinvalidar') {
+  const email = `prueba_${sufijo}@quiniela.test`;
+  let uid;
+  try {
+    const u = await authAdmin.createUser({ email, password: PASSWORD, displayName: `Prueba ${sufijo}` });
+    uid = u.uid;
+  } catch (e) {
+    if (e.code === 'auth/email-already-exists') {
+      uid = (await authAdmin.getUserByEmail(email)).uid;
+    } else {
+      throw e;
+    }
+  }
+  await db.doc(`users/${uid}`).set(
+    {
+      email,
+      alias: `Prueba ${sufijo}`,
+      rol: 'user',
+      validada: false, // <- la clave de esta prueba
+      bloqueado: false,
+      puntos: 5000,
+      puntosHistoricos: 5000,
+      esPrueba: true,
+    },
+    { merge: true },
+  );
+  return { uid, email };
+}
+
 module.exports = {
   projectId,
   db,
@@ -155,10 +351,24 @@ module.exports = {
   saldoDe,
   uidDe,
   comoUsuario,
+  cerrarSesion,
   ok,
   crearCompeticionConJornada,
   capturarResultadosJornada,
   arrancarTorneo,
   arrancarBracket,
   marcarPrueba,
+  // Helpers de pruebas avanzadas:
+  esperarError,
+  crearPartido,
+  fijarSaldo,
+  ajustarPartido,
+  leerReserva,
+  contarLedger,
+  participanteDe,
+  fijarJornadaTorneo,
+  crearBracketDuenos,
+  leerBracket,
+  crearUsuarioSinValidar,
+  PASSWORD,
 };

@@ -75,6 +75,13 @@ export class App {
       )
       .subscribe(() => this.novedades.revisarAlEntrar());
 
+    // Limpieza de un SW de messaging registrado por error en la raíz '/'
+    // (versiones previas lo hacían). Ese registro compite con ngsw-worker.js
+    // por el control de la página y rompe la detección de versiones. Lo
+    // desregistramos si su scope es exactamente el origen '/', sin tocar el
+    // registro de Angular ni el de messaging en su scope aislado.
+    this.limpiarSwMessagingEnRaiz();
+
     if (!this.updates.isEnabled) return;
 
     const sub = this.updates.versionUpdates
@@ -99,5 +106,62 @@ export class App {
   /** Activa la versión nueva y reinicia la app. */
   recargar(): void {
     this.updates.activateUpdate().then(() => location.reload());
+  }
+
+  /**
+   * Desregistra el SW de messaging si quedó registrado en el scope raíz '/'
+   * (bug de versiones anteriores). Ese registro le disputaba el control de la
+   * página a ngsw-worker.js de Angular, dejando SwUpdate sin detectar
+   * versiones. El SW de Angular y el de messaging en su scope propio no se
+   * tocan. Es defensivo: cualquier fallo se ignora.
+   */
+  private limpiarSwMessagingEnRaiz(): void {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker
+      .getRegistrations()
+      .then(async (regs) => {
+        let desregistrado = false;
+        for (const r of regs) {
+          const url = r.active?.scriptURL ?? r.installing?.scriptURL ?? r.waiting?.scriptURL ?? '';
+          const scopeRaiz = r.scope === location.origin + '/';
+          if (url.includes('firebase-messaging-sw.js') && scopeRaiz) {
+            const ok = await r.unregister().catch(() => false);
+            desregistrado = desregistrado || ok;
+          }
+        }
+
+        // Si limpiamos un registro roto, recargamos UNA sola vez para que el
+        // SW de Angular retome el control de inmediato (si no, tardaría hasta
+        // que el usuario cierre todas las pestañas).
+        //
+        // Anti-bucle: solo recargamos si puedeRecargarSinCiclar() confirma que
+        // logró dejar (y releer) una marca en sessionStorage. Si el storage no
+        // es confiable, NO recargamos, para no arriesgar un ciclo.
+        if (desregistrado && this.puedeRecargarSinCiclar()) {
+          location.reload();
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  /**
+   * Decide si es seguro recargar tras limpiar el SW roto, sin riesgo de bucle.
+   * Devuelve true SOLO si logramos dejar la marca en sessionStorage (y no
+   * estaba ya puesta). Si el storage falla o ya recargamos antes, devuelve
+   * false: preferimos NO recargar (el usuario se recupera igual al reabrir)
+   * antes que arriesgar un ciclo de recargas.
+   */
+  private puedeRecargarSinCiclar(): boolean {
+    const YA = 'sw-messaging-limpiado';
+    try {
+      if (sessionStorage.getItem(YA)) return false;
+      sessionStorage.setItem(YA, '1');
+      // Verificamos que de verdad quedó escrito (algunos navegadores en modo
+      // privado aceptan setItem pero no persisten).
+      return sessionStorage.getItem(YA) === '1';
+    } catch {
+      // Sin storage confiable, no arriesgamos recarga automática.
+      return false;
+    }
   }
 }

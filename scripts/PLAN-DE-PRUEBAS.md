@@ -19,13 +19,26 @@ Requisitos: `scripts/service-account-dev.json`, `scripts/config-dev.json`, y cor
 antes el seed: `node scripts/seed-dev.js seed`.
 
 ```bash
+# Flujo (happy path)
 node scripts/prueba-partido.js             # pronóstico de partido individual
 node scripts/prueba-survivor.js            # torneo supervivencia
 node scripts/prueba-quiniela.js            # torneo quiniela por puntos
 node scripts/prueba-bracket-pronostico.js  # eliminatoria modo pronóstico
 node scripts/prueba-bracket-duenos.js      # eliminatoria modo dueños
+
+# Casos difíciles (validaciones, aritmética, idempotencia, permisos)
+node scripts/prueba-partido-avanzado.js    # edición, tope −1000, bote/redondeo, doble liquidación
+node scripts/prueba-survivor-avanzado.js   # sin pick, empate/vidas, tropiezo, no repetir, revivir
+node scripts/prueba-quiniela-avanzado.js   # marcadores inválidos, desempate, empate total
+node scripts/prueba-brackets-avanzado.js   # reparto=100, dueños aceptar/rechazar, pago doble
+node scripts/prueba-seguridad.js           # autorización: qué NO puede un usuario común/sin validar
+
 node scripts/seed-dev.js limpiar           # borra todo lo marcado esPrueba
 ```
+
+> Atajo: `npm run pruebas` corre el seed, las 6 de flujo y las 5 avanzadas de
+> un jalón. Las avanzadas ajustan saldos a propósito (para probar el tope);
+> corre `node scripts/seed-dev.js seed` si quieres restaurarlos.
 
 Cada script crea sus propios datos (competición + jornada, torneo o bracket),
 los deja marcados `esPrueba: true`, y al final imprime `✅ PRUEBA PASÓ` / `❌ FALLÓ`.

@@ -1,7 +1,7 @@
 import { Component, computed, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { EscudoComponent } from '../../shared/escudo.component';
-import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
+import { Jornada, PartidoJornada, horaPartido } from '../../core/models/competicion.model';
 import { Quiniela } from '../../core/models/torneo.model';
 import { minutoVivoTexto } from '../../core/models/partido.model';
 
@@ -73,6 +73,10 @@ const PUNTOS_RESULTADO = 3;
                 </span>
               </div>
 
+              @if (hora(p); as h) {
+                <div class="match-hora"><i class="ti ti-clock"></i> {{ h }}</div>
+              }
+
               <div class="picks">
                 @for (c of cartones(); track c.id) {
                   <div class="pick" [class.pick--yo]="c.uid === miUid()">
@@ -134,6 +138,12 @@ const PUNTOS_RESULTADO = 3;
         display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
         gap: 8px; padding: 10px 12px; background: var(--surface-2);
         border-bottom: 1px solid var(--border);
+      }
+      .match-hora {
+        display: flex; align-items: center; justify-content: center; gap: 4px;
+        padding: 5px 12px; background: var(--surface-2);
+        border-bottom: 1px solid var(--border);
+        font-size: 11px; color: var(--text-muted); text-transform: capitalize;
       }
       .lado { display: flex; align-items: center; gap: 8px; min-width: 0; }
       .lado--der { justify-content: flex-end; }
@@ -211,6 +221,11 @@ export class CartonesJornadaComponent {
   /** ¿El partido tiene marcador en vivo para mostrar? */
   tieneVivo(p: PartidoJornada): boolean {
     return typeof p.vivoLocal === 'number' && typeof p.vivoVisitante === 'number';
+  }
+
+  /** Hora de inicio legible del partido, o '' si no hay. */
+  hora(p: PartidoJornada): string {
+    return horaPartido(p.fechaInicio);
   }
 
   /** Texto del minuto/estado en vivo, traducido al español. */

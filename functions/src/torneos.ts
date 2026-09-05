@@ -1247,7 +1247,29 @@ export const previsualizarQuiniela = onCall(opcionesCall, async (req) => {
     }
 
     const j = jornadaSnap.data() as JornadaDoc;
+    const cartones = await calcularPreviaQuiniela(competicionId, j.numero, j.partidos);
+    return { ok: true, cartones };
+});
 
+/**
+ * Núcleo del cálculo de la previa de quiniela por puntos. Recorre los torneos
+ * quiniela de la competición parados en esa jornada y, para los cartones aún
+ * pendientes, escribe puntosPrevia/exactosPrevia (SET absoluto, idempotente).
+ * NO toca puntajes oficiales ni resuelve nada. Devuelve cuántos cartones tocó.
+ *
+ * Lo usan la función manual (previsualizarQuiniela) y el scheduler de precarga
+ * de resultados, para que la vista en vivo se actualice sola sin que el admin
+ * tenga que guardar el marcador a mano.
+ */
+export async function calcularPreviaQuiniela(
+    competicionId: string,
+    numeroJornada: number,
+    partidosJornada: Array<{
+        resultado?: string | null;
+        golesLocal?: number | null;
+        golesVisitante?: number | null;
+    }>,
+): Promise<number> {
     // Torneos quiniela de esta competición, parados en esta jornada.
     const torneos = await db
         .collection('torneos')
@@ -1258,15 +1280,12 @@ export const previsualizarQuiniela = onCall(opcionesCall, async (req) => {
     const afectados = torneos.docs.filter(
         (d) =>
             d.data()['modo'] === 'quiniela' &&
-            Number(d.data()['jornadaActual'] ?? 0) === j.numero,
+            Number(d.data()['jornadaActual'] ?? 0) === numeroJornada,
     );
+    if (afectados.length === 0) return 0;
 
     let cartones = 0;
-    const partidos = j.partidos as Array<{
-        resultado?: string | null;
-        golesLocal?: number | null;
-        golesVisitante?: number | null;
-    }>;
+    const partidos = partidosJornada;
 
     for (const torneoDoc of afectados) {
         const torneoRef = torneoDoc.ref;
@@ -1274,7 +1293,7 @@ export const previsualizarQuiniela = onCall(opcionesCall, async (req) => {
         // puntaje oficial y no deben tocarse.
         const quinielas = await torneoRef
             .collection('quinielas')
-            .where('jornada', '==', j.numero)
+            .where('jornada', '==', numeroJornada)
             .where('estado', '==', 'pendiente')
             .get();
         if (quinielas.empty) continue;
@@ -1310,8 +1329,8 @@ export const previsualizarQuiniela = onCall(opcionesCall, async (req) => {
         await batch.commit();
     }
 
-    return { ok: true, cartones };
-});
+    return cartones;
+}
 
 /**
  * Datos públicos de un torneo a partir de su código de invitación.

@@ -14,6 +14,11 @@ Estos scripts prueban la app en el proyecto **dev** (`quiniela-dev-d203d`), nunc
 | `prueba-quiniela.js` | Flujo completo de un torneo de quiniela por puntos. |
 | `prueba-bracket-pronostico.js` | Flujo completo de una eliminatoria modo pronóstico. |
 | `prueba-bracket-duenos.js` | Flujo completo de una eliminatoria modo dueños. |
+| `prueba-partido-avanzado.js` | **Casos difíciles** de partido: edición de pronóstico, tope de saldo, multiplicador inválido, cerrado/liquidado, nadie/todos aciertan, redondeo del bote, doble liquidación. |
+| `prueba-survivor-avanzado.js` | **Casos difíciles** de survivor: sin pick, empate sin/con vida, `vidaCubre` tropiezo, no repetir equipo, revivir (ventana/costo/una vez), idempotencia. |
+| `prueba-quiniela-avanzado.js` | **Casos difíciles** de quiniela: marcadores fuera de rango/longitud, desempate por exactos, empate total compartido, guardas de estado. |
+| `prueba-brackets-avanzado.js` | **Casos difíciles** de brackets: reparto que debe sumar 100, dueños aceptar/rechazar/idempotencia, aceptar sin saldo, calificar dueños y chequeo de pago doble. |
+| `prueba-seguridad.js` | **Autorización transversal**: qué NO pueden hacer los usuarios comunes ni las cuentas sin validar; protección al borrar; límites de alias. |
 | `prueba-partido-ui.spec.js` | Prueba la interfaz con un navegador real (Playwright). |
 | `PLAN-DE-PRUEBAS.md` | Checklist manual dev → prod. |
 
@@ -73,7 +78,12 @@ npm run pruebas
 
 Esto hace, en orden: **seed** (crea los usuarios de prueba) → las 6 pruebas de
 flujo (partido, survivor, survivor NFL, quiniela, bracket pronóstico, bracket
-dueños) → un **resumen ✅/❌** al final.
+dueños) → las **5 pruebas avanzadas** (partido, survivor, quiniela y brackets
+en sus casos difíciles, más seguridad) → un **resumen ✅/❌** al final.
+
+> Las pruebas avanzadas ajustan el saldo de algunos jugadores a propósito (para
+> probar el tope de −1000). Si después quieres volver a correr las de flujo con
+> los saldos originales, corre de nuevo `node scripts/seed-dev.js seed`.
 
 **No borra nada:** los datos quedan en dev para que los revises en la app / consola.
 Cuando termines de mirar:
@@ -141,6 +151,30 @@ También requieren `seed` antes (usan los usuarios de prueba a/b/c/d y admin).
 Fuerzan el estado a `en-curso` por Admin SDK para no esperar los schedulers.
 Al terminar, `node scripts/seed-dev.js limpiar` borra todo (incluidas las
 competiciones/jornadas que crearon, marcadas `esPrueba`).
+
+### Paso 2c — Casos difíciles (pruebas avanzadas)
+
+Las de flujo confirman que el camino feliz funciona. Estas otras atacan las
+**validaciones, la aritmética con redondeo, la idempotencia y los permisos**:
+esperan que ciertas llamadas **fallen** con el código correcto, y verifican al
+céntimo los repartos con bote y sobrante.
+
+```bash
+node scripts/prueba-partido-avanzado.js    # edición, tope, bote/redondeo, doble liquidación
+node scripts/prueba-survivor-avanzado.js   # vidas, tropiezo, no repetir equipo, revivir
+node scripts/prueba-quiniela-avanzado.js   # marcadores inválidos, desempate, empate total
+node scripts/prueba-brackets-avanzado.js   # reparto=100, dueños aceptar/rechazar, pago doble
+node scripts/prueba-seguridad.js           # qué NO puede hacer un usuario común / sin validar
+```
+
+Cada una crea sus propios datos y los marca `esPrueba`. Al final imprime
+`✅ PRUEBA PASÓ` / `❌ PRUEBA FALLÓ`. Como algunas fijan saldos para probar el
+tope de −1000, corre `node scripts/seed-dev.js seed` si necesitas restaurarlos.
+
+> `prueba-brackets-avanzado.js` verifica que una segunda llamada a
+> `calificarBracket` se **rechace** (guarda de idempotencia): el bracket se
+> marca `repartido: true` al calificar, así un doble "Publicar" o un reintento
+> no vuelve a pagar la bolsa.
 
 ### Paso 3 — Probar la interfaz (navegador)
 

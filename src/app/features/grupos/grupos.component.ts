@@ -5,6 +5,8 @@ import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavComponent } from '../../shared/nav.component';
 import { CargandoComponent } from '../../shared/cargando.component';
+import { EscanerQrComponent } from '../../shared/escaner-qr.component';
+import { InvitacionPendiente } from '../../shared/invitacion.util';
 import { GruposService } from '../../core/services/grupos.service';
 import { UserService } from '../../core/services/user.service';
 import { ToastService } from '../../shared/toast.service';
@@ -17,7 +19,7 @@ const EMOJIS = ['⚽', '🏆', '🔥', '🎯', '🥅', '🏅', '🎮', '👑', '
 @Component({
   selector: 'app-grupos',
   standalone: true,
-  imports: [CommonModule, FormsModule, NavComponent, CargandoComponent],
+  imports: [CommonModule, FormsModule, NavComponent, CargandoComponent, EscanerQrComponent],
   template: `
     <div class="screen">
       <app-nav [back]="true" title="Mis grupos" />
@@ -101,20 +103,23 @@ const EMOJIS = ['⚽', '🏆', '🔥', '🎯', '🥅', '🏅', '🎮', '👑', '
         </div>
       }
 
-      <!-- Diálogo: unirse -->
+      <!-- Diálogo: unirse (escanear QR o escribir el código) -->
       @if (modo() === 'unirse') {
         <div class="overlay" (click)="cerrar()">
-          <div class="dialogo" (click)="$event.stopPropagation()">
+          <div class="dialogo dialogo--ancho" (click)="$event.stopPropagation()">
             <h3>Unirme a un grupo</h3>
-            <label class="campo">
-              <span>Código de invitación</span>
-              <input [(ngModel)]="codigo" placeholder="BARRIO7" maxlength="8" style="text-transform:uppercase" />
-            </label>
+            <p class="dialogo-ayuda">
+              Escanea el QR de invitación del grupo o escribe su código.
+            </p>
+
+            <app-escaner-qr [autoNavegar]="false" tipoPorDefecto="grupo" (leido)="onEscaneado($event)" />
+
+            @if (ocupado()) {
+              <div class="uniendo"><i class="ti ti-loader-2"></i> Uniéndote…</div>
+            }
+
             <div class="dialogo-acciones">
-              <button class="btn" (click)="cerrar()">Cancelar</button>
-              <button class="btn btn--primary" [disabled]="ocupado() || !codigo.trim()" (click)="unirse()">
-                {{ ocupado() ? 'Uniéndome…' : 'Unirme' }}
-              </button>
+              <button class="btn" (click)="cerrar()">Cerrar</button>
             </div>
           </div>
         </div>
@@ -172,7 +177,16 @@ const EMOJIS = ['⚽', '🏆', '🔥', '🎯', '🥅', '🏅', '🎮', '👑', '
         width: 100%; max-width: 340px; background: var(--surface-2);
         border-radius: 16px; padding: 20px;
       }
+      .dialogo--ancho { max-width: 400px; max-height: 90vh; overflow-y: auto; }
       .dialogo h3 { margin: 0 0 16px; font-size: 17px; font-weight: 700; }
+      .dialogo-ayuda { margin: -8px 0 14px; font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
+      .uniendo {
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+        font-size: 13px; color: var(--text-muted); margin: 14px 0 0;
+      }
+      .uniendo i { font-size: 18px; animation: gira 1s linear infinite; }
+      @keyframes gira { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .uniendo i { animation: none; } }
       .campo { display: block; margin-bottom: 14px; }
       .campo span { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
       .campo input {
@@ -214,7 +228,6 @@ export class GruposComponent {
   readonly ocupado = signal(false);
   nombre = '';
   icono = EMOJIS[0];
-  codigo = '';
 
   esAdminDe(g: Grupo): boolean {
     return g.adminUid === this.miUid();
@@ -229,7 +242,6 @@ export class GruposComponent {
     this.modo.set('crear');
   }
   abrirUnirse(): void {
-    this.codigo = '';
     this.modo.set('unirse');
   }
   cerrar(): void {
@@ -254,10 +266,33 @@ export class GruposComponent {
     }
   }
 
-  async unirse(): Promise<void> {
+  /**
+   * El escáner (QR o código escrito a mano) devolvió una invitación. Estando en
+   * la pantalla de grupos, el caso normal es un grupo, así que el escáner asume
+   * 'grupo' para códigos sueltos. Si el QR trae explícitamente un torneo o una
+   * eliminatoria (deep-link), respetamos su ruta en vez de forzar grupo.
+   */
+  onEscaneado(inv: InvitacionPendiente): void {
+    if (inv.tipo === 'torneo') {
+      this.cerrar();
+      this.router.navigate(['/unirse', inv.valor]);
+      return;
+    }
+    if (inv.tipo === 'bracket') {
+      this.cerrar();
+      this.router.navigate(['/unirse-elim', inv.valor]);
+      return;
+    }
+    this.unirse(inv.valor);
+  }
+
+  async unirse(codigoEntrada: string): Promise<void> {
+    const codigo = (codigoEntrada ?? '').trim().toUpperCase();
+    if (!codigo) return;
+
     this.ocupado.set(true);
     try {
-      const r = await this.gruposSrv.unirse(this.codigo.trim().toUpperCase());
+      const r = await this.gruposSrv.unirse(codigo);
       this.toast.exito(`Te uniste a ${r.nombre}.`);
       // El grupo al que te unes se vuelve el contexto activo.
       this.contexto.cambiar({ grupoId: r.grupoId, nombre: r.nombre, icono: r.icono });

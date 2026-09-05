@@ -117,15 +117,23 @@ import { ToastService } from '../../shared/toast.service';
         border-radius: var(--radius-lg); padding: 16px;
       }
 
-      .cabecera { margin-bottom: 14px; }
+      .cabecera {
+        display: flex; flex-wrap: wrap; align-items: center;
+        justify-content: space-between; gap: 12px; margin-bottom: 14px;
+      }
+      .titulo { min-width: 0; }
       .titulo h2 { font-size: 16px; font-weight: 600; margin: 0; }
       .conteo { font-size: 12px; color: var(--text-muted); }
       .pend { color: var(--warning-text); font-weight: 600; }
 
-      .acciones-top { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+      .acciones-top {
+        display: flex; flex-wrap: wrap; gap: 8px;
+        align-items: center; justify-content: flex-end;
+      }
       .chip {
-        display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
-        font-size: 13px; padding: 8px 12px; border-radius: 999px; white-space: nowrap;
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        cursor: pointer; height: 36px; line-height: 1;
+        font-size: 13px; padding: 0 14px; border-radius: 999px; white-space: nowrap;
         border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
       }
       .chip:hover { background: var(--surface-1); }
@@ -199,9 +207,9 @@ import { ToastService } from '../../shared/toast.service';
       .leyenda span { display: inline-flex; align-items: center; gap: 5px; }
       .leyenda i { font-size: 15px; }
 
-      @media (min-width: 480px) {
-        .cabecera { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-        .acciones-top { margin-top: 0; flex-shrink: 0; }
+      @media (max-width: 479px) {
+        .cabecera { align-items: flex-start; }
+        .acciones-top { width: 100%; justify-content: flex-start; }
       }
       @media (min-width: 620px) {
         .item {

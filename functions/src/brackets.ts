@@ -926,13 +926,26 @@ export const calificarBracket = onCall(
 
         const bracketId = String(req.data?.bracketId ?? '');
         const ref = db.doc(`brackets/${bracketId}`);
-        const snap = await ref.get();
-        if (!snap.exists) throw new HttpsError('not-found', 'La eliminatoria no existe.');
-        const b = snap.data() as Record<string, unknown>;
 
-        if (b['estado'] !== 'finalizado') {
-            throw new HttpsError('failed-precondition', 'La eliminatoria todavía no termina.');
-        }
+        // Candado de idempotencia: marcar 'repartido' en una transacción ANTES
+        // de pagar nada. Si ya estaba marcado (un segundo "Publicar", un doble
+        // clic o un reintento), abortamos sin volver a repartir. Al ser
+        // transaccional también evita que dos llamadas simultáneas paguen doble.
+        const b = await db.runTransaction(async (tx) => {
+            const snap = await tx.get(ref);
+            if (!snap.exists) throw new HttpsError('not-found', 'La eliminatoria no existe.');
+            const datos = snap.data() as Record<string, unknown>;
+
+            if (datos['estado'] !== 'finalizado') {
+                throw new HttpsError('failed-precondition', 'La eliminatoria todavía no termina.');
+            }
+            if (datos['repartido'] === true) {
+                throw new HttpsError('failed-precondition', 'Esta eliminatoria ya fue calificada y repartida.');
+            }
+
+            tx.update(ref, { repartido: true });
+            return datos;
+        });
 
         const llaves = b['llaves'] as LlaveBk[];
 

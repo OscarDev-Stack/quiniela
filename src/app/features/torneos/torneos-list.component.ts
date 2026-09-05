@@ -1,11 +1,12 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { tap } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
 import { CargandoComponent } from '../../shared/cargando.component';
+import { EscanerQrComponent } from '../../shared/escaner-qr.component';
+import { InvitacionPendiente } from '../../shared/invitacion.util';
 import { apagarCargando } from '../../shared/cargando.util';
 import { TorneosService } from '../../core/services/torneos.service';
 import { BracketsService } from '../../core/services/brackets.service';
@@ -17,7 +18,7 @@ import { Bracket } from '../../core/models/bracket.model';
 @Component({
   selector: 'app-torneos-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, NavComponent, CargandoComponent],
+  imports: [CommonModule, NavComponent, CargandoComponent, EscanerQrComponent],
   template: `
     <div class="screen">
       <app-nav title="Torneos" />
@@ -28,13 +29,32 @@ import { Bracket } from '../../core/models/bracket.model';
         </button>
       </div>
 
+      <section class="lista-panel">
+      <nav class="tabs">
+        <button class="tab" [class.tab--on]="filtro() === 'En juego'" (click)="filtro.set('En juego')">
+          En juego <span class="tab-num">{{ conteo('En juego') }}</span>
+        </button>
+        <button class="tab" [class.tab--on]="filtro() === 'Abiertos'" (click)="filtro.set('Abiertos')">
+          Abiertos <span class="tab-num">{{ conteo('Abiertos') }}</span>
+        </button>
+        <button class="tab" [class.tab--on]="filtro() === 'Cerrados'" (click)="filtro.set('Cerrados')">
+          Cerrados <span class="tab-num">{{ conteo('Cerrados') }}</span>
+        </button>
+      </nav>
+
       @if (cargando()) {
         <app-cargando texto="Cargando torneos" />
       } @else if (visibles().length === 0 && bracketsVisibles().length === 0) {
         <div class="vacio">
           <i class="ti ti-tournament"></i>
-          <p>No participas en ningún torneo.</p>
-          <p class="pista">Los torneos y eliminatorias son por invitación: únete con el código que te compartan.</p>
+          @if (filtro() === 'En juego') {
+            <p>No hay torneos ni eliminatorias en juego ahora mismo.</p>
+          } @else if (filtro() === 'Abiertos') {
+            <p>No hay torneos ni eliminatorias abiertos a inscripción.</p>
+            <p class="pista">Los torneos y eliminatorias son por invitación: únete con el código que te compartan.</p>
+          } @else {
+            <p>Todavía no hay torneos ni eliminatorias finalizados.</p>
+          }
         </div>
       }
 
@@ -105,34 +125,26 @@ import { Bracket } from '../../core/models/bracket.model';
           </article>
         }
       }
+      </section>
 
-      <!-- Diálogo: unirse con código (torneo o eliminatoria) -->
+      <!-- Diálogo: unirse con código (escanear QR o escribir el código) -->
       @if (mostrarUnirse()) {
         <div class="overlay" (click)="cerrarUnirse()">
           <div class="dialogo" (click)="$event.stopPropagation()">
             <h3>Unirme con código</h3>
             <p class="dialogo-ayuda">
-              Escribe el código de invitación del torneo o la eliminatoria.
+              Escanea el QR de la invitación o escribe el código del torneo o la
+              eliminatoria.
             </p>
-            <label class="campo">
-              <span>Código de invitación</span>
-              <input
-                [(ngModel)]="codigo"
-                placeholder="ABC123"
-                maxlength="8"
-                autocapitalize="characters"
-                style="text-transform:uppercase"
-              />
-            </label>
+
+            <app-escaner-qr [autoNavegar]="false" (leido)="onEscaneado($event)" />
+
+            @if (ocupado()) {
+              <div class="uniendo"><i class="ti ti-loader-2"></i> Uniéndote…</div>
+            }
+
             <div class="dialogo-acciones">
-              <button class="btn" (click)="cerrarUnirse()">Cancelar</button>
-              <button
-                class="btn btn--primary"
-                [disabled]="ocupado() || !codigo.trim()"
-                (click)="unirse()"
-              >
-                {{ ocupado() ? 'Uniéndome…' : 'Unirme' }}
-              </button>
+              <button class="btn" (click)="cerrarUnirse()">Cerrar</button>
             </div>
           </div>
         </div>
@@ -162,14 +174,45 @@ import { Bracket } from '../../core/models/bracket.model';
         display: flex; align-items: center; justify-content: center; padding: 20px;
       }
       .dialogo {
-        width: 100%; max-width: 360px; background: var(--surface-2);
+        width: 100%; max-width: 400px; background: var(--surface-2);
         border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px;
+        max-height: 90vh; overflow-y: auto;
       }
       .dialogo h3 { margin: 0 0 6px; font-size: 17px; }
       .dialogo-ayuda { margin: 0 0 14px; font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
-      .campo { display: block; margin-bottom: 16px; }
-      .campo span { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
-      .dialogo-acciones { display: flex; gap: 8px; }
+      .uniendo {
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+        font-size: 13px; color: var(--text-muted); margin: 14px 0 0;
+      }
+      .uniendo i { font-size: 18px; animation: gira 1s linear infinite; }
+      @keyframes gira { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .uniendo i { animation: none; } }
+      .dialogo-acciones { display: flex; gap: 8px; margin-top: 16px; }
+
+      /* Tabs de filtro por estado (mismo patrón que la vista de Partidos). */
+      .tabs { display: flex; gap: 6px; margin-top: 8px; margin-bottom: 18px; }
+      .tab {
+        flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+        padding: 9px 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-2); color: var(--text-secondary);
+      }
+      .tab--on { background: var(--accent-fill); color: #fff; border-color: var(--accent-fill); }
+      .tab-num {
+        flex-shrink: 0; width: 22px; height: 22px; box-sizing: border-box;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11px; border-radius: 999px; background: rgba(0, 0, 0, 0.12);
+      }
+      .tab--on .tab-num { background: rgba(255, 255, 255, 0.25); }
+
+      /* Panel contenedor: agrupa pestañas, torneos y eliminatorias para que
+         no queden "volando" sueltos sobre el fondo. */
+      .lista-panel {
+        background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); padding: 14px 14px 4px; margin-bottom: 16px;
+      }
+      .lista-panel .card { background: var(--surface-1); }
+      .lista-panel .seccion { margin-top: 18px; }
 
       .card {
         background: var(--surface-2); border: 1px solid var(--border);
@@ -215,17 +258,39 @@ export class TorneosListComponent {
   private readonly contexto = inject(ContextoService);
   private readonly toast = inject(ToastService);
 
-  /* --- Unirme con código (torneo o eliminatoria) --- */
+  /* Filtro por estado, mismas tres pestañas que la vista de Partidos.
+     Arranca en 'Abiertos', igual que Partidos. */
+  readonly filtro = signal<'En juego' | 'Abiertos' | 'Cerrados'>('Abiertos');
+
+  /* --- Unirme con código (escanear QR o escribir el código) --- */
   readonly mostrarUnirse = signal(false);
   readonly ocupado = signal(false);
-  codigo = '';
 
   abrirUnirse(): void {
-    this.codigo = '';
     this.mostrarUnirse.set(true);
   }
   cerrarUnirse(): void {
     this.mostrarUnirse.set(false);
+  }
+
+  /**
+   * El escáner (QR o código escrito a mano) devolvió una invitación. Si trae un
+   * tipo explícito (grupo o eliminatoria por el deep-link), respetamos su ruta.
+   * Para un código suelto de torneo, lo resolvemos como antes: primero como
+   * torneo (pantalla de reglas), y si no existe, como eliminatoria.
+   */
+  onEscaneado(inv: InvitacionPendiente): void {
+    if (inv.tipo === 'grupo') {
+      this.cerrarUnirse();
+      this.router.navigate(['/unirse-grupo', inv.valor]);
+      return;
+    }
+    if (inv.tipo === 'bracket') {
+      this.cerrarUnirse();
+      this.router.navigate(['/unirse-elim', inv.valor]);
+      return;
+    }
+    this.unirse(inv.valor);
   }
 
   /**
@@ -234,8 +299,8 @@ export class TorneosListComponent {
    * reglas /unirse/:codigo, que muestra el costo antes de aceptar) y, si no
    * existe como torneo, lo intentamos como eliminatoria.
    */
-  async unirse(): Promise<void> {
-    const codigo = this.codigo.trim().toUpperCase();
+  async unirse(codigoEntrada: string): Promise<void> {
+    const codigo = (codigoEntrada ?? '').trim().toUpperCase();
     if (!codigo) return;
 
     this.ocupado.set(true);
@@ -301,29 +366,77 @@ export class TorneosListComponent {
     return 2; // finalizado y cualquier otro
   }
 
-  readonly visibles = computed(() => {
+  /**
+   * ¿El estado (de torneo o eliminatoria) cae dentro del chip activo?
+   * Mapea las etiquetas a los estados compartidos por ambos modelos:
+   *  En juego → en-curso · Abiertos → inscripcion (y armando) · Cerrados → finalizado.
+   * 'Todos' no filtra nada.
+   */
+  private pasaFiltro(estado: string): boolean {
+    switch (this.filtro()) {
+      case 'En juego':
+        return estado === 'en-curso';
+      case 'Abiertos':
+        return estado === 'inscripcion' || estado === 'armando';
+      default: // 'Cerrados'
+        return estado === 'finalizado';
+    }
+  }
+
+  /** Torneos del contexto activo, sin filtrar por el chip (base del conteo). */
+  private readonly torneosContexto = computed(() => {
     const ctx = this.contexto.grupoId(); // null = Global
-    return [...this.torneos()]
-      .filter((t) => (t.grupoId ?? null) === ctx)
-      .sort((a, b) => this.rangoEstado(a.estado) - this.rangoEstado(b.estado));
+    return this.torneos().filter((t) => (t.grupoId ?? null) === ctx);
   });
 
   /**
-   * Brackets del contexto activo: los MÍOS más las eliminatorias PÚBLICAS
-   * abiertas donde aún no estoy (sin duplicar), para que se puedan descubrir
-   * y unir desde aquí. Mismo orden por estado.
+   * Eliminatorias del contexto activo: las MÍAS más las PÚBLICAS abiertas
+   * donde aún no estoy (sin duplicar), para descubrirlas y unirse desde aquí.
+   * Base sin filtrar por chip, usada por la lista visible y por el conteo.
    */
-  readonly bracketsVisibles = computed(() => {
+  private readonly bracketsContexto = computed(() => {
     const ctx = this.contexto.grupoId();
     const mios = this.brackets().filter((b) => (b.grupoId ?? null) === ctx);
     const idsMios = new Set(mios.map((b) => b.id));
     const publicasNuevas = this.bracketsPublicos().filter(
       (b) => (b.grupoId ?? null) === ctx && !idsMios.has(b.id),
     );
-    return [...mios, ...publicasNuevas].sort(
-      (a, b) => this.rangoEstado(a.estado) - this.rangoEstado(b.estado),
-    );
+    return [...mios, ...publicasNuevas];
   });
+
+  readonly visibles = computed(() =>
+    [...this.torneosContexto()]
+      .filter((t) => this.pasaFiltro(t.estado))
+      .sort((a, b) => this.rangoEstado(a.estado) - this.rangoEstado(b.estado)),
+  );
+
+  readonly bracketsVisibles = computed(() =>
+    [...this.bracketsContexto()]
+      .filter((b) => this.pasaFiltro(b.estado))
+      .sort((a, b) => this.rangoEstado(a.estado) - this.rangoEstado(b.estado)),
+  );
+
+  /**
+   * Conteo combinado (torneos + eliminatorias) para el badge de cada chip.
+   * Cuenta según la etiqueta del chip, no según el filtro activo.
+   */
+  conteo(etiqueta: string): number {
+    const estados = [
+      ...this.torneosContexto().map((t) => t.estado),
+      ...this.bracketsContexto().map((b) => b.estado),
+    ];
+    const cae = (e: string): boolean => {
+      switch (etiqueta) {
+        case 'En juego':
+          return e === 'en-curso';
+        case 'Abiertos':
+          return e === 'inscripcion' || e === 'armando';
+        default: // 'Cerrados'
+          return e === 'finalizado';
+      }
+    };
+    return estados.filter(cae).length;
+  }
 
   /** ¿Está finalizado? Para atenuarlo visualmente. */
   finalizado(estado: string): boolean {

@@ -8,9 +8,11 @@ import {
     docData,
     addDoc,
     updateDoc,
+    getDocs,
     query,
     where,
     orderBy,
+    limit,
     arrayUnion,
     arrayRemove,
     serverTimestamp,
@@ -108,7 +110,12 @@ export class CompeticionesService {
     ): Promise<{
         numeroJornada: number;
         primeraHora: string;
-        partidos: Array<{ local: string; visitante: string; apiEventId?: string }>;
+        partidos: Array<{
+            local: string;
+            visitante: string;
+            apiEventId?: string;
+            fechaInicio?: string | null;
+        }>;
     }> {
         const fn = httpsCallable<
             { competicionId: string; numeroJornada: number },
@@ -116,7 +123,12 @@ export class CompeticionesService {
                 ok: boolean;
                 numeroJornada: number;
                 primeraHora: string;
-                partidos: Array<{ local: string; visitante: string; apiEventId?: string }>;
+                partidos: Array<{
+                    local: string;
+                    visitante: string;
+                    apiEventId?: string;
+                    fechaInicio?: string | null;
+                }>;
             }
         >(this.fns, 'traerJornadaApi');
         const res = await fn({ competicionId, numeroJornada });
@@ -149,18 +161,50 @@ export class CompeticionesService {
         });
     }
 
-    crearJornada(
+    /**
+     * Crea o SOBREESCRIBE la jornada con ese número. Si ya existe una jornada
+     * con el mismo `numero` en la competición, se actualiza (así no quedan dos
+     * "jornada 1" duplicadas). Devuelve `{ id, sobrescrita }`.
+     */
+    async crearJornada(
         competicionId: string,
         numero: number,
         cierraAt: Date,
-        partidos: Array<{ local: string; visitante: string; apiEventId?: string }>,
-    ) {
-        return addDoc(collection(this.db, `competiciones/${competicionId}/jornadas`), {
+        partidos: Array<{
+            local: string;
+            visitante: string;
+            apiEventId?: string;
+            fechaInicio?: string | null;
+        }>,
+    ): Promise<{ id: string; sobrescrita: boolean }> {
+        const col = collection(this.db, `competiciones/${competicionId}/jornadas`);
+        const nuevos = partidos.map((p) => ({
+            local: p.local,
+            visitante: p.visitante,
+            ...(p.apiEventId ? { apiEventId: p.apiEventId } : {}),
+            fechaInicio: p.fechaInicio ?? null,
+            resultado: null,
+        }));
+
+        // ¿Ya existe una jornada con ese número? Si sí, la sobrescribimos.
+        const existentes = await getDocs(query(col, where('numero', '==', numero), limit(1)));
+        if (!existentes.empty) {
+            const ref = existentes.docs[0].ref;
+            await updateDoc(ref, {
+                cierraAt,
+                estado: 'abierta',
+                partidos: nuevos,
+            });
+            return { id: ref.id, sobrescrita: true };
+        }
+
+        const ref = await addDoc(col, {
             numero,
             cierraAt,
             estado: 'abierta',
-            partidos: partidos.map((p) => ({ ...p, resultado: null })),
+            partidos: nuevos,
         });
+        return { id: ref.id, sobrescrita: false };
     }
 
     guardarResultados(competicionId: string, jornadaId: string, partidos: Jornada['partidos']) {

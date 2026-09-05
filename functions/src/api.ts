@@ -35,6 +35,7 @@ import {
 } from './sportsdb';
 import { avisar } from './notificaciones';
 import { ejecutarLiquidacion } from './partidos';
+import { calcularPreviaQuiniela } from './torneos';
 
 
 const API_BASE = 'https://api.football-data.org/v4';
@@ -620,6 +621,7 @@ export const traerJornadaApi = onCall({ ...opcionesCall, secrets: [sportsDbKey] 
             local: p.local,
             visitante: p.visitante,
             apiEventId: p.apiEventId,
+            fechaInicio: p.timestamp || null,
         })),
     };
 });
@@ -835,6 +837,24 @@ export const revisarJornadas = onSchedule(
 
                 await jDoc.ref.update({ partidos });
                 jornadasTocadas++;
+
+                // Recalcula la previa de la quiniela por puntos con los
+                // resultados recién precargados, para que los jugadores vean
+                // sus puntos parciales sin esperar a que el admin guarde a
+                // mano. Si falla, no bloquea: los resultados ya se guardaron.
+                try {
+                    const cartones = await calcularPreviaQuiniela(compDoc.id, j.numero, partidos);
+                    if (cartones > 0) {
+                        logger.info(
+                            `Previa quiniela recalculada: ${cartones} cartón(es) en ${compDoc.id} J${j.numero}.`,
+                        );
+                    }
+                } catch (e) {
+                    logger.warn(
+                        `No se pudo recalcular la previa de la quiniela en ${compDoc.id} J${j.numero}.`,
+                        e,
+                    );
+                }
             }
         }
 

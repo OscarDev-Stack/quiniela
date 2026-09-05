@@ -33,9 +33,51 @@ import {
     <div class="wrap">
       <h1>Eliminatorias</h1>
 
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">Eliminatorias</div>
+          <div class="stat-val">{{ delContexto().length }}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">En curso</div>
+          <div class="stat-val">{{ conteo('En juego') }}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Abiertas</div>
+          <div class="stat-val">{{ conteo('Abiertos') }}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Participantes</div>
+          <div class="stat-val">{{ totalParticipantes() }}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">En bolsas</div>
+          <div class="stat-val accent">{{ totalBolsas() | number }}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Finalizadas</div>
+          <div class="stat-val">{{ conteo('Cerrados') }}</div>
+        </div>
+      </div>
+
       <a class="btn btn--primary ancho-crear" routerLink="/admin/brackets/crear">
         <i class="ti ti-plus"></i> Crear eliminatoria
       </a>
+
+      <section class="lista-panel">
+        <h2 class="lista-title">Eliminatorias</h2>
+
+        <nav class="tabs">
+          <button class="tab" [class.tab--on]="filtro() === 'En juego'" (click)="filtro.set('En juego')">
+            En juego <span class="tab-num">{{ conteo('En juego') }}</span>
+          </button>
+          <button class="tab" [class.tab--on]="filtro() === 'Abiertos'" (click)="filtro.set('Abiertos')">
+            Abiertos <span class="tab-num">{{ conteo('Abiertos') }}</span>
+          </button>
+          <button class="tab" [class.tab--on]="filtro() === 'Cerrados'" (click)="filtro.set('Cerrados')">
+            Cerrados <span class="tab-num">{{ conteo('Cerrados') }}</span>
+          </button>
+        </nav>
 
       <!-- Lista y captura -->
       @for (b of brackets(); track b.id) {
@@ -160,7 +202,18 @@ import {
             }
           }
         </section>
+      } @empty {
+        <p class="vacio">
+          @if (filtro() === 'En juego') {
+            No hay eliminatorias en juego ahora mismo.
+          } @else if (filtro() === 'Abiertos') {
+            No hay eliminatorias abiertas a inscripción.
+          } @else {
+            Todavía no hay eliminatorias finalizadas.
+          }
+        </p>
       }
+      </section>
 
       <!-- Modal: elegir ganador de penales en un empate -->
       @if (penalesPend(); as p) {
@@ -224,6 +277,45 @@ import {
         display: flex; align-items: center; justify-content: center; gap: 6px;
         width: 100%; text-decoration: none; margin-bottom: 18px;
       }
+
+      /* Estadísticas (mismo patrón que Torneos/Partidos). */
+      .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+      .stat { background: var(--surface-1); border-radius: var(--radius); padding: 12px 14px; }
+      .stat-label { font-size: 12px; color: var(--text-secondary); }
+      .stat-val { font-size: 22px; font-weight: 600; }
+      .stat-val.accent { color: var(--accent-text); }
+      @media (max-width: 620px) {
+        .stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .stat-val { font-size: 19px; }
+      }
+
+      /* Tabs de filtro por estado (mismo patrón que la vista de Partidos). */
+      .tabs { display: flex; gap: 6px; margin-top: 8px; margin-bottom: 18px; }
+      .tab {
+        flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+        padding: 9px 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-2); color: var(--text-secondary);
+      }
+      .tab--on { background: var(--accent-fill); color: #fff; border-color: var(--accent-fill); }
+      .tab-num {
+        flex-shrink: 0; width: 22px; height: 22px; box-sizing: border-box;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11px; border-radius: 999px; background: rgba(0, 0, 0, 0.12);
+      }
+      .tab--on .tab-num { background: rgba(255, 255, 255, 0.25); }
+      .vacio { font-size: 14px; color: var(--text-muted); padding: 8px 0; }
+
+      /* Panel contenedor de la lista: agrupa pestañas y tarjetas para que no
+         queden "volando" sueltas sobre el fondo. */
+      .lista-panel {
+        background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: 12px; padding: 14px 16px 4px; margin-bottom: 14px;
+      }
+      .lista-title { font-size: 15px; font-weight: 600; margin: 0 0 12px; }
+      /* Tarjetas internas: fondo más tenue para distinguirlas del contenedor. */
+      .lista-panel .panel { background: var(--surface-1); }
+      .lista-panel .panel:last-of-type { margin-bottom: 10px; }
 
       .pen-fondo {
         position: fixed; inset: 0; z-index: 2000;
@@ -346,11 +438,62 @@ export class GestionarBracketsComponent {
 
   private readonly todos = toSignal(this.service.brackets(), { initialValue: [] as Bracket[] });
 
-  /** Eliminatorias del contexto activo (Global o el grupo elegido). */
-  readonly brackets = computed(() => {
+  /* Filtro por estado, mismas tres pestañas que la vista de Partidos.
+     Arranca en 'Abiertos', igual que Partidos. */
+  readonly filtro = signal<'En juego' | 'Abiertos' | 'Cerrados'>('Abiertos');
+
+  /**
+   * ¿El estado de la eliminatoria entra en la pestaña activa?
+   *  En juego → en-curso · Abiertos → inscripcion (y armando) · Cerrados → finalizado.
+   */
+  private pasaFiltro(estado: string): boolean {
+    switch (this.filtro()) {
+      case 'En juego':
+        return estado === 'en-curso';
+      case 'Abiertos':
+        return estado === 'inscripcion' || estado === 'armando';
+      default: // 'Cerrados'
+        return estado === 'finalizado';
+    }
+  }
+
+  /** Eliminatorias del contexto activo (Global o el grupo elegido), sin filtrar por pestaña. */
+  readonly delContexto = computed(() => {
     const ctx = this.contexto.grupoId();
     return this.todos().filter((b) => (b.grupoId ?? null) === ctx);
   });
+
+  /** Eliminatorias del contexto activo, ya filtradas por el chip activo. */
+  readonly brackets = computed(() => this.delContexto().filter((b) => this.pasaFiltro(b.estado)));
+
+  /** Cuántas eliminatorias hay para una pestaña (número del tab). */
+  conteo(etiqueta: string): number {
+    const lista = this.delContexto();
+    switch (etiqueta) {
+      case 'En juego':
+        return lista.filter((b) => b.estado === 'en-curso').length;
+      case 'Abiertos':
+        return lista.filter((b) => b.estado === 'inscripcion' || b.estado === 'armando').length;
+      default: // 'Cerrados'
+        return lista.filter((b) => b.estado === 'finalizado').length;
+    }
+  }
+
+  /**
+   * Total de participantes en las eliminatorias del contexto. En modo dueños
+   * se cuentan los dueños asignados; en modo pronóstico no tenemos la lista
+   * de inscritos en este componente, así que ese aporte queda en 0.
+   */
+  readonly totalParticipantes = computed(() =>
+    this.delContexto().reduce((suma, b) => suma + (b.duenos?.length ?? 0), 0),
+  );
+
+  /** Puntos acumulados en las bolsas de las eliminatorias no finalizadas. */
+  readonly totalBolsas = computed(() =>
+    this.delContexto()
+      .filter((b) => b.estado !== 'finalizado')
+      .reduce((suma, b) => suma + Number(b.bolsa ?? 0), 0),
+  );
   readonly abierto = signal<string | null>(null);
   readonly copiado = signal<string | null>(null);
   /** Qué paneles de participantes están desplegados (por id de bracket). */

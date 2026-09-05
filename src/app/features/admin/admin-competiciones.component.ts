@@ -233,12 +233,24 @@ import { ToastService } from '../../shared/toast.service';
                 <button class="quitar" (click)="quitarFila(c.id, $index)" aria-label="Quitar">
                   <i class="ti ti-x"></i>
                 </button>
+                @if (mostrandoFechas(c.id)) {
+                  <input
+                    class="fecha-partido"
+                    type="datetime-local"
+                    [(ngModel)]="fila.fechaInicio"
+                    title="Hora de inicio (solo informativa)"
+                  />
+                }
               </div>
             }
 
             <div class="acciones">
               <button class="btn sm" (click)="agregarFila(c.id)">
                 <i class="ti ti-plus"></i> Agregar partido
+              </button>
+              <button class="btn sm" (click)="alternarFechas(c.id)">
+                <i class="ti ti-clock"></i>
+                {{ mostrandoFechas(c.id) ? 'Ocultar horas' : 'Con hora de inicio' }}
               </button>
               @if (b(c.id).filas.length === 0) {
                 <button class="btn sm" (click)="llenarJornada(c)">
@@ -457,9 +469,14 @@ import { ToastService } from '../../shared/toast.service';
         display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;
       }
       .fila-partido {
-        display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+        display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;
       }
       .fila-partido select { flex: 1; min-width: 0; }
+      .fecha-partido {
+        flex-basis: 100%;
+        padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px;
+        background: var(--surface); color: var(--text-primary); font-size: 12px;
+      }
       .vs { font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
       .quitar {
         flex-shrink: 0; width: 34px; height: 34px; cursor: pointer;
@@ -569,6 +586,24 @@ export class AdminCompeticionesComponent {
   readonly resolviendo = signal(false);
   /** True mientras se consulta la API (traer jornada o resultados). */
   readonly trayendo = signal(false);
+  /** Competiciones donde el admin activó capturar la hora de cada partido. */
+  private readonly fechasAbiertas = signal<string[]>([]);
+
+  /** ¿Se muestran los campos de hora por partido en el borrador? */
+  mostrandoFechas(competicionId: string): boolean {
+    return this.fechasAbiertas().includes(competicionId);
+  }
+
+  /** Muestra u oculta el campo de hora de inicio en cada fila de partido. */
+  alternarFechas(competicionId: string): void {
+    const abiertas = this.fechasAbiertas();
+    this.fechasAbiertas.set(
+      abiertas.includes(competicionId)
+        ? abiertas.filter((id) => id !== competicionId)
+        : [...abiertas, competicionId],
+    );
+  }
+
   /** True mientras se refresca la tabla de posiciones desde la API. */
   readonly refrescandoTabla = signal(false);
   /** True mientras se importan los equipos de la liga. */
@@ -651,6 +686,7 @@ export class AdminCompeticionesComponent {
         local: p.local,
         visitante: p.visitante,
         ...(p.apiEventId ? { apiEventId: p.apiEventId } : {}),
+        ...(p.fechaInicio ? { fechaInicio: this.isoALocalInputExacto(p.fechaInicio) } : {}),
       }));
       let cierrePrellenado = '';
       if (r.primeraHora) {
@@ -787,12 +823,43 @@ export class AdminCompeticionesComponent {
     return `${fecha}T${hora}`;
   }
 
+  /**
+   * Igual que isoALocalInput pero SIN margen: la hora EXACTA de inicio del
+   * partido, en hora de México, para el input datetime-local de cada fila.
+   */
+  private isoALocalInputExacto(iso: string): string {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const fecha = d.toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
+    const hora = d.toLocaleTimeString('en-GB', {
+      timeZone: 'America/Mexico_City',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    return `${fecha}T${hora}`;
+  }
+
+  /** Convierte un valor de input datetime-local (hora MX) a ISO UTC. */
+  private localInputAIso(valor: string | undefined): string | null {
+    const v = (valor ?? '').trim();
+    if (!v) return null;
+    const d = new Date(v);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString();
+  }
+
   borrador: Record<
     string,
     {
       numero: number;
       cierra: string;
-      filas: Array<{ local: string; visitante: string; apiEventId?: string }>;
+      filas: Array<{
+        local: string;
+        visitante: string;
+        apiEventId?: string;
+        fechaInicio?: string;
+      }>;
     }
   > = {};
 
@@ -873,7 +940,12 @@ export class AdminCompeticionesComponent {
   b(competicionId: string): {
     numero: number;
     cierra: string;
-    filas: Array<{ local: string; visitante: string; apiEventId?: string }>;
+    filas: Array<{
+      local: string;
+      visitante: string;
+      apiEventId?: string;
+      fechaInicio?: string;
+    }>;
   } {
     if (!this.borrador[competicionId]) {
       this.borrador[competicionId] = { numero: 1, cierra: '', filas: [] };
@@ -1126,9 +1198,19 @@ export class AdminCompeticionesComponent {
     }
 
     const numero = Number(b.numero) || 1;
-    await this.service.crearJornada(c.id, numero, cierre, partidos);
+    const conFecha = partidos.map((p) => ({
+      local: p.local,
+      visitante: p.visitante,
+      ...(p.apiEventId ? { apiEventId: p.apiEventId } : {}),
+      fechaInicio: this.localInputAIso(p.fechaInicio),
+    }));
+    const r = await this.service.crearJornada(c.id, numero, cierre, conFecha);
     this.borrador[c.id] = { numero: numero + 1, cierra: '', filas: [] };
-    this.avisar(`Jornada ${numero} agregada con ${partidos.length} partido(s).`);
+    this.avisar(
+      r.sobrescrita
+        ? `Jornada ${numero} sobrescrita con ${partidos.length} partido(s).`
+        : `Jornada ${numero} agregada con ${partidos.length} partido(s).`,
+    );
   }
 
   async guardar(c: Competicion, j: Jornada): Promise<void> {
