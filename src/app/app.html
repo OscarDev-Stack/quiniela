@@ -1,4 +1,6 @@
-@if (hayActualizacion()) {
+@if (actualizando()) {
+<app-cargando texto="Actualizando" />
+} @else if (hayActualizacion()) {
 <div class="update">
     <span>Hay una versión nueva disponible.</span>
     <button (click)="recargar()">Actualizar</button>
