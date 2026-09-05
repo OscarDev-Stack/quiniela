@@ -58,8 +58,10 @@ import {
 
       @if (activo()) {
         <div class="video-wrap">
-          <video #video class="video" playsinline muted></video>
-          <div class="mira" aria-hidden="true"></div>
+          <div class="video-caja">
+            <video #video class="video" playsinline muted></video>
+            <div class="mira" aria-hidden="true"></div>
+          </div>
           <p class="pista">Buscando código…</p>
           <button class="btn btn--fantasma" (click)="detener()">Cancelar</button>
         </div>
@@ -123,30 +125,31 @@ import {
         margin: 0 0 14px;
       }
       .video-wrap {
-        position: relative;
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 10px;
       }
-      .video {
+      .video-caja {
+        position: relative;
         width: 100%;
-        max-width: 320px;
+        max-width: 300px;
         aspect-ratio: 1;
-        object-fit: cover;
         border-radius: 16px;
+        overflow: hidden;
         background: #000;
+      }
+      .video {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
       }
       .mira {
         position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 62%;
-        aspect-ratio: 1;
-        transform: translate(-50%, -50%);
-        border: 3px solid rgba(255, 255, 255, 0.85);
+        inset: 18%;
+        border: 3px solid rgba(255, 255, 255, 0.9);
         border-radius: 14px;
-        box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.28);
         pointer-events: none;
       }
       .pista {
@@ -269,9 +272,10 @@ export class EscanerQrComponent implements OnDestroy {
 
     this.activo.set(true);
 
-    // Esperamos a que Angular pinte el <video> antes de engancharlo.
-    await Promise.resolve();
-    const video = this.videoRef()?.nativeElement;
+    // Esperamos a que Angular pinte el <video> antes de engancharlo. Un solo
+    // microtask no siempre basta (depende del ciclo de detección de cambios),
+    // así que sondeamos el elemento un breve lapso hasta que exista.
+    const video = await this.esperarVideo();
     if (!video) {
       this.activo.set(false);
       this.error.set('No se pudo preparar la cámara.');
@@ -298,6 +302,29 @@ export class EscanerQrComponent implements OnDestroy {
       this.activo.set(false);
       this.error.set(this.mensajeError(e));
     }
+  }
+
+  /**
+   * Devuelve el <video> en cuanto Angular lo monta, sondeando cada frame hasta
+   * un máximo (~1s). Evita depender de un solo microtask, que a veces corre
+   * antes de que la vista se pinte y dejaba el elemento en undefined.
+   */
+  private esperarVideo(intentos = 60): Promise<HTMLVideoElement | null> {
+    return new Promise((resolve) => {
+      const buscar = (restantes: number) => {
+        const el = this.videoRef()?.nativeElement;
+        if (el) {
+          resolve(el);
+          return;
+        }
+        if (restantes <= 0) {
+          resolve(null);
+          return;
+        }
+        requestAnimationFrame(() => buscar(restantes - 1));
+      };
+      buscar(intentos);
+    });
   }
 
   detener(): void {
