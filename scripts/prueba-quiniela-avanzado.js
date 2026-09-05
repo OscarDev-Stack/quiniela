@@ -15,7 +15,7 @@
 const {
   projectId, db, saldoDe, comoUsuario, ok, esperarError,
   crearCompeticionConJornada, capturarResultadosJornada, arrancarTorneo,
-  marcarPrueba, leerReserva,
+  marcarPrueba, leerReserva, fijarSaldo,
 } = require('./_prueba-comun');
 
 const ADMIN = 'prueba_admin@quiniela.test';
@@ -99,11 +99,14 @@ async function casoDesempateExactos() {
   ];
   const { torneoId, codigo, competicionId, jornadaId, jornadaRef } = await nuevaQuiniela(partidos, { costoEntrada: 100 });
 
+  // Baseline determinista: fijamos saldos y los leemos ANTES de unirse.
+  await fijarSaldo(A, 5000);
+  await fijarSaldo(B, 5000);
+  const antesA = (await saldoDe(A)).puntos; // 5000 (antes de pagar la entrada)
+  const antesB = (await saldoDe(B)).puntos;
+
   await comoUsuario(A, 'unirseTorneo', { codigo });
   await comoUsuario(B, 'unirseTorneo', { codigo });
-
-  const antesA = (await saldoDe(A)).puntos;
-  const antesB = (await saldoDe(B)).puntos;
 
   await arrancarTorneo(torneoId);
   // A: 2-0 exacto (5) + 1-1 exacto (5) = 10, con 2 exactos.
@@ -132,12 +135,15 @@ async function casoEmpateTotal() {
   // 3 jugadores con costo 100 → bolsa 300. Los 3 aciertan IGUAL (mismo cartón).
   const { torneoId, codigo, competicionId, jornadaId, jornadaRef } = await nuevaQuiniela(partidos, { costoEntrada: 100 });
 
-  for (const e of [A, B, C]) await comoUsuario(e, 'unirseTorneo', { codigo });
+  // Baseline determinista ANTES de unirse: cada quien paga 100 y recupera 100,
+  // así el neto debe ser 0 respecto a este saldo.
+  for (const e of [A, B, C]) await fijarSaldo(e, 5000);
   const antes = {
     [A]: (await saldoDe(A)).puntos,
     [B]: (await saldoDe(B)).puntos,
     [C]: (await saldoDe(C)).puntos,
   };
+  for (const e of [A, B, C]) await comoUsuario(e, 'unirseTorneo', { codigo });
   const reservaAntes = await leerReserva();
 
   await arrancarTorneo(torneoId);

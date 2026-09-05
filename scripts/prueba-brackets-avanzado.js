@@ -65,9 +65,10 @@ async function casoAceptar() {
   const saldoDoble = (await saldoDe(A)).puntos;
   marca(ok(saldoDoble === saldoDespues, `segundo aceptar no cobra doble (${saldoDespues} = ${saldoDoble})`));
 
-  // Un solo movimiento 'bracket-entrada' en el ledger.
-  const entradas = await contarLedger(uidA, 'bracket-entrada');
-  marca(ok(entradas === 1, `un solo movimiento 'bracket-entrada' (hay ${entradas})`));
+  // Un solo movimiento 'bracket-entrada' EN ESTE bracket (el ledger acumula
+  // movimientos de otros brackets del mismo usuario, por eso filtramos).
+  const entradas = await contarLedger(uidA, 'bracket-entrada', { bracketId });
+  marca(ok(entradas === 1, `un solo movimiento 'bracket-entrada' en este bracket (hay ${entradas})`));
 
   // Rechazar tras aceptar: rechazado.
   marca(await esperarError(

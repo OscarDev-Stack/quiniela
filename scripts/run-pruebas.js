@@ -9,6 +9,11 @@
  *   node scripts/run-pruebas.js            (seed + todas las pruebas)
  *   node scripts/run-pruebas.js --no-seed  (solo las pruebas; usa los usuarios ya sembrados)
  *
+ * Entre pruebas hace una pausa (por defecto 20 s) para no agotar la cuota de
+ * verificación de contraseñas de Firebase Auth. Ajústala con PAUSA_PRUEBAS:
+ *   PAUSA_PRUEBAS=0  node scripts/run-pruebas.js   (sin pausa; puede dar quota-exceeded)
+ *   PAUSA_PRUEBAS=30 node scripts/run-pruebas.js   (pausa más larga)
+ *
  * REQUISITOS: scripts/service-account-dev.json y scripts/config-dev.json
  * (mismos que los demás scripts). Candado anti-producción incluido.
  */
@@ -17,6 +22,19 @@ const { spawnSync } = require('child_process');
 const path = require('path');
 
 const noSeed = process.argv.includes('--no-seed');
+
+// Pausa entre pruebas (segundos). Firebase Auth limita cuántas verificaciones
+// de contraseña acepta por ventana de tiempo; correr las 11 pruebas seguidas
+// (cada una con varios logins) puede disparar 'auth/quota-exceeded'. Una pausa
+// breve entre pruebas deja que la cuota se recupere. Ajustable con la variable
+// de entorno PAUSA_PRUEBAS (0 para desactivar). Por defecto 20 s.
+const PAUSA_SEG = Number(process.env.PAUSA_PRUEBAS ?? 20);
+
+/** Pausa bloqueante (spawnSync ya es síncrono, así que no usamos async). */
+function dormir(segundos) {
+  if (segundos <= 0) return;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, segundos * 1000);
+}
 
 // Orden: primero el seed (si aplica), luego las pruebas.
 const pasos = [];
@@ -57,6 +75,13 @@ for (const paso of pasos) {
   if (paso.archivo === 'seed-dev.js' && !paso_ok) {
     console.error('\n❌ El seed falló. Revisa las credenciales de dev. Abortando.\n');
     process.exit(1);
+  }
+
+  // Respiro entre pruebas para no agotar la cuota de logins de Firebase Auth.
+  const esUltimo = paso === pasos[pasos.length - 1];
+  if (!esUltimo && PAUSA_SEG > 0) {
+    console.log(`\n⏳ Pausa de ${PAUSA_SEG}s (evita 'auth/quota-exceeded')...`);
+    dormir(PAUSA_SEG);
   }
 }
 

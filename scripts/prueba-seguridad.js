@@ -18,7 +18,7 @@
 
 const {
   projectId, comoUsuario, ok, esperarError, uidDe,
-  crearPartido, crearBracketDuenos, crearUsuarioSinValidar,
+  crearPartido, crearBracketDuenos, crearUsuarioSinValidar, crearCompeticionConJornada,
 } = require('./_prueba-comun');
 
 const ADMIN = 'prueba_admin@quiniela.test';
@@ -76,9 +76,14 @@ async function casoSoloAdmin() {
     'permission-denied', 'usuario común NO puede eliminar usuarios',
   ));
 
-  // Resolver una jornada de competición (solo admin/gestor).
+  // Resolver una jornada de competición (solo admin/gestor). Usamos una
+  // competición REAL: si mandáramos ids inexistentes, fallaría antes con
+  // 'not-found' (la existencia se valida antes que el permiso).
+  const { competicionId, jornadaId } = await crearCompeticionConJornada([
+    { local: 'América', visitante: 'Guadalajara' },
+  ]);
   marca(await esperarError(
-    () => comoUsuario(A, 'resolverJornadaCompeticion', { competicionId: 'x', jornadaId: 'y' }),
+    () => comoUsuario(A, 'resolverJornadaCompeticion', { competicionId, jornadaId }),
     'permission-denied', 'usuario común NO puede resolver jornadas',
   ));
 }

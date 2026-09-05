@@ -70,16 +70,31 @@ async function uidDe(email) {
   return (await authAdmin.getUserByEmail(email)).uid;
 }
 
-/** Llama a una función autenticándose como el usuario dado. */
+/**
+ * Llama a una función autenticándose como el usuario dado.
+ *
+ * Cachea la sesión: solo hace signIn cuando CAMBIA el usuario respecto a la
+ * llamada anterior. Así el suite completo hace ~1 login por usuario en vez de
+ * uno por llamada, evitando 'auth/quota-exceeded' (Firebase limita cuántas
+ * verificaciones de contraseña acepta por ventana de tiempo).
+ */
+let _emailActual = null;
 async function comoUsuario(email, nombreFn, datos) {
-  await signInWithEmailAndPassword(authCliente, email, PASSWORD);
-  try {
-    const fn = httpsCallable(functions, nombreFn);
-    const res = await fn(datos);
-    return res.data;
-  } finally {
-    await signOut(authCliente);
+  if (_emailActual !== email) {
+    // Cambiamos de usuario: cerramos la sesión anterior (si había) y entramos.
+    if (authCliente.currentUser) await signOut(authCliente).catch(() => undefined);
+    await signInWithEmailAndPassword(authCliente, email, PASSWORD);
+    _emailActual = email;
   }
+  const fn = httpsCallable(functions, nombreFn);
+  const res = await fn(datos);
+  return res.data;
+}
+
+/** Cierra la sesión cacheada. Útil al final de una prueba (opcional). */
+async function cerrarSesion() {
+  if (authCliente.currentUser) await signOut(authCliente).catch(() => undefined);
+  _emailActual = null;
 }
 
 /** Aserción con log. Devuelve el booleano para poder acumular. */
@@ -224,13 +239,14 @@ async function leerReserva() {
   return Number(snap.data()?.['total'] ?? 0);
 }
 
-/** Cuenta cuántos movimientos de un tipo tiene un usuario en el ledger. */
-async function contarLedger(uid, tipo) {
-  const snap = await db
-    .collection('ledger')
-    .where('uid', '==', uid)
-    .where('tipo', '==', tipo)
-    .get();
+/** Cuenta cuántos movimientos de un tipo tiene un usuario en el ledger.
+ *  Si se pasa `filtros` (p. ej. { bracketId } o { torneoId }), acota a esos. */
+async function contarLedger(uid, tipo, filtros = {}) {
+  let q = db.collection('ledger').where('uid', '==', uid).where('tipo', '==', tipo);
+  for (const [campo, valor] of Object.entries(filtros)) {
+    q = q.where(campo, '==', valor);
+  }
+  const snap = await q.get();
   return snap.size;
 }
 
@@ -335,6 +351,7 @@ module.exports = {
   saldoDe,
   uidDe,
   comoUsuario,
+  cerrarSesion,
   ok,
   crearCompeticionConJornada,
   capturarResultadosJornada,

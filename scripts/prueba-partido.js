@@ -91,15 +91,18 @@ async function saldoDe(email) {
 }
 
 /** Llama a una función autenticándose como el usuario dado. */
+// Cachea la sesión: solo re-loguea cuando cambia el usuario, para no agotar
+// la cuota de verificación de contraseñas de Firebase (auth/quota-exceeded).
+let _emailActual = null;
 async function comoUsuario(email, nombreFn, datos) {
-  await signInWithEmailAndPassword(authCliente, email, PASSWORD);
-  try {
-    const fn = httpsCallable(functions, nombreFn);
-    const res = await fn(datos);
-    return res.data;
-  } finally {
-    await signOut(authCliente);
+  if (_emailActual !== email) {
+    if (authCliente.currentUser) await signOut(authCliente).catch(() => undefined);
+    await signInWithEmailAndPassword(authCliente, email, PASSWORD);
+    _emailActual = email;
   }
+  const fn = httpsCallable(functions, nombreFn);
+  const res = await fn(datos);
+  return res.data;
 }
 
 function ok(cond, msg) {

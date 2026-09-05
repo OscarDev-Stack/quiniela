@@ -128,12 +128,17 @@ async function casoEquipoRepetido() {
 
   await comoUsuario(A, 'unirseTorneo', { codigo });
   await arrancarTorneo(torneoId);
-  await comoUsuario(A, 'guardarPick', { torneoId, equipo: 'Monterrey' });
 
-  // Volver a elegir Monterrey en la misma jornada: ya lo tiene marcado como usado.
+  // El equipo se marca "usado" al RESOLVER la jornada, no al guardar el pick.
+  // Para probar la guarda de "no repetir", sembramos equiposUsados directamente
+  // (simulando que Monterrey ya se usó en una jornada anterior).
+  const ua = (await saldoDe(A)).uid;
+  await db.doc(`torneos/${torneoId}/participantes/${ua}`).update({ equiposUsados: ['Monterrey'] });
+
+  // Volver a elegir Monterrey: ya está en equiposUsados → rechazado.
   marca(await esperarError(
     () => comoUsuario(A, 'guardarPick', { torneoId, equipo: 'Monterrey' }),
-    'failed-precondition', 'repetir el mismo equipo rechazado',
+    'failed-precondition', 'repetir un equipo ya usado rechazado',
   ));
 
   // Un equipo que no juega en la jornada: invalid-argument.
