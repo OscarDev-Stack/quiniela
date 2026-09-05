@@ -155,6 +155,28 @@ export class CompeticionesService {
         return res.data;
     }
 
+    /**
+     * Rellena las fechas (y el idEvent) que faltaban en los partidos de una
+     * jornada ya guardada, volviendo a consultar la API. Solo completa huecos:
+     * no toca resultados, pronósticos ni las horas ya capturadas. Devuelve la
+     * jornada con los partidos actualizados y cuántos se completaron.
+     */
+    async completarFechasJornadaApi(
+        competicionId: string,
+        jornadaId: string,
+    ): Promise<{
+        numero: number;
+        completados: number;
+        partidos: Jornada['partidos'];
+    }> {
+        const fn = httpsCallable<
+            { competicionId: string; jornadaId: string },
+            { ok: boolean; numero: number; completados: number; partidos: Jornada['partidos'] }
+        >(this.fns, 'completarFechasJornadaApi');
+        const res = await fn({ competicionId, jornadaId });
+        return res.data;
+    }
+
     cambiarGestor(competicionId: string, uid: string, agregar: boolean) {
         return updateDoc(doc(this.db, 'competiciones', competicionId), {
             gestores: agregar ? arrayUnion(uid) : arrayRemove(uid),
