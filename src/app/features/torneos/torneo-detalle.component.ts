@@ -301,6 +301,20 @@ import { StatsService } from '../../shared/stats.service';
           </section>
         }
 
+        <!-- SURVIVOR: tu elección de la jornada, destacada arriba con el escudo grande. -->
+        @if (!esQuiniela() && t.estado === 'en-curso' && miPick(); as p) {
+          <section class="hero-pick">
+            <span class="hero-pick-etq">Tu elección · Jornada {{ p.jornada }}</span>
+            <app-escudo class="hero-pick-escudo" [equipo]="p.equipo" [size]="72" />
+            <span class="hero-pick-eq">{{ p.equipo }}</span>
+            @if (puedeElegir()) {
+              <span class="hero-pick-nota">Puedes cambiarla mientras la jornada siga abierta.</span>
+            } @else {
+              <span class="hero-pick-nota">Jornada cerrada. ¡Suerte!</span>
+            }
+          </section>
+        }
+
         @if (!esQuiniela() && t.estado === 'en-curso' && jornadaActual(); as j) {
           <section class="panel p-jornada">
             <div class="panel-head">
@@ -316,12 +330,6 @@ import { StatsService } from '../../shared/stats.service';
                 </span>
               }
             </div>
-
-            @if (miPick(); as p) {
-              <div class="elegido">
-                <i class="ti ti-check"></i> Elegiste <strong>{{ p.equipo }}</strong>
-              </div>
-            }
 
             @if (puedeElegir()) {
               @if (!miPick()) {
@@ -368,14 +376,6 @@ import { StatsService } from '../../shared/stats.service';
               }
             }
           </section>
-        }
-
-        @if (t.estado === 'en-curso' && jornadaActual(); as j) {
-          <app-partidos-jornada
-            class="p-partidos"
-            [jornada]="j"
-            [miEquipo]="miPick()?.equipo ?? null"
-          />
         }
 
         @if (!esQuiniela() && yo() && yo()!.vivo) {
@@ -558,9 +558,19 @@ import { StatsService } from '../../shared/stats.service';
             }
           }
 
-          <!-- ELIMINADOS -->
+          <!-- ELIMINADOS (colapsados por defecto) -->
           @if (eliminados().length > 0) {
-            <div class="grupo-titulo grupo-titulo--fuera">Eliminados</div>
+            <button
+              class="grupo-titulo grupo-titulo--fuera grupo-titulo--boton"
+              (click)="verEliminados.set(!verEliminados())"
+            >
+              <span>Eliminados · {{ eliminados().length }}</span>
+              <i class="ti"
+                [class.ti-chevron-down]="!verEliminados()"
+                [class.ti-chevron-up]="verEliminados()"></i>
+            </button>
+
+            @if (verEliminados()) {
             @for (p of eliminados(); track p.id) {
               <div class="jugador jugador--fuera" [class.jugador--yo]="p.id === miUid()">
                 <div class="jug-cab">
@@ -582,8 +592,18 @@ import { StatsService } from '../../shared/stats.service';
                 }
               </div>
             }
+            }
           }
         </section>
+        }
+
+        <!-- Partidos de la jornada: al final, como contexto de consulta. -->
+        @if (t.estado === 'en-curso' && jornadaActual(); as j) {
+          <app-partidos-jornada
+            class="p-partidos"
+            [jornada]="j"
+            [miEquipo]="miPick()?.equipo ?? null"
+          />
         }
 
         @if (mostrarTablaLiga() && competicion(); as comp) {
@@ -615,19 +635,23 @@ import { StatsService } from '../../shared/stats.service';
       .flujo { display: flex; flex-direction: column; }
       .flujo > * { order: 5; }
       .flujo > .franja { order: 0; }
-      .flujo > .p-jornada { order: 1; }
-      .flujo > .p-partidos { order: 2; }
+      /* Hero de la elección (survivor): justo bajo la franja. */
+      .flujo > .hero-pick { order: 1; }
+      .flujo > .p-jornada { order: 2; }
       .flujo > .p-equipos { order: 3; }
       .flujo > .p-jugadores { order: 6; }
+      /* Partidos de la jornada: al final, como contexto de consulta. */
+      .flujo > .p-partidos { order: 7; }
       .flujo > .reglas-panel { order: 9; }
       /* El resultado final (ganaste / terminó) siempre justo bajo la franja. */
       .flujo > .p-final { order: 0; }
       .flujo--cerrada > .p-final { order: 0; }
 
-      .flujo--cerrada > .p-partidos { order: 1; }
+      /* Jornada cerrada: participantes primero, partidos al final. */
       .flujo--cerrada > .p-jugadores { order: 2; }
       .flujo--cerrada > .p-jornada { order: 3; }
       .flujo--cerrada > .p-equipos { order: 4; }
+      .flujo--cerrada > .p-partidos { order: 7; }
 
       .franja {
         display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;
@@ -837,6 +861,33 @@ import { StatsService } from '../../shared/stats.service';
       .equipo:hover:not(:disabled) { border-color: var(--accent-fill); background: var(--accent-bg); }
       .equipo:disabled { opacity: 0.5; }
       .usados { font-size: 11px; color: var(--text-muted); margin: 12px 0 0; }
+
+      /* Hero de la elección (survivor): escudo grande y destacado. */
+      .hero-pick {
+        display: flex; flex-direction: column; align-items: center; gap: 8px;
+        text-align: center; margin-bottom: 16px; padding: 20px 16px;
+        border: 1px solid var(--accent-fill);
+        border-radius: 16px;
+        background: linear-gradient(180deg,
+          color-mix(in srgb, var(--accent-fill) 14%, transparent),
+          var(--surface-2));
+      }
+      .hero-pick-etq {
+        font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+        color: var(--accent-text);
+      }
+      .hero-pick-escudo {
+        filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.18));
+      }
+      .hero-pick-eq { font-size: 20px; font-weight: 800; color: var(--text-primary); }
+      .hero-pick-nota { font-size: 12px; color: var(--text-secondary); }
+
+      /* Botón para plegar/desplegar los eliminados. */
+      .grupo-titulo--boton {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        width: 100%; background: none; border: none; cursor: pointer;
+        padding: 0;
+      }
 
       .elegido { display: flex; align-items: center; gap: 8px; font-size: 14px;
         background: var(--accent-bg); color: var(--accent-text);
@@ -1235,6 +1286,9 @@ export class TorneoDetalleComponent {
   /** Cartones de todos en la jornada. El tablero los ordena. */
   private readonly quinielasSignal = signal<Quiniela[]>([]);
   readonly quinielasJornada = this.quinielasSignal.asReadonly();
+
+  /** Eliminados colapsados por defecto en la lista de participantes. */
+  readonly verEliminados = signal(false);
 
   /* ---- Historial de jornadas ---- */
   readonly verHistorial = signal(false);
