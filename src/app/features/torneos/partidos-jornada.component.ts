@@ -18,8 +18,12 @@ import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
         <span class="restantes">{{ jugados() }} de {{ jornada().partidos.length }} jugados</span>
       </div>
 
-      @for (p of jornada().partidos; track $index) {
-        <div class="encuentro" [class.encuentro--mio]="esMio(p)">
+      @for (p of partidosOrdenados(); track p.local + '|' + p.visitante) {
+        <div
+          class="encuentro"
+          [class.encuentro--mio]="esMio(p)"
+          [class.encuentro--vivo]="enJuego(p)"
+        >
           <span class="lado" [class.lado--gano]="p.resultado === 'local'">
             <span class="nom">{{ p.local }}</span>
             <app-escudo [equipo]="p.local" [size]="22" />
@@ -28,6 +32,9 @@ import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
           <span class="marcador">
             @if (p.resultado === 'pospuesto') {
               <span class="apl">Apl.</span>
+            } @else if (enJuego(p)) {
+              <span class="vivo-marca">{{ p.vivoLocal }}<span class="sep">-</span>{{ p.vivoVisitante }}</span>
+              <span class="vivo-etq"><span class="live-dot" aria-hidden="true"></span> En juego</span>
             } @else if (tieneMarcador(p)) {
               {{ p.golesLocal }}<span class="sep">-</span>{{ p.golesVisitante }}
             } @else {
@@ -64,6 +71,29 @@ import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
       .encuentro:last-child { border-bottom: none; }
       .encuentro--mio { background: var(--accent-bg); }
 
+      /* En juego: marco resaltado para que salte a la vista. */
+      .encuentro--vivo {
+        border: 1px solid #d63b3b;
+        background: color-mix(in srgb, #d63b3b 8%, transparent);
+        margin-bottom: 6px;
+      }
+      .vivo-marca { color: #d63b3b; font-weight: 800; }
+      .vivo-etq {
+        display: flex; align-items: center; justify-content: center; gap: 4px;
+        font-size: 10px; font-weight: 700; color: #d63b3b; margin-top: 1px;
+      }
+      .vivo-etq .live-dot {
+        width: 6px; height: 6px; border-radius: 50%; background: #d63b3b;
+        box-shadow: 0 0 0 0 rgba(214, 59, 59, 0.6);
+        animation: latido-partido 1.4s ease-out infinite;
+      }
+      @keyframes latido-partido {
+        0% { box-shadow: 0 0 0 0 rgba(214, 59, 59, 0.6); }
+        70% { box-shadow: 0 0 0 5px rgba(214, 59, 59, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(214, 59, 59, 0); }
+      }
+      @media (prefers-reduced-motion: reduce) { .vivo-etq .live-dot { animation: none; } }
+
       .lado {
         display: flex; align-items: center; justify-content: flex-end; gap: 7px;
         color: var(--text-secondary); min-width: 0;
@@ -92,8 +122,37 @@ export class PartidosJornadaComponent {
       this.jornada().partidos.filter((p) => !!p.resultado && p.resultado !== 'pospuesto').length,
   );
 
+  /**
+   * Partidos ordenados para dar contexto de un vistazo: primero los que están
+   * EN JUEGO (marcador en vivo, sin resultado final), luego los ya jugados,
+   * y al final los pendientes/aplazados. Conserva el orden original dentro de
+   * cada grupo. No muta el arreglo de entrada.
+   */
+  readonly partidosOrdenados = computed(() => {
+    const rango = (p: PartidoJornada): number => {
+      if (this.enJuego(p)) return 0; // en juego, arriba
+      if (!!p.resultado && p.resultado !== 'pospuesto') return 1; // jugado
+      return 2; // pendiente o aplazado
+    };
+    return [...this.jornada().partidos]
+      .map((p, i) => ({ p, i }))
+      .sort((a, b) => rango(a.p) - rango(b.p) || a.i - b.i)
+      .map((x) => x.p);
+  });
+
   tieneMarcador(p: PartidoJornada): boolean {
     return typeof p.golesLocal === 'number' && typeof p.golesVisitante === 'number';
+  }
+
+  /**
+   * ¿El partido está EN JUEGO ahora? Solo lo sabemos para partidos con marcador
+   * en vivo (los de ligas con API): tiene vivoLocal/vivoVisitante y todavía no
+   * un resultado final. Para partidos sin dato en vivo, no se puede afirmar, así
+   * que caen en jugado/pendiente según su resultado.
+   */
+  enJuego(p: PartidoJornada): boolean {
+    if (p.resultado && p.resultado !== 'pospuesto') return false; // ya tiene final
+    return typeof p.vivoLocal === 'number' && typeof p.vivoVisitante === 'number';
   }
 
   esMio(p: PartidoJornada): boolean {
