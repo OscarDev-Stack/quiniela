@@ -132,14 +132,36 @@ export class App {
 
         // Si limpiamos un registro roto, recargamos UNA sola vez para que el
         // SW de Angular retome el control de inmediato (si no, tardaría hasta
-        // que el usuario cierre todas las pestañas). El flag en sessionStorage
-        // evita cualquier bucle de recarga.
-        const YA = 'sw-messaging-limpiado';
-        if (desregistrado && !sessionStorage.getItem(YA)) {
-          sessionStorage.setItem(YA, '1');
+        // que el usuario cierre todas las pestañas).
+        //
+        // Anti-bucle: solo recargamos si puedeRecargarSinCiclar() confirma que
+        // logró dejar (y releer) una marca en sessionStorage. Si el storage no
+        // es confiable, NO recargamos, para no arriesgar un ciclo.
+        if (desregistrado && this.puedeRecargarSinCiclar()) {
           location.reload();
         }
       })
       .catch(() => undefined);
+  }
+
+  /**
+   * Decide si es seguro recargar tras limpiar el SW roto, sin riesgo de bucle.
+   * Devuelve true SOLO si logramos dejar la marca en sessionStorage (y no
+   * estaba ya puesta). Si el storage falla o ya recargamos antes, devuelve
+   * false: preferimos NO recargar (el usuario se recupera igual al reabrir)
+   * antes que arriesgar un ciclo de recargas.
+   */
+  private puedeRecargarSinCiclar(): boolean {
+    const YA = 'sw-messaging-limpiado';
+    try {
+      if (sessionStorage.getItem(YA)) return false;
+      sessionStorage.setItem(YA, '1');
+      // Verificamos que de verdad quedó escrito (algunos navegadores en modo
+      // privado aceptan setItem pero no persisten).
+      return sessionStorage.getItem(YA) === '1';
+    } catch {
+      // Sin storage confiable, no arriesgamos recarga automática.
+      return false;
+    }
   }
 }
