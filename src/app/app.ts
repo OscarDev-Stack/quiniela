@@ -129,12 +129,26 @@ export class App {
     };
     buscar();
     document.addEventListener('visibilitychange', buscar);
+
+    // iOS en modo standalone restaura la PWA desde el bfcache: la página vuelve
+    // tal cual estaba, sin re-ejecutar el arranque de Angular y sin disparar
+    // visibilitychange. Con eso, ni el buscar() inicial ni el del foco llegan a
+    // correr, y el dispositivo se queda pegado en la versión vieja aunque el
+    // servidor ya tenga una nueva. El evento pageshow SÍ llega en esa
+    // restauración, con persisted en true (en una carga normal viene en false),
+    // así que es el único momento fiable para volver a preguntar por la versión.
+    const alRestaurar = (e: PageTransitionEvent) => {
+      if (e.persisted) buscar();
+    };
+    window.addEventListener('pageshow', alRestaurar);
+
     const intervalo = setInterval(buscar, 30 * 60 * 1000);
 
     inject(DestroyRef).onDestroy(() => {
       subVersion.unsubscribe();
       subUnrec.unsubscribe();
       document.removeEventListener('visibilitychange', buscar);
+      window.removeEventListener('pageshow', alRestaurar);
       clearInterval(intervalo);
     });
   }
