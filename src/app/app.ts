@@ -9,6 +9,7 @@ import { NovedadesComponent } from './shared/novedades.component';
 import { ToastsComponent } from './shared/toasts.component';
 import { CargandoComponent } from './shared/cargando.component';
 import { NovedadesService } from './shared/novedades.service';
+import { ActualizacionService } from './shared/actualizacion.service';
 import { limpiarInvitacion } from './shared/invitacion.util';
 import { UserService } from './core/services/user.service';
 import { StatsService } from './shared/stats.service';
@@ -29,6 +30,7 @@ export class App {
   protected readonly title = signal('quiniela');
 
   private readonly updates = inject(SwUpdate);
+  private readonly actualizacion = inject(ActualizacionService);
   private readonly novedades = inject(NovedadesService);
   private readonly router = inject(Router);
   private readonly users = inject(UserService);
@@ -91,6 +93,30 @@ export class App {
     // desregistramos si su scope es exactamente el origen '/', sin tocar el
     // registro de Angular ni el de messaging en su scope aislado.
     this.limpiarSwMessagingEnRaiz();
+
+    // Detección de versión INDEPENDIENTE del Service Worker: consulta
+    // /version.json (fuera del bundle, sin caché) y compara con la versión
+    // local. Es el respaldo confiable para iOS, donde el SW a veces no detecta
+    // nada y el usuario se queda pegado en una versión vieja. Cuando el JSON
+    // reporta algo nuevo, encendemos el mismo banner "Actualizar" de siempre.
+    const revisarVersionRemota = () => {
+      if (document.visibilityState !== 'visible') return;
+      this.actualizacion.revisar().then(() => {
+        if (this.actualizacion.hayNueva()) this.hayActualizacion.set(true);
+      });
+    };
+    revisarVersionRemota();
+    document.addEventListener('visibilitychange', revisarVersionRemota);
+    const alRestaurarVersion = (e: PageTransitionEvent) => {
+      if (e.persisted) revisarVersionRemota();
+    };
+    window.addEventListener('pageshow', alRestaurarVersion);
+    const intervaloVersion = setInterval(revisarVersionRemota, 30 * 60 * 1000);
+    inject(DestroyRef).onDestroy(() => {
+      document.removeEventListener('visibilitychange', revisarVersionRemota);
+      window.removeEventListener('pageshow', alRestaurarVersion);
+      clearInterval(intervaloVersion);
+    });
 
     if (!this.updates.isEnabled) return;
 
@@ -187,7 +213,19 @@ export class App {
       setTimeout(() => location.reload(), Math.max(0, restante));
     };
 
-    this.updates.activateUpdate().then(recargarTrasMinimo).catch(recargarTrasMinimo);
+    // Antes de activar, forzamos un checkForUpdate(): si la versión nueva la
+    // detectó /version.json pero el SW todavía no la había descargado (caso
+    // típico en iOS), este check la baja para que activateUpdate() tenga algo
+    // real que aplicar. Si el SW está deshabilitado o falla, recargamos igual:
+    // una recarga limpia suele bastar para que el navegador re-traiga assets.
+    const activarYRecargar = () =>
+      this.updates.activateUpdate().then(recargarTrasMinimo).catch(recargarTrasMinimo);
+
+    if (this.updates.isEnabled) {
+      this.updates.checkForUpdate().then(activarYRecargar).catch(activarYRecargar);
+    } else {
+      recargarTrasMinimo();
+    }
   }
 
   /**
