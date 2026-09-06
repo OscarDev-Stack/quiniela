@@ -85,3 +85,26 @@ sw = sw
 fs.writeFileSync(destino, sw, 'utf8');
 console.log(`[generar-sw] Service worker generado para ${esDev ? 'DEV' : 'PROD'} (${cfg.projectId}).`);
 console.log(`[generar-sw] Escrito en: ${destino}`);
+
+// version.json: la versión REAL del servidor, servida FUERA del bundle y sin
+// caché (ver cabecera no-store en firebase.json). La app la consulta con fetch
+// para detectar actualizaciones sin depender del Service Worker, que en iOS a
+// veces se queda atorado y deja al usuario pegado en una versión vieja.
+// Se genera desde APP_VERSION en src/app/core/version.ts para no duplicarlo.
+function leerAppVersion() {
+    const archivo = path.join(raiz, 'src', 'app', 'core', 'version.ts');
+    const texto = fs.readFileSync(archivo, 'utf8');
+    const m = texto.match(/APP_VERSION\s*=\s*['"]([^'"]+)['"]/);
+    return m ? m[1] : '';
+}
+
+const appVersion = leerAppVersion();
+if (!appVersion) {
+    console.error('[generar-sw] No pude leer APP_VERSION de src/app/core/version.ts');
+    process.exit(1);
+}
+
+const carpetaDist = path.dirname(destino);
+const versionJson = path.join(carpetaDist, 'version.json');
+fs.writeFileSync(versionJson, JSON.stringify({ version: appVersion }) + '\n', 'utf8');
+console.log(`[generar-sw] version.json generado (${appVersion}) en: ${versionJson}`);

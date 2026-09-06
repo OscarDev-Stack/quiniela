@@ -26,6 +26,95 @@
 
 <body>
   <app-root></app-root>
+
+  <!--
+    Auto-reparador de versión (independiente del bundle de Angular).
+
+    Vive INLINE en index.html a propósito: index.html se sirve con no-store
+    (ver firebase.json), así que se refresca por red aunque el Service Worker
+    esté sirviendo un bundle viejo desde su caché. Esto permite rescatar a los
+    usuarios "atorados" —típico en iOS PWA— sin que necesiten recibir primero
+    los cambios del bundle, que es justo lo que no pueden actualizar.
+
+    Qué hace: lee /version.json (la versión REAL del servidor, sin caché) y la
+    compara con la última versión que este dispositivo llegó a arrancar. Si el
+    servidor tiene una versión nueva pero el dispositivo sigue en la vieja tras
+    recargar, asume que el SW está atorado: lo desregistra, limpia las caches y
+    recarga UNA sola vez para que el navegador reinstale todo desde cero.
+
+    Es defensivo y con guardia anti-bucle (sessionStorage): si algo falla o no
+    hay storage confiable, no hace nada, para no arriesgar recargas en ciclo.
+  -->
+  <script>
+    (function () {
+      'use strict';
+      // Solo tiene sentido con Service Worker; si no existe, no hay nada que reparar.
+      if (!('serviceWorker' in navigator)) return;
+
+      var CLAVE_VISTA = 'appVersionArrancada'; // Última versión que de verdad cargó aquí.
+      var CLAVE_GUARDA = 'autoreparoVersion'; // Marca anti-bucle de la última reparación.
+      var VENTANA_MS = 2 * 60 * 1000; // No reparar dos veces en menos de 2 min.
+
+      function leer(almacen, clave) {
+        try { return almacen.getItem(clave); } catch (e) { return null; }
+      }
+      function escribir(almacen, clave, valor) {
+        try { almacen.setItem(clave, valor); return almacen.getItem(clave) === valor; }
+        catch (e) { return false; }
+      }
+
+      // Anti-bucle: solo repara si no hubo otra reparación en la ventana. Guarda
+      // (y relee) una marca de tiempo; si el storage no persiste, NO repara.
+      function puedeReparar() {
+        var ahora = Date.now();
+        var previo = Number(leer(sessionStorage, CLAVE_GUARDA));
+        if (previo && ahora - previo < VENTANA_MS) return false;
+        return escribir(sessionStorage, CLAVE_GUARDA, String(ahora));
+      }
+
+      function repararSwYRecargar() {
+        if (!puedeReparar()) return;
+        var limpiarCaches = ('caches' in window)
+          ? caches.keys().then(function (llaves) {
+              return Promise.all(llaves.map(function (k) { return caches.delete(k); }));
+            }).catch(function () {})
+          : Promise.resolve();
+
+        navigator.serviceWorker.getRegistrations()
+          .then(function (regs) {
+            return Promise.all(regs.map(function (r) { return r.unregister().catch(function () {}); }));
+          })
+          .catch(function () {})
+          .then(function () { return limpiarCaches; })
+          .then(function () { location.reload(); })
+          .catch(function () { location.reload(); });
+      }
+
+      fetch('/version.json', { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (datos) {
+          if (!datos || !datos.version) return;
+          var remota = String(datos.version).trim();
+          var vista = leer(localStorage, CLAVE_VISTA);
+
+          // Primera vez en este dispositivo, o ya está en la versión del
+          // servidor: registramos la versión vista y no hacemos nada más. El
+          // bundle real definirá su APP_VERSION al arrancar; aquí solo llevamos
+          // la cuenta para detectar si una recarga NO logró cambiar de versión.
+          if (!vista || vista === remota) {
+            escribir(localStorage, CLAVE_VISTA, remota);
+            return;
+          }
+
+          // El servidor tiene una versión distinta a la última arrancada aquí.
+          // Marcamos la nueva como "objetivo" y forzamos la reparación del SW.
+          // Si la recarga funciona, en el próximo arranque vista === remota.
+          escribir(localStorage, CLAVE_VISTA, remota);
+          repararSwYRecargar();
+        })
+        .catch(function () { /* Sin red o JSON inválido: no hacemos nada. */ });
+    })();
+  </script>
 </body>
 
 </html>
