@@ -56,7 +56,7 @@ import { Bracket } from '../../core/models/bracket.model';
       }
 
       @for (t of visibles(); track t.id) {
-        <article class="card" [class.card--quin]="t.modo === 'quiniela'" [class.card--surv]="t.modo !== 'quiniela'" [class.card--terminado]="finalizado(t.estado)" (click)="abrir(t)">
+        <article class="card" [class.card--quin]="t.modo === 'quiniela'" [class.card--surv]="t.modo !== 'quiniela'" [class.card--abierto]="t.estado === 'inscripcion'" [class.card--terminado]="finalizado(t.estado)" (click)="abrir(t)">
           <div class="top">
             <span class="competicion">{{ t.competicionNombre }}</span>
             @switch (t.estado) {
@@ -99,7 +99,7 @@ import { Bracket } from '../../core/models/bracket.model';
       @if (bracketsVisibles().length > 0) {
         <h3 class="seccion">Eliminatorias</h3>
         @for (b of bracketsVisibles(); track b.id) {
-          <article class="card card--bracket" [class.card--terminado]="finalizado(b.estado)" (click)="abrirBracket(b)">
+          <article class="card card--bracket" [class.card--abierto]="b.estado === 'inscripcion'" [class.card--terminado]="finalizado(b.estado)" (click)="abrirBracket(b)">
             <div class="top">
               <span class="competicion">Eliminatoria</span>
               @switch (b.estado) {
@@ -241,9 +241,36 @@ import { Bracket } from '../../core/models/bracket.model';
         font-size: 13px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
         color: var(--text-muted); margin: 22px 0 12px;
       }
-      .card--bracket { border-left: 4px solid var(--tipo-elim-fill); }
-      .card--surv { border-left: 4px solid var(--tipo-surv-fill); }
-      .card--quin { border-left: 4px solid var(--tipo-quin-fill); }
+      /* Cada tarjeta expone su color propio en --c-realce; así el realce de
+         "abierto" usa el color de SU tipo (quiniela verde, survivor rojo,
+         eliminatoria azul) y nunca mezcla colores entre tipos. */
+      .card--bracket { border-left: 4px solid var(--tipo-elim-fill); --c-realce: var(--tipo-elim-fill); }
+      .card--surv { border-left: 4px solid var(--tipo-surv-fill); --c-realce: var(--tipo-surv-fill); }
+      .card--quin { border-left: 4px solid var(--tipo-quin-fill); --c-realce: var(--tipo-quin-fill); }
+
+      /* Abiertos a inscripción: los resaltamos para invitar a unirse. Un pulso
+         sutil del anillo, en el color propio de la tarjeta, para que salten a
+         la vista sin mezclar colores entre tipos. */
+      .card--abierto {
+        border-color: var(--c-realce);
+        animation: pulso-abierto 2.2s ease-in-out infinite;
+      }
+      @keyframes pulso-abierto {
+        0%, 100% { box-shadow: 0 0 0 0 transparent, 0 4px 14px rgba(0, 0, 0, 0.12); }
+        50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-realce) 35%, transparent), 0 4px 14px rgba(0, 0, 0, 0.12); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .card--abierto {
+          animation: none;
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-realce) 30%, transparent), 0 4px 14px rgba(0, 0, 0, 0.12);
+        }
+      }
+      .card--abierto .unete {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 3px 9px; border-radius: 999px;
+        background: color-mix(in srgb, var(--c-realce) 15%, transparent);
+        color: var(--c-realce);
+      }
 
       /* Terminados: atenuados y con el acento en gris, para distinguirlos de
          un vistazo de los que siguen activos. */
@@ -373,13 +400,14 @@ export class TorneosListComponent {
   });
 
   /**
-   * Orden por estado: primero lo que está EN JUEGO, luego lo abierto a
-   * inscripción, y al final lo finalizado. Así de un vistazo se ve qué está
-   * activo sin que los terminados estorben.
+   * Orden por estado: primero lo abierto a INSCRIPCIÓN (para captarlos antes
+   * de que cierren), luego lo que está EN JUEGO por jornada, y al final lo
+   * finalizado. Así de un vistazo se ve qué está activo sin que los terminados
+   * estorben.
    */
   private rangoEstado(estado: string): number {
-    if (estado === 'en-curso') return 0;
-    if (estado === 'inscripcion') return 1;
+    if (estado === 'inscripcion' || estado === 'armando') return 0;
+    if (estado === 'en-curso') return 1;
     return 2; // finalizado y cualquier otro
   }
 
