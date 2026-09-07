@@ -33,8 +33,9 @@ import { InstalarService } from '../../shared/instalar.service';
         </div>
       } @else {
       <div class="fila">
+        <span class="cat-icono"><i class="ti ti-device-mobile"></i></span>
         <div class="txt">
-          <span class="tit"><i class="ti ti-bell"></i> Notificaciones en este dispositivo</span>
+          <span class="tit">En este dispositivo</span>
           <small class="pista">
             Avisos de jornadas, resultados y torneos directo a tu teléfono.
           </small>
@@ -66,9 +67,14 @@ import { InstalarService } from '../../shared/instalar.service';
       .fila {
         display: flex; align-items: center; justify-content: space-between; gap: 14px;
       }
-      .txt { min-width: 0; }
+      .txt { min-width: 0; flex: 1; }
       .tit { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; }
       .pista { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 3px; line-height: 1.4; }
+      .cat-icono {
+        display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+        width: 34px; height: 34px; border-radius: 50%; font-size: 17px;
+        background: var(--accent-bg); color: var(--accent-text);
+      }
       .aviso-perm {
         font-size: 12px; color: var(--warning-text); background: var(--warning-bg);
         padding: 9px 11px; border-radius: var(--radius); margin: 10px 0 0; line-height: 1.4;
