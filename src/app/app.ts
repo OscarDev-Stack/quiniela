@@ -13,6 +13,7 @@ import { ActualizacionService } from './shared/actualizacion.service';
 import { limpiarInvitacion } from './shared/invitacion.util';
 import { UserService } from './core/services/user.service';
 import { StatsService } from './shared/stats.service';
+import { APP_VERSION } from './core/version';
 
 @Component({
   selector: 'app-root',
@@ -43,6 +44,21 @@ export class App {
   readonly actualizando = signal(false);
 
   constructor() {
+    // "Sello de arranque": marcamos en localStorage la versión que REALMENTE
+    // está corriendo (APP_VERSION del bundle). El auto-reparador inline de
+    // index.html lee esta marca para decidir si una recarga logró promover el
+    // bundle nuevo o si el SW sigue atorado sirviendo el viejo. Solo aquí, ya
+    // dentro de Angular, sabemos con certeza qué versión arrancó; por eso la
+    // escribe el bundle y no el script inline (que lo haría de forma optimista
+    // y rompería la detección de "recargó pero no cambió"). Es defensivo:
+    // cualquier fallo de storage se ignora.
+    try {
+      localStorage.setItem('appVersionArrancada', APP_VERSION);
+    } catch {
+      // Sin storage confiable (modo privado, etc.): no pasa nada, el
+      // auto-reparador simplemente no intervendrá.
+    }
+
     // Propiedades categóricas del usuario para segmentar Analytics (sin PII):
     // rol (super admin / admin de grupo / jugador) y si está validado. Se
     // actualizan solas cuando cambia la sesión o el documento del usuario.
@@ -92,110 +108,121 @@ export class App {
     // por el control de la página y rompe la detección de versiones. Lo
     // desregistramos si su scope es exactamente el origen '/', sin tocar el
     // registro de Angular ni el de messaging en su scope aislado.
+    //
+    // TODO (limpieza técnica): esta reparación se introdujo el 2026-09-05.
+    // Cuando haya pasado suficiente tiempo para que casi ningún dispositivo
+    // conserve el registro huérfano (revisar ~después de 2026-11), este método
+    // se puede eliminar por completo.
     this.limpiarSwMessagingEnRaiz();
 
-    // Detección de versión INDEPENDIENTE del Service Worker: consulta
-    // /version.json (fuera del bundle, sin caché) y compara con la versión
-    // local. Es el respaldo confiable para iOS, donde el SW a veces no detecta
-    // nada y el usuario se queda pegado en una versión vieja. Cuando el JSON
-    // reporta algo nuevo, encendemos el mismo banner "Actualizar" de siempre.
-    const revisarVersionRemota = () => {
+    // Arranca la única maquinaria de detección de actualizaciones (SwUpdate +
+    // version.json), toda enrutada al mismo punto de recarga.
+    this.iniciarDeteccionDeActualizaciones();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Detección de actualizaciones (Capa A: dentro del bundle)
+  //
+  // Dos fuentes de señal, UN solo destino:
+  //   1. SwUpdate      → mecanismo nativo de Angular (funciona en el 95% de
+  //                      navegadores por sí solo).
+  //   2. /version.json → respaldo independiente del SW, imprescindible en iOS
+  //                      PWA en standalone, donde SwUpdate a veces no detecta
+  //                      nada y el bfcache restaura la app sin re-arrancar.
+  //
+  // Ambas encienden el banner (hayActualizacion) y llaman a la MISMA función
+  // recargarPorActualizacion(), que centraliza overlay, activación del SW,
+  // recarga y guarda anti-bucle. Antes cada señal tenía su propia ruta de
+  // recarga y su propia clave anti-bucle; eso era la fuente de los ciclos.
+  // ─────────────────────────────────────────────────────────────────────────
+  private iniciarDeteccionDeActualizaciones(): void {
+    const destroyRef = inject(DestroyRef);
+
+    // Un único "revisar todo": pregunta al SW y a version.json. Solo corre con
+    // la pestaña visible (evita trabajo en segundo plano y checks inútiles).
+    const revisar = () => {
       if (document.visibilityState !== 'visible') return;
+
+      // version.json: respaldo que no depende del SW.
       this.actualizacion.revisar().then(() => {
-        if (this.actualizacion.hayNueva()) this.hayActualizacion.set(true);
-      });
-    };
-    revisarVersionRemota();
-    document.addEventListener('visibilitychange', revisarVersionRemota);
-    const alRestaurarVersion = (e: PageTransitionEvent) => {
-      if (e.persisted) revisarVersionRemota();
-    };
-    window.addEventListener('pageshow', alRestaurarVersion);
-    const intervaloVersion = setInterval(revisarVersionRemota, 30 * 60 * 1000);
-    inject(DestroyRef).onDestroy(() => {
-      document.removeEventListener('visibilitychange', revisarVersionRemota);
-      window.removeEventListener('pageshow', alRestaurarVersion);
-      clearInterval(intervaloVersion);
-    });
-
-    if (!this.updates.isEnabled) return;
-
-    // Cuando Angular termina de descargar la versión nueva en segundo plano
-    // (VERSION_READY), la aplicamos y recargamos SOLOS, sin esperar a que el
-    // usuario toque un botón. En iOS/Android con la PWA instalada casi nadie
-    // ve (ni toca) el banner, así que se quedaban pegados en la versión vieja.
-    //
-    // El banner se mantiene como respaldo visible: si por lo que sea la recarga
-    // automática no ocurre (storage no confiable, anti-bucle activo), el
-    // usuario todavía puede forzarla a mano.
-    const subVersion = this.updates.versionUpdates
-      .pipe(filter((e): e is VersionReadyEvent => e.type === 'VERSION_READY'))
-      .subscribe(() => {
-        this.hayActualizacion.set(true);
-        this.aplicarActualizacion();
-      });
-
-    // Estado irrecuperable del SW (cache corrupta, frecuente en iOS): la única
-    // salida es recargar para que el navegador reinstale el SW desde cero.
-    const subUnrec = this.updates.unrecoverable
-      .pipe(filter((e): e is UnrecoverableStateEvent => !!e))
-      .subscribe(() => {
-        if (this.puedeRecargarSinCiclar('sw-unrecoverable')) {
-          location.reload();
+        if (this.actualizacion.hayNueva()) {
+          this.hayActualizacion.set(true);
+          this.recargarPorActualizacion('version-json');
         }
       });
 
-    // Busca actualizaciones al abrir, al volver el foco a la app y de forma
-    // periódica (cada 30 min). El check por foco no es confiable en iOS cuando
-    // la PWA se congela en segundo plano; el intervalo cubre ese hueco.
-    const buscar = () => {
-      if (document.visibilityState === 'visible') {
+      // SwUpdate: mecanismo nativo. checkForUpdate dispara VERSION_READY si hay
+      // algo nuevo (ver suscripción abajo).
+      if (this.updates.isEnabled) {
         this.updates.checkForUpdate().catch(() => undefined);
       }
     };
-    buscar();
-    document.addEventListener('visibilitychange', buscar);
 
-    // iOS en modo standalone restaura la PWA desde el bfcache: la página vuelve
-    // tal cual estaba, sin re-ejecutar el arranque de Angular y sin disparar
-    // visibilitychange. Con eso, ni el buscar() inicial ni el del foco llegan a
-    // correr, y el dispositivo se queda pegado en la versión vieja aunque el
-    // servidor ya tenga una nueva. El evento pageshow SÍ llega en esa
-    // restauración, con persisted en true (en una carga normal viene en false),
-    // así que es el único momento fiable para volver a preguntar por la versión.
+    // VERSION_READY: Angular ya descargó la versión nueva en segundo plano.
+    // Encendemos el banner (respaldo visible) y recargamos solos.
+    if (this.updates.isEnabled) {
+      this.updates.versionUpdates
+        .pipe(
+          filter((e): e is VersionReadyEvent => e.type === 'VERSION_READY'),
+          takeUntilDestroyed(destroyRef),
+        )
+        .subscribe(() => {
+          this.hayActualizacion.set(true);
+          this.recargarPorActualizacion('sw-version-ready');
+        });
+
+      // Estado irrecuperable (cache del SW corrupta, frecuente en iOS): la
+      // única salida es recargar para que el navegador reinstale el SW.
+      this.updates.unrecoverable
+        .pipe(
+          filter((e): e is UnrecoverableStateEvent => !!e),
+          takeUntilDestroyed(destroyRef),
+        )
+        .subscribe(() => this.recargarPorActualizacion('sw-unrecoverable'));
+    }
+
+    // Momentos en que volvemos a revisar: al abrir, al recuperar el foco y de
+    // forma periódica. En iOS standalone el foco no siempre dispara
+    // visibilitychange; pageshow con persisted=true es el único evento fiable
+    // cuando la PWA se restaura desde el bfcache.
+    revisar();
     const alRestaurar = (e: PageTransitionEvent) => {
-      if (e.persisted) buscar();
+      if (e.persisted) revisar();
     };
+    document.addEventListener('visibilitychange', revisar);
     window.addEventListener('pageshow', alRestaurar);
+    const intervalo = setInterval(revisar, 30 * 60 * 1000);
 
-    const intervalo = setInterval(buscar, 30 * 60 * 1000);
-
-    inject(DestroyRef).onDestroy(() => {
-      subVersion.unsubscribe();
-      subUnrec.unsubscribe();
-      document.removeEventListener('visibilitychange', buscar);
+    destroyRef.onDestroy(() => {
+      document.removeEventListener('visibilitychange', revisar);
       window.removeEventListener('pageshow', alRestaurar);
       clearInterval(intervalo);
     });
   }
 
-  /**
-   * Aplica la versión nueva y recarga la app automáticamente. Usa el guardián
-   * anti-bucle para no entrar en un ciclo de recargas si algo sale mal (p. ej.
-   * el SW reporta VERSION_READY una y otra vez sin llegar a activarse).
-   */
-  private aplicarActualizacion(): void {
-    if (!this.puedeRecargarSinCiclar('sw-version-aplicada')) return;
-    this.recargarConOverlay();
-  }
-
-  /** Activa la versión nueva y reinicia la app (invocado desde el fallback). */
+  /** Activa la versión nueva y reinicia la app (invocado desde el banner). */
   recargar(): void {
+    // El botón manual del banner es una acción explícita del usuario, así que
+    // se salta la guarda anti-bucle: si lo tocó, quiere recargar ya.
     this.recargarConOverlay();
   }
 
   /** Duración mínima del overlay "Actualizando" para que no sea un parpadeo. */
   private static readonly OVERLAY_MIN_MS = 800;
+
+  /**
+   * ÚNICO punto de recarga automática. Cualquier señal (VERSION_READY,
+   * version.json, estado irrecuperable) pasa por aquí. Consulta la guarda
+   * anti-bucle una sola vez y, si autoriza, muestra el overlay y recarga.
+   *
+   * El `motivo` solo sirve para trazabilidad/depuración; la decisión de
+   * recargar es la misma para todos, con un único tope global de recargas.
+   */
+  private recargarPorActualizacion(motivo: string): void {
+    if (!this.puedeRecargarSinCiclar()) return;
+    void motivo; // Reservado para logging futuro; no afecta la decisión.
+    this.recargarConOverlay();
+  }
 
   /**
    * Muestra el overlay "Actualizando", activa la versión nueva y recarga.
@@ -252,39 +279,45 @@ export class App {
 
         // Si limpiamos un registro roto, recargamos UNA sola vez para que el
         // SW de Angular retome el control de inmediato (si no, tardaría hasta
-        // que el usuario cierre todas las pestañas).
-        //
-        // Anti-bucle: solo recargamos si puedeRecargarSinCiclar() confirma que
-        // logró dejar (y releer) una marca en sessionStorage. Si el storage no
-        // es confiable, NO recargamos, para no arriesgar un ciclo.
-        if (desregistrado && this.puedeRecargarSinCiclar('sw-messaging-limpiado')) {
-          location.reload();
+        // que el usuario cierre todas las pestañas). Pasa por el mismo punto
+        // de recarga y la misma guarda anti-bucle que el resto.
+        if (desregistrado) {
+          this.recargarPorActualizacion('sw-messaging-limpiado');
         }
       })
       .catch(() => undefined);
   }
 
   /**
-   * Decide si es seguro recargar sin riesgo de bucle, para la `clave` dada.
-   * Devuelve true SOLO si no hubo otra recarga con esa clave en los últimos
-   * VENTANA_MS. En vez de bloquear para siempre, guarda una marca de tiempo:
-   * así una actualización legítima más tarde en la misma sesión sí puede
-   * recargar, pero dos recargas seguidas (síntoma de bucle) se cortan.
+   * Guarda anti-bucle ÚNICA para toda recarga automática. Autoriza como mucho
+   * MAX_RECARGAS recargas dentro de VENTANA_MS, sin importar la causa. Antes
+   * había una clave distinta por mecanismo y podían encadenarse varias recargas
+   * en segundos (cada una pasando su propia guarda) dejando al usuario en
+   * "cargando" infinito. Con un único contador global eso ya no puede pasar.
+   *
+   * La ventana está alineada con la del auto-reparador inline de index.html
+   * para que ambas capas sean coherentes.
    *
    * Si el storage no es confiable (modo privado, etc.), devuelve false:
    * preferimos NO recargar automáticamente antes que arriesgar un ciclo. El
    * usuario se recupera igual con el banner manual o al reabrir la app.
    */
-  private puedeRecargarSinCiclar(clave: string): boolean {
-    const VENTANA_MS = 60 * 1000; // 1 minuto de guarda entre recargas por clave.
+  private puedeRecargarSinCiclar(): boolean {
+    const VENTANA_MS = 2 * 60 * 1000; // 2 min, alineada con el inline de index.html.
+    const MAX_RECARGAS = 3;
+    const CLAVE = 'recargasAutoTs';
     const ahora = Date.now();
     try {
-      const previo = Number(sessionStorage.getItem(clave));
-      if (previo && ahora - previo < VENTANA_MS) return false;
-      sessionStorage.setItem(clave, String(ahora));
+      const crudo = sessionStorage.getItem(CLAVE);
+      const marcas: number[] = crudo ? (JSON.parse(crudo) as number[]) : [];
+      const recientes = marcas.filter((t) => ahora - t < VENTANA_MS);
+      if (recientes.length >= MAX_RECARGAS) return false;
+
+      recientes.push(ahora);
+      sessionStorage.setItem(CLAVE, JSON.stringify(recientes));
       // Confirmamos que de verdad quedó escrito (algunos navegadores en modo
       // privado aceptan setItem pero no persisten).
-      return sessionStorage.getItem(clave) === String(ahora);
+      return sessionStorage.getItem(CLAVE) !== null;
     } catch {
       // Sin storage confiable, no arriesgamos recarga automática.
       return false;
