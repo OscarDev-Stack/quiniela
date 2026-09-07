@@ -44,6 +44,11 @@
     --tipo-pron-bg: #f0eafc;
     --tipo-pron-text: #4c2d85;
 
+    /* Grupos — teal (no es un tipo de juego, sino el contenedor/comunidad). */
+    --grupo-fill: #0d9488;
+    --grupo-bg: #e0f2f0;
+    --grupo-text: #0a5c54;
+
     --radius: 10px;
     --radius-lg: 14px;
 }
@@ -86,6 +91,11 @@
         --tipo-pron-fill: #9d78d9;
         --tipo-pron-bg: #2a1f42;
         --tipo-pron-text: #c4a9ef;
+
+        /* Grupos — teal (modo oscuro). */
+        --grupo-fill: #2bb3a3;
+        --grupo-bg: #0e332f;
+        --grupo-text: #6fd6c8;
     }
 }
 

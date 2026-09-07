@@ -20,49 +20,138 @@ import { guardarInvitacion, limpiarInvitacion } from '../../shared/invitacion.ut
   imports: [CommonModule, NavComponent],
   template: `
     <div class="screen">
-      <app-nav [back]="true" title="Invitación a grupo" />
+      <app-nav [back]="true" title="Invitación" />
 
       <div class="invitacion">
-        <div class="ico">👥</div>
-        <h1>Te invitaron a un grupo</h1>
-        <p class="codigo">Código <strong>{{ codigo }}</strong></p>
+        <div class="card">
+          <div class="hero">
+            <div class="hero__glow"></div>
+            <span class="hero__badge">Te invitaron</span>
+            <div class="hero__ico"><i class="ti ti-users-group"></i></div>
+            <h1 class="hero__nombre">Únete al grupo</h1>
+            <p class="hero__tipo">Comparte quinielas y compite con tu gente</p>
+          </div>
 
-        @if (error()) {
-          <p class="error">{{ error() }}</p>
-        }
+          <div class="body">
+            <div class="codigo">
+              <span class="codigo__label">Código de invitación</span>
+              <span class="codigo__valor">{{ codigo }}</span>
+            </div>
 
-        @if (sesion()) {
-          <button class="btn btn--primary" [disabled]="uniendo()" (click)="unirse()">
-            {{ uniendo() ? 'Uniéndome…' : 'Unirme al grupo' }}
-          </button>
-        } @else {
-          <p class="hint">Inicia sesión para unirte. Guardamos la invitación.</p>
-          <button class="btn btn--primary" (click)="ir('login')">Iniciar sesión</button>
-          <button class="btn" (click)="ir('registro')">Crear cuenta</button>
-        }
+            <p class="detalle">
+              <i class="ti ti-friends"></i>
+              Demuestra quién sabe más de futbol.
+            </p>
+
+            @if (error()) {
+              <p class="error"><i class="ti ti-alert-circle"></i> {{ error() }}</p>
+            }
+
+            @if (sesion()) {
+              <button class="btn btn--primary" [disabled]="uniendo()" (click)="unirse()">
+                <i class="ti ti-check"></i>
+                {{ uniendo() ? 'Uniéndome…' : 'Unirme al grupo' }}
+              </button>
+              <p class="pie">Te están esperando 👋</p>
+            } @else {
+              <button class="btn btn--primary" (click)="ir('login')">
+                <i class="ti ti-login"></i> Iniciar sesión y unirme
+              </button>
+              <button class="btn btn--ghost" (click)="ir('registro')">Crear cuenta</button>
+              <p class="pie">Guardamos tu invitación mientras entras.</p>
+            }
+          </div>
+        </div>
       </div>
     </div>
   `,
   styles: [
     `
-      .invitacion { max-width: 420px; margin: 20px auto 0; text-align: center; }
-      .ico {
-        width: 72px; height: 72px; border-radius: 18px; margin: 0 auto 14px;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 34px; background: var(--surface-1);
+      .invitacion { max-width: 440px; margin: 16px auto 0; padding: 0 4px; }
+
+      .card {
+        border: 1px solid var(--border); border-radius: var(--radius-lg);
+        background: var(--surface-2); overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
       }
-      h1 { font-size: 20px; margin: 0 0 6px; }
-      .codigo { font-size: 14px; color: var(--text-secondary); margin: 0 0 20px; }
-      .codigo strong { letter-spacing: 2px; color: var(--accent-text); }
-      .error { color: var(--danger-text); font-size: 14px; margin: 0 0 14px; }
-      .hint { font-size: 13px; color: var(--text-muted); margin: 0 0 12px; }
+
+      /* Hero con el teal de grupos. */
+      .hero {
+        position: relative; overflow: hidden; text-align: center;
+        padding: 28px 20px 24px;
+        background: radial-gradient(120% 120% at 50% -10%, var(--grupo-fill) 0%, var(--grupo-text) 90%);
+        color: #fff;
+      }
+      .hero__glow {
+        position: absolute; inset: 0;
+        background: radial-gradient(60% 50% at 50% 0%, rgba(255, 255, 255, 0.28), transparent 70%);
+        pointer-events: none;
+      }
+      .hero__badge {
+        position: relative; display: inline-block;
+        font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+        padding: 4px 10px; border-radius: 999px; margin-bottom: 14px;
+        background: rgba(255, 255, 255, 0.18); color: #fff;
+        backdrop-filter: blur(2px);
+      }
+      .hero__ico {
+        position: relative; width: 66px; height: 66px; margin: 0 auto 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 32px; border-radius: 20px;
+        background: rgba(255, 255, 255, 0.16);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+      }
+      .hero__ico i { line-height: 1; }
+      .hero__nombre { position: relative; font-size: 23px; font-weight: 800; margin: 0 0 4px; }
+      .hero__tipo { position: relative; font-size: 13px; margin: 0; opacity: 0.9; }
+
+      .body { padding: 20px 18px 22px; }
+
+      /* Código destacado. */
+      .codigo {
+        display: flex; flex-direction: column; align-items: center; gap: 4px;
+        background: var(--grupo-bg); border-radius: var(--radius);
+        padding: 14px 16px; margin-bottom: 14px;
+      }
+      .codigo__label {
+        font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+        color: var(--grupo-text); opacity: 0.85;
+      }
+      .codigo__valor {
+        font-size: 26px; font-weight: 800; letter-spacing: 4px; color: var(--grupo-text);
+      }
+
+      .detalle {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 12.5px; color: var(--text-secondary); margin: 0 2px 16px;
+      }
+      .detalle i { color: var(--grupo-fill); font-size: 16px; }
+
+      .error {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 13px; color: var(--danger-text);
+        background: var(--danger-bg); border-radius: var(--radius);
+        padding: 10px 12px; margin: 0 0 14px;
+      }
+
       .btn {
-        width: 100%; padding: 13px; margin-top: 8px; cursor: pointer; font-size: 15px; font-weight: 600;
+        width: 100%; padding: 13px; margin-top: 8px; cursor: pointer;
+        font-size: 15px; font-weight: 700;
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
         border: 1px solid var(--border); border-radius: var(--radius);
         background: var(--surface-2); color: var(--text-primary);
+        transition: transform 0.05s ease, filter 0.15s ease;
       }
-      .btn--primary { background: var(--accent-fill); color: #fff; border-color: var(--accent-fill); }
-      .btn:disabled { opacity: 0.6; cursor: default; }
+      .btn:active { transform: translateY(1px); }
+      .btn--primary {
+        background: var(--grupo-fill); color: #fff; border-color: var(--grupo-fill);
+        box-shadow: 0 6px 16px rgba(13, 148, 136, 0.35);
+      }
+      .btn--primary:hover:not(:disabled) { filter: brightness(1.05); }
+      .btn--ghost { background: transparent; }
+      .btn:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
+
+      .pie { text-align: center; font-size: 12.5px; color: var(--text-muted); margin: 12px 0 0; }
     `,
   ],
 })
