@@ -81,44 +81,53 @@ import { APP_VERSION } from '../../core/version';
 
       <section class="tarjetas">
         <div class="tarjeta">
-          <span class="etq">Acierto</span>
+          <span class="tarjeta-icono icono-acierto"><i class="ti ti-target-arrow"></i></span>
           <span class="val acento">
             {{ porcentaje() }}%
-            <small>{{ aciertos() }}/{{ resueltos() }}</small>
           </span>
+          <span class="etq">Acierto</span>
+          <small class="sub">{{ aciertos() }}/{{ resueltos() }}</small>
         </div>
         <div class="tarjeta">
-          <span class="etq">Racha</span>
+          <span class="tarjeta-icono icono-racha"><i class="ti ti-flame"></i></span>
           <span class="val">
             {{ racha() }}
             @if (racha() >= 3) { <span class="fuego">🔥</span> }
-            <small>mejor {{ mejorRacha() }}</small>
           </span>
+          <span class="etq">Racha</span>
+          <small class="sub">mejor {{ mejorRacha() }}</small>
         </div>
         <div class="tarjeta">
-          <span class="etq">Puntos históricos</span>
+          <span class="tarjeta-icono icono-puntos"><i class="ti ti-coins"></i></span>
           <span class="val" [class.neg]="historicos() < 0">{{ historicos() | number }}</span>
+          <span class="etq">Puntos históricos</span>
         </div>
         <div class="tarjeta">
-          <span class="etq">Torneos ganados</span>
+          <span class="tarjeta-icono icono-torneos"><i class="ti ti-trophy"></i></span>
           <span class="val dorado">{{ trofeos().length || torneosGanados() }}</span>
+          <span class="etq">Torneos ganados</span>
         </div>
       </section>
 
       @if (esMio()) {
         <section class="panel">
           <h2>Mi actividad</h2>
-          <div class="linea">
-            <span>Saldo disponible</span>
-            <strong [class.neg]="(me()?.puntos ?? 0) < 0">{{ me()?.puntos ?? 0 | number }} pts</strong>
-          </div>
-          <div class="linea">
-            <span>Total apostado</span>
-            <strong>{{ resumen()?.totalApostado ?? 0 | number }} pts</strong>
-          </div>
-          <div class="linea">
-            <span>Mejor premio</span>
-            <strong class="verde">{{ resumen()?.mejorPremio ?? 0 | number }} pts</strong>
+          <div class="actividad">
+            <div class="act-tarjeta act-tarjeta--saldo">
+              <span class="act-icono"><i class="ti ti-wallet"></i></span>
+              <span class="act-val" [class.neg]="(me()?.puntos ?? 0) < 0">{{ me()?.puntos ?? 0 | number }} pts</span>
+              <span class="act-etq">Saldo disponible</span>
+            </div>
+            <div class="act-tarjeta act-tarjeta--apostado">
+              <span class="act-icono"><i class="ti ti-chart-bar"></i></span>
+              <span class="act-val">{{ resumen()?.totalApostado ?? 0 | number }} pts</span>
+              <span class="act-etq">Total apostado</span>
+            </div>
+            <div class="act-tarjeta act-tarjeta--premio">
+              <span class="act-icono"><i class="ti ti-trophy"></i></span>
+              <span class="act-val">{{ resumen()?.mejorPremio ?? 0 | number }} pts</span>
+              <span class="act-etq">Mejor premio</span>
+            </div>
           </div>
 
           <button class="ver-movs" (click)="verMovimientos()">
@@ -150,51 +159,6 @@ import { APP_VERSION } from '../../core/version';
       }
 
       @if (esMio() && validada()) {
-        <section class="panel">
-          <div class="panel-head">
-            <h3><i class="ti ti-refresh-dot"></i> Reinicio de saldo</h3>
-          </div>
-
-          @if (saldo() < 0) {
-            <p class="ayuda-tg">
-              ¿Traes el saldo en rojo? Pide que lo regresen a cero.
-              El administrador lo revisa y decide; tus aciertos, racha y
-              puntos históricos no se tocan.
-            </p>
-          } @else {
-            <p class="ayuda-tg">
-              Tu saldo está en positivo, así que reiniciarlo significa
-              <strong>perder los {{ saldo() | number }} pts que llevas</strong>.
-              Pídelo solo si de verdad quieres empezar de cero.
-            </p>
-          }
-
-          @if (yaSolicitado()) {
-            <div class="pendiente">
-              <i class="ti ti-clock"></i>
-              <div>
-                <strong>Ya la enviaste</strong>
-                <p>
-                  El administrador la revisará. Si tu saldo se mueve, podrás
-                  pedirlo de nuevo.
-                </p>
-              </div>
-            </div>
-          } @else {
-            <button class="btn btn--principal" [disabled]="pidiendo()" (click)="pedirReinicio()">
-              {{ pidiendo() ? 'Enviando…' : 'Solicitar reinicio de saldo' }}
-            </button>
-          }
-
-          @if (mensajeReinicio()) {
-            <p class="aviso-tg" [class.aviso-tg--error]="errorReinicio()">
-              {{ mensajeReinicio() }}
-            </p>
-          }
-        </section>
-      }
-
-      @if (esMio() && validada()) {
         <!-- Un solo panel de Notificaciones con los dos canales adentro. -->
         <section class="panel panel--notif">
           <div class="panel-head">
@@ -212,8 +176,9 @@ import { APP_VERSION } from '../../core/version';
           <!-- Canal 2: Telegram -->
           <div class="canal canal--tg">
             <div class="fila">
+              <span class="cat-icono cat-icono--tg"><i class="ti ti-brand-telegram"></i></span>
               <div class="txt">
-                <span class="tit"><i class="ti ti-brand-telegram"></i> Telegram</span>
+                <span class="tit">Telegram</span>
                 <small class="pista">
                   @if (conectado()) {
                     Recibes los avisos en tu chat de Telegram.
@@ -263,6 +228,7 @@ import { APP_VERSION } from '../../core/version';
               <p class="cat-titulo">¿Qué avisos quieres recibir?</p>
 
               <label class="switch switch--cat">
+                <span class="cat-icono"><i class="ti ti-trophy"></i></span>
                 <span class="txt">
                   <span class="tit">Torneos donde participo</span>
                   <small class="pista">Jornadas, resultados y premios de tus torneos y eliminatorias.</small>
@@ -277,6 +243,7 @@ import { APP_VERSION } from '../../core/version';
               </label>
 
               <label class="switch switch--cat">
+                <span class="cat-icono"><i class="ti ti-calendar-event"></i></span>
                 <span class="txt">
                   <span class="tit">Resumen del día</span>
                   <small class="pista">Un aviso diario con los torneos públicos y partidos por cerrar de tu grupo o global.</small>
@@ -291,6 +258,7 @@ import { APP_VERSION } from '../../core/version';
               </label>
 
               <label class="switch switch--cat">
+                <span class="cat-icono"><i class="ti ti-chart-bar"></i></span>
                 <span class="txt">
                   <span class="tit">Resultados de mis pronósticos</span>
                   <small class="pista">Cuando se liquida un partido que pronosticaste.</small>
@@ -306,6 +274,43 @@ import { APP_VERSION } from '../../core/version';
             </div>
           }
         </section>
+      }
+
+      @if (esMio() && validada()) {
+        <div class="reinicio">
+          @if (yaSolicitado()) {
+            <div class="reinicio-fila reinicio-fila--pend">
+              <span class="reinicio-icono"><i class="ti ti-clock"></i></span>
+              <div class="reinicio-txt">
+                <span class="reinicio-tit">Solicitud enviada</span>
+                <small class="reinicio-sub">
+                  El administrador la revisará. Si tu saldo se mueve, podrás pedirlo de nuevo.
+                </small>
+              </div>
+            </div>
+          } @else {
+            <button class="reinicio-fila" [disabled]="pidiendo()" (click)="pedirReinicio()">
+              <span class="reinicio-icono"><i class="ti ti-refresh-dot"></i></span>
+              <div class="reinicio-txt">
+                <span class="reinicio-tit">{{ pidiendo() ? 'Enviando…' : 'Reiniciar saldo' }}</span>
+                <small class="reinicio-sub">
+                  @if (saldo() < 0) {
+                    Tu saldo está en rojo. Pide que lo regresen a cero.
+                  } @else {
+                    Tu saldo actual es de {{ saldo() | number }} pts. Al reiniciar, los datos comenzarán nuevamente desde cero.
+                  }
+                </small>
+              </div>
+              <i class="ti ti-chevron-right reinicio-flecha"></i>
+            </button>
+          }
+
+          @if (mensajeReinicio()) {
+            <p class="aviso-tg" [class.aviso-tg--error]="errorReinicio()">
+              {{ mensajeReinicio() }}
+            </p>
+          }
+        </div>
       }
 
       @if (esMio()) {
@@ -366,10 +371,20 @@ import { APP_VERSION } from '../../core/version';
 
       .tarjetas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
       .tarjeta { background: var(--surface-2); border: 1px solid var(--border);
-        border-radius: var(--radius); padding: 12px 14px; }
-      .etq { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 3px; }
-      .val { font-size: 20px; font-weight: 700; display: flex; align-items: baseline; gap: 5px; }
-      .val small { font-size: 12px; font-weight: 400; color: var(--text-muted); }
+        border-radius: var(--radius); padding: 14px 12px;
+        display: flex; flex-direction: column; align-items: center; text-align: center; gap: 3px; }
+      .tarjeta-icono {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 34px; height: 34px; border-radius: 50%; font-size: 17px; margin-bottom: 4px;
+        background: var(--surface-1); color: var(--text-secondary);
+      }
+      .icono-acierto { background: var(--accent-bg); color: var(--accent-text); }
+      .icono-racha { background: var(--danger-bg); color: var(--danger-text); }
+      .icono-puntos { background: var(--surface-1); color: var(--text-secondary); }
+      .icono-torneos { background: var(--warning-bg); color: var(--warning-text); }
+      .etq { display: block; font-size: 11px; color: var(--text-muted); }
+      .val { font-size: 22px; font-weight: 700; display: flex; align-items: baseline; justify-content: center; gap: 5px; line-height: 1.1; }
+      .sub { font-size: 11px; font-weight: 400; color: var(--text-muted); }
       .acento { color: var(--accent-text); }
       .dorado { color: var(--warning-text); }
       .neg { color: var(--danger-text); }
@@ -391,6 +406,26 @@ import { APP_VERSION } from '../../core/version';
       .ver-movs i:last-child { color: var(--text-muted); }
       .verde { color: var(--success-text); }
 
+      /* Mi actividad: tres tarjetitas con lo más importante del saldo. */
+      .actividad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+      .act-tarjeta {
+        display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px;
+        padding: 12px 10px; border-radius: var(--radius);
+        border: 1px solid var(--border); background: var(--surface-1);
+      }
+      .act-icono {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 30px; height: 30px; border-radius: 50%; font-size: 15px; margin-bottom: 2px;
+        background: var(--surface-2); color: var(--text-secondary);
+      }
+      .act-val { font-size: 16px; font-weight: 700; color: var(--text-primary); line-height: 1.2; }
+      .act-etq { font-size: 11px; color: var(--text-muted); line-height: 1.3; }
+      .act-tarjeta--saldo .act-icono { background: var(--success-bg); color: var(--success-text); }
+      .act-tarjeta--apostado .act-icono { background: var(--accent-bg); color: var(--accent-text); }
+      .act-tarjeta--premio .act-icono { background: var(--warning-bg); color: var(--warning-text); }
+      .act-tarjeta--premio .act-val { color: var(--success-text); }
+      .act-val.neg { color: var(--danger-text); }
+
       .trofeo { display: flex; align-items: center; gap: 12px; padding: 10px 0;
         border-bottom: 1px solid var(--border); }
       .trofeo:last-child { border-bottom: none; }
@@ -410,9 +445,9 @@ import { APP_VERSION } from '../../core/version';
       .canal { padding: 14px 0; border-top: 1px solid var(--border); }
       .canal:first-of-type { border-top: none; }
       .canal .fila {
-        display: flex; align-items: center; justify-content: space-between; gap: 14px;
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
       }
-      .canal .txt { min-width: 0; }
+      .canal .txt { min-width: 0; flex: 1; }
       .canal .tit { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; }
       .canal .pista { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 3px; line-height: 1.4; }
       .btn-tg {
@@ -439,6 +474,14 @@ import { APP_VERSION } from '../../core/version';
       .switch--cat .txt { flex: 1; display: flex; flex-direction: column; }
       .switch--cat .tit { font-size: 14px; font-weight: 600; }
       .switch--cat .pista { font-size: 12px; color: var(--text-secondary); margin-top: 3px; line-height: 1.4; }
+
+      /* Ícono redondo a la izquierda de cada fila de notificación. */
+      .cat-icono {
+        display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+        width: 34px; height: 34px; border-radius: 50%; font-size: 17px;
+        background: var(--surface-1); color: var(--text-secondary);
+      }
+      .cat-icono--tg { background: var(--accent-bg); color: var(--accent-text); }
 
       /* El interruptor real está oculto; se dibuja la pista y el botón. */
       .switch-input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -486,6 +529,26 @@ import { APP_VERSION } from '../../core/version';
       .btn--principal { display: flex; align-items: center; justify-content: center; gap: 8px; }
       .aviso-tg { font-size: 13px; color: var(--success-text); margin: 12px 0 0; }
       .aviso-tg--error { color: var(--danger-text); }
+
+      /* Reinicio de saldo: fila sutil de advertencia, al final del perfil. */
+      .reinicio { margin-bottom: 14px; }
+      .reinicio-fila {
+        display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+        padding: 13px 14px; cursor: pointer;
+        border: 1px solid var(--danger-border, var(--danger-bg)); border-radius: var(--radius-lg);
+        background: var(--danger-bg); color: var(--danger-text);
+      }
+      .reinicio-fila:disabled { opacity: 0.6; cursor: default; }
+      .reinicio-fila--pend { cursor: default; background: var(--warning-bg); border-color: var(--warning-bg); color: var(--warning-text); }
+      .reinicio-icono {
+        display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+        width: 34px; height: 34px; border-radius: 50%; font-size: 17px;
+        background: rgba(0, 0, 0, 0.06); color: inherit;
+      }
+      .reinicio-txt { flex: 1; min-width: 0; }
+      .reinicio-tit { display: block; font-size: 14px; font-weight: 600; }
+      .reinicio-sub { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 2px; line-height: 1.4; }
+      .reinicio-flecha { flex-shrink: 0; opacity: 0.7; }
 
       .salir {
         display: flex; align-items: center; justify-content: center; gap: 8px;

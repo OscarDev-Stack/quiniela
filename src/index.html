@@ -97,19 +97,26 @@
           var remota = String(datos.version).trim();
           var vista = leer(localStorage, CLAVE_VISTA);
 
-          // Primera vez en este dispositivo, o ya está en la versión del
-          // servidor: registramos la versión vista y no hacemos nada más. El
-          // bundle real definirá su APP_VERSION al arrancar; aquí solo llevamos
-          // la cuenta para detectar si una recarga NO logró cambiar de versión.
+          // Primera vez en este dispositivo (aún no arrancó ningún bundle) o ya
+          // vamos en la versión del servidor: no hay nada que reparar.
+          //
+          // Importante: NO escribimos CLAVE_VISTA aquí. Esa marca representa la
+          // versión que REALMENTE arrancó, y solo el bundle de Angular la puede
+          // afirmar (lo hace al bootstrap con su APP_VERSION). Si la escribiéramos
+          // aquí de forma optimista, marcaríamos "ya actualizado" antes de que el
+          // bundle nuevo corra; y si la recarga no logró promoverlo, el auto-
+          // reparador se callaría creyendo que todo está bien mientras sigue
+          // corriendo el bundle viejo. Dejarla intacta permite distinguir de
+          // verdad "recargó y cambió" de "recargó y sigue igual" (SW atorado).
           if (!vista || vista === remota) {
-            escribir(localStorage, CLAVE_VISTA, remota);
             return;
           }
 
-          // El servidor tiene una versión distinta a la última arrancada aquí.
-          // Marcamos la nueva como "objetivo" y forzamos la reparación del SW.
-          // Si la recarga funciona, en el próximo arranque vista === remota.
-          escribir(localStorage, CLAVE_VISTA, remota);
+          // El servidor tiene una versión distinta a la que este dispositivo
+          // llegó a arrancar de verdad. Forzamos la reparación del SW. Si la
+          // recarga funciona, el bundle nuevo arrancará y escribirá vista ===
+          // remota; si NO cambia, vista seguirá en la vieja y la guarda anti-
+          // bucle (VENTANA_MS) evita que reparemos otra vez en cadena.
           repararSwYRecargar();
         })
         .catch(function () { /* Sin red o JSON inválido: no hacemos nada. */ });

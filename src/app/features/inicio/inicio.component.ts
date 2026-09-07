@@ -177,6 +177,30 @@ import { Bracket } from '../../core/models/bracket.model';
             }
           </section>
         }
+
+        <!-- ABIERTOS PARA UNIRSE — al final. Torneos/eliminatorias públicos en
+             inscripción; solo un adelanto (uno de cada tipo) + "Ver más".
+             Cada fila usa el color de SU tipo (no se mezclan). -->
+        @if (abiertosPublicos().length > 0) {
+          <section class="bloque bloque--abiertos">
+            <div class="bloque-cab">
+              <span class="bloque-tit"><i class="ti ti-door-enter"></i> Abiertos para unirse</span>
+              @if (totalAbiertosPublicos() > abiertosPublicos().length) {
+                <button class="bloque-ver" (click)="ir('/torneos')">Ver más</button>
+              }
+            </div>
+            @for (a of abiertosPublicos(); track a.nombre) {
+              <button class="fila fila--unirse" [class]="'fila--' + a.clase" (click)="a.accion()">
+                <span class="fila-icono"><i class="ti" [class]="a.icono"></i></span>
+                <span class="fila-txt">
+                  <span class="fila-nom">{{ a.nombre }}</span>
+                  <span class="fila-sub">{{ a.sub }} · Abierto para unirse</span>
+                </span>
+                <span class="unete-badge">Únete</span>
+              </button>
+            }
+          </section>
+        }
       }
     </div>
   `,
@@ -262,6 +286,44 @@ import { Bracket } from '../../core/models/bracket.model';
       .progreso-barra { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
       .progreso-fill { display: block; height: 100%; background: var(--tipo-quin-fill); border-radius: 999px; transition: width 0.3s ease; }
       .progreso-txt { font-size: 11px; color: var(--text-muted); }
+
+      /* Sección "Abiertos para unirse". El bloque no tiene color fijo: cada
+         fila lleva el color de SU tipo en --c-fila, así no se mezclan. */
+      .bloque--abiertos { --c-fill: var(--text-muted); }
+
+      .fila--unirse {
+        --c-fila: var(--text-muted);
+        border-color: var(--c-fila);
+        animation: fila-pulso 2.2s ease-in-out infinite;
+      }
+      .fila--surv { --c-fila: var(--tipo-surv-fill); }
+      .fila--quin { --c-fila: var(--tipo-quin-fill); }
+      .fila--elim { --c-fila: var(--tipo-elim-fill); }
+
+      .fila-icono {
+        flex-shrink: 0; width: 30px; height: 30px; border-radius: 8px;
+        display: flex; align-items: center; justify-content: center;
+        background: color-mix(in srgb, var(--c-fila) 15%, transparent);
+        color: var(--c-fila);
+      }
+      .fila-icono .ti { font-size: 16px; }
+      .unete-badge {
+        flex-shrink: 0; font-size: 11px; font-weight: 700;
+        padding: 3px 9px; border-radius: 999px;
+        background: color-mix(in srgb, var(--c-fila) 15%, transparent);
+        color: var(--c-fila);
+      }
+
+      @keyframes fila-pulso {
+        0%, 100% { box-shadow: 0 0 0 0 transparent; }
+        50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-fila) 30%, transparent); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .fila--unirse {
+          animation: none;
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-fila) 28%, transparent);
+        }
+      }
     `,
   ],
 })
@@ -387,10 +449,60 @@ export class InicioComponent {
     return [...mios, ...publicosNuevos];
   });
 
+  // Las secciones por tipo muestran lo MÍO. Los públicos abiertos donde aún
+  // no participo van a su propia sección "Abiertos para unirse", así que aquí
+  // los excluimos para no duplicarlos.
   readonly survivors = computed(() =>
-    this.torneosVista().filter((t) => (t.modo ?? 'supervivencia') === 'supervivencia'),
+    this.torneosVista().filter(
+      (t) => (t.modo ?? 'supervivencia') === 'supervivencia' && !this.esPublicoNoMioTorneo(t),
+    ),
   );
-  readonly quinielas = computed(() => this.torneosVista().filter((t) => t.modo === 'quiniela'));
+  readonly quinielas = computed(() =>
+    this.torneosVista().filter((t) => t.modo === 'quiniela' && !this.esPublicoNoMioTorneo(t)),
+  );
+
+  /**
+   * Torneos y eliminatorias PÚBLICOS abiertos a inscripción donde aún no
+   * participo, del contexto actual. Es la sección para descubrir y unirse.
+   * Cada item lleva su tipo para pintar el color propio (no se mezclan).
+   */
+  private readonly torneosAbiertosPublicos = computed(() =>
+    this.torneosVista()
+      .filter((t) => this.esPublicoNoMioTorneo(t) && t.estado === 'inscripcion')
+      .map((t) => ({
+        clase: (t.modo === 'quiniela' ? 'quin' : 'surv') as 'quin' | 'surv',
+        icono: t.modo === 'quiniela' ? 'ti-list-check' : 'ti-activity-heartbeat',
+        nombre: t.nombre,
+        sub: t.modo === 'quiniela' ? 'Quiniela' : 'Survivor',
+        accion: () => this.irTorneo(t),
+      })),
+  );
+
+  private readonly bracketsAbiertosPublicos = computed(() =>
+    this.eliminatoriasBase()
+      .filter((b) => this.esPublicoNoMio(b) && b.estado === 'inscripcion')
+      .map((b) => ({
+        clase: 'elim' as const,
+        icono: 'ti-sitemap',
+        nombre: b.nombre,
+        sub: 'Eliminatoria',
+        accion: () => this.ir('/eliminatorias/' + b.id),
+      })),
+  );
+
+  /** Total disponible, para decidir si mostramos "Ver más". */
+  readonly totalAbiertosPublicos = computed(
+    () => this.torneosAbiertosPublicos().length + this.bracketsAbiertosPublicos().length,
+  );
+
+  /**
+   * En el hub mostramos solo un adelanto: UN torneo y UNA eliminatoria (uno de
+   * cada tipo). El resto se ve con "Ver más" en la lista completa de torneos.
+   */
+  readonly abiertosPublicos = computed(() => [
+    ...this.torneosAbiertosPublicos().slice(0, 1),
+    ...this.bracketsAbiertosPublicos().slice(0, 1),
+  ]);
 
   /** ¿Es un torneo público abierto en el que aún no participo? */
   esPublicoNoMioTorneo(t: Torneo): boolean {
@@ -409,7 +521,7 @@ export class InicioComponent {
   private readonly idsMios = computed(() => new Set(this.misBrackets().map((b) => b.id)));
 
   /** Eliminatorias mías (activas) + públicas abiertas donde aún no estoy, sin duplicar. */
-  readonly eliminatorias = computed(() => {
+  private readonly eliminatoriasBase = computed(() => {
     const ctx = this.contexto.grupoId();
     const mias = this.misBrackets().filter(
       (b) => (b.grupoId ?? null) === ctx && b.estado !== 'finalizado',
@@ -419,6 +531,14 @@ export class InicioComponent {
     );
     return [...mias, ...publicasNuevas];
   });
+
+  /**
+   * Sección "Eliminatorias" de la vista: solo las MÍAS. Las públicas abiertas
+   * donde aún no participo se muestran en "Abiertos para unirse".
+   */
+  readonly eliminatorias = computed(() =>
+    this.eliminatoriasBase().filter((b) => !this.esPublicoNoMio(b)),
+  );
 
   esPublicoNoMio(b: Bracket): boolean {
     return !this.idsMios().has(b.id);
@@ -483,7 +603,8 @@ export class InicioComponent {
       this.partidosAbiertos().length === 0 &&
       this.survivors().length === 0 &&
       this.quinielas().length === 0 &&
-      this.eliminatorias().length === 0,
+      this.eliminatorias().length === 0 &&
+      this.abiertosPublicos().length === 0,
   );
 
   ir(ruta: string): void {

@@ -22,86 +22,202 @@ import { guardarInvitacion } from '../../shared/invitacion.util';
   imports: [CommonModule, NavComponent],
   template: `
     <div class="screen">
-      <app-nav [back]="true" title="Invitación a eliminatoria" />
+      <app-nav [back]="true" title="Invitación" />
 
       <div class="invitacion">
-        <div class="ico">🏆</div>
-
-        @if (info(); as b) {
-          <h1>{{ b.nombre }}</h1>
-          <p class="sub">
-            {{ b.modo === 'duenos' ? 'Modo dueños' : 'Pronóstico' }}
-            · {{ b.equipos }} equipos
-            · {{ b.formatoRondas === 'ida-vuelta' ? 'ida y vuelta' : 'partido único' }}
-          </p>
-
-          <div class="reglas">
-            @if (b.costoEntrada > 0) {
-              <div class="regla"><i class="ti ti-coins"></i> Entrada: {{ b.costoEntrada | number }} pts</div>
+        <div class="card">
+          <div class="hero">
+            <div class="hero__glow"></div>
+            <span class="hero__badge">Te invitaron</span>
+            <div class="hero__ico"><i class="ti ti-trophy"></i></div>
+            @if (info(); as b) {
+              <h1 class="hero__nombre">{{ b.nombre }}</h1>
+              <p class="hero__tipo">Eliminatoria · {{ b.modo === 'duenos' ? 'Modo dueños' : 'Pronóstico' }}</p>
+            } @else if (!error()) {
+              <h1 class="hero__nombre">Eliminatoria</h1>
+              <p class="hero__tipo">Código {{ codigo }}</p>
             } @else {
-              <div class="regla"><i class="ti ti-gift"></i> Entrada gratis</div>
-            }
-            <div class="regla">
-              <i class="ti ti-sitemap"></i>
-              {{ b.avance === 'reordena' ? 'Liguilla (resiembra cada ronda)' : 'Copa (cuadro fijo)' }}
-            </div>
-            @if (b.estado !== 'inscripcion') {
-              <div class="regla regla--aviso"><i class="ti ti-lock"></i> Ya no admite inscripciones.</div>
+              <h1 class="hero__nombre">Ups…</h1>
             }
           </div>
-        } @else if (!error()) {
-          <h1>Te invitaron a una eliminatoria</h1>
-          <p class="sub">Código <strong>{{ codigo }}</strong></p>
-        }
 
-        @if (error()) {
-          <p class="error">{{ error() }}</p>
-        }
+          <div class="body">
+            @if (info(); as b) {
+              <div class="chips">
+                <span class="chip"><i class="ti ti-users-group"></i> {{ b.equipos }} equipos</span>
+                <span class="chip">
+                  <i class="ti ti-arrows-shuffle"></i>
+                  {{ b.formatoRondas === 'ida-vuelta' ? 'Ida y vuelta' : 'Partido único' }}
+                </span>
+                <span class="chip">
+                  <i class="ti ti-sitemap"></i>
+                  {{ b.avance === 'reordena' ? 'Liguilla' : 'Copa' }}
+                </span>
+              </div>
 
-        @if (sesion()) {
-          <button
-            class="btn btn--primary"
-            [disabled]="uniendo() || (info() && info()!.estado !== 'inscripcion')"
-            (click)="unirse()"
-          >
-            {{ uniendo() ? 'Uniéndome…' : 'Unirme a la eliminatoria' }}
-          </button>
-        } @else {
-          <p class="hint">Inicia sesión para unirte. Guardamos la invitación.</p>
-          <button class="btn btn--primary" (click)="ir('login')">Iniciar sesión</button>
-          <button class="btn" (click)="ir('registro')">Crear cuenta</button>
-        }
+              <div class="entrada" [class.entrada--free]="b.costoEntrada <= 0">
+                @if (b.costoEntrada > 0) {
+                  <div class="entrada__ico"><i class="ti ti-coins"></i></div>
+                  <div class="entrada__txt">
+                    <span class="entrada__label">Entrada</span>
+                    <span class="entrada__valor">{{ b.costoEntrada | number }} <small>pts</small></span>
+                  </div>
+                } @else {
+                  <div class="entrada__ico"><i class="ti ti-gift"></i></div>
+                  <div class="entrada__txt">
+                    <span class="entrada__label">Entrada</span>
+                    <span class="entrada__valor">Gratis</span>
+                  </div>
+                }
+              </div>
+
+              <p class="detalle">
+                <i class="ti ti-sitemap"></i>
+                {{ b.avance === 'reordena' ? 'Liguilla: se resiembra el cuadro cada ronda.' : 'Copa: el cuadro queda fijo desde el inicio.' }}
+              </p>
+
+              @if (b.estado !== 'inscripcion') {
+                <p class="aviso"><i class="ti ti-lock"></i> Esta eliminatoria ya no admite inscripciones.</p>
+              }
+            }
+
+            @if (error()) {
+              <p class="error"><i class="ti ti-alert-circle"></i> {{ error() }}</p>
+            }
+
+            @if (sesion()) {
+              <button
+                class="btn btn--primary"
+                [disabled]="uniendo() || (info() && info()!.estado !== 'inscripcion')"
+                (click)="unirse()"
+              >
+                <i class="ti ti-check"></i>
+                {{ uniendo() ? 'Uniéndome…' : 'Unirme a la eliminatoria' }}
+              </button>
+              @if (info() && info()!.estado === 'inscripcion') {
+                <p class="pie">Te están esperando 👀</p>
+              }
+            } @else {
+              <button class="btn btn--primary" (click)="ir('login')">
+                <i class="ti ti-login"></i> Iniciar sesión y unirme
+              </button>
+              <button class="btn btn--ghost" (click)="ir('registro')">Crear cuenta</button>
+              <p class="pie">Guardamos tu invitación mientras entras.</p>
+            }
+          </div>
+        </div>
       </div>
     </div>
   `,
   styles: [
     `
-      .invitacion { max-width: 420px; margin: 20px auto 0; text-align: center; }
-      .ico {
-        width: 72px; height: 72px; border-radius: 18px; margin: 0 auto 14px;
+      .invitacion { max-width: 440px; margin: 16px auto 0; padding: 0 4px; }
+
+      .card {
+        border: 1px solid var(--border); border-radius: var(--radius-lg);
+        background: var(--surface-2); overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+      }
+
+      /* Hero con degradado en el azul de eliminatorias. */
+      .hero {
+        position: relative; overflow: hidden; text-align: center;
+        padding: 28px 20px 24px;
+        background:
+          radial-gradient(120% 120% at 50% -10%, var(--tipo-elim-fill) 0%, var(--tipo-elim-text) 90%);
+        color: #fff;
+      }
+      .hero__glow {
+        position: absolute; inset: 0;
+        background: radial-gradient(60% 50% at 50% 0%, rgba(255, 255, 255, 0.28), transparent 70%);
+        pointer-events: none;
+      }
+      .hero__badge {
+        position: relative; display: inline-block;
+        font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+        padding: 4px 10px; border-radius: 999px; margin-bottom: 14px;
+        background: rgba(255, 255, 255, 0.18); color: #fff;
+        backdrop-filter: blur(2px);
+      }
+      .hero__ico {
+        position: relative; width: 66px; height: 66px; margin: 0 auto 12px;
         display: flex; align-items: center; justify-content: center;
-        font-size: 34px; background: var(--surface-1);
+        font-size: 32px; border-radius: 20px;
+        background: rgba(255, 255, 255, 0.16);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
       }
-      h1 { font-size: 20px; margin: 0 0 6px; }
-      .sub { font-size: 13px; color: var(--text-secondary); margin: 0 0 16px; }
-      .sub strong { letter-spacing: 2px; color: var(--accent-text); }
-      .reglas {
-        text-align: left; background: var(--surface-1); border-radius: var(--radius);
-        padding: 12px 14px; margin: 0 0 18px; display: flex; flex-direction: column; gap: 8px;
+      .hero__ico i { line-height: 1; }
+      .hero__nombre { position: relative; font-size: 23px; font-weight: 800; margin: 0 0 4px; }
+      .hero__tipo { position: relative; font-size: 13px; margin: 0; opacity: 0.9; }
+
+      .body { padding: 20px 18px 22px; }
+
+      /* Chips de un vistazo. */
+      .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 16px; }
+      .chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        font-size: 12.5px; font-weight: 600; color: var(--tipo-elim-text);
+        background: var(--tipo-elim-bg); border-radius: 999px; padding: 6px 12px;
       }
-      .regla { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
-      .regla i { color: var(--accent-text); }
-      .regla--aviso { color: var(--warning-text); }
-      .regla--aviso i { color: var(--warning-text); }
-      .error { color: var(--danger-text); font-size: 14px; margin: 0 0 14px; }
-      .hint { font-size: 13px; color: var(--text-muted); margin: 0 0 12px; }
+      .chip i { font-size: 15px; }
+
+      /* Entrada como gancho principal. */
+      .entrada {
+        display: flex; align-items: center; gap: 14px;
+        background: var(--surface-1); border-radius: var(--radius);
+        padding: 14px 16px; margin-bottom: 14px;
+      }
+      .entrada__ico {
+        width: 44px; height: 44px; flex: none; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 22px; color: var(--warning-text); background: var(--warning-bg);
+      }
+      .entrada--free .entrada__ico { color: var(--success-text); background: var(--success-bg); }
+      .entrada__txt { display: flex; flex-direction: column; text-align: left; }
+      .entrada__label {
+        font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+        color: var(--text-muted);
+      }
+      .entrada__valor { font-size: 20px; font-weight: 800; color: var(--text-primary); }
+      .entrada__valor small { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+
+      .detalle {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 12.5px; color: var(--text-secondary); margin: 0 2px 16px;
+      }
+      .detalle i { color: var(--accent-text); font-size: 16px; }
+
+      .aviso {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 13px; color: var(--warning-text);
+        background: var(--warning-bg); border-radius: var(--radius);
+        padding: 10px 12px; margin: 0 0 14px;
+      }
+      .error {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 13px; color: var(--danger-text);
+        background: var(--danger-bg); border-radius: var(--radius);
+        padding: 10px 12px; margin: 0 0 14px;
+      }
+
       .btn {
-        width: 100%; padding: 13px; margin-top: 8px; cursor: pointer; font-size: 15px; font-weight: 600;
+        width: 100%; padding: 13px; margin-top: 8px; cursor: pointer;
+        font-size: 15px; font-weight: 700;
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
         border: 1px solid var(--border); border-radius: var(--radius);
         background: var(--surface-2); color: var(--text-primary);
+        transition: transform 0.05s ease, filter 0.15s ease;
       }
-      .btn--primary { background: var(--accent-fill); color: #fff; border-color: var(--accent-fill); }
-      .btn:disabled { opacity: 0.6; cursor: default; }
+      .btn:active { transform: translateY(1px); }
+      .btn--primary {
+        background: var(--tipo-elim-fill); color: #fff; border-color: var(--tipo-elim-fill);
+        box-shadow: 0 6px 16px rgba(55, 138, 221, 0.35);
+      }
+      .btn--primary:hover:not(:disabled) { filter: brightness(1.05); }
+      .btn--ghost { background: transparent; }
+      .btn:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
+
+      .pie { text-align: center; font-size: 12.5px; color: var(--text-muted); margin: 12px 0 0; }
     `,
   ],
 })
