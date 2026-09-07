@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { EscudoComponent } from '../../shared/escudo.component';
 import {
   Bracket,
+  EquipoBracket,
   Llave,
   PronosticoBracket,
   nombreRonda,
@@ -11,11 +12,20 @@ import {
 import { globalDeLlave } from '../../core/services/bracket-cuadro';
 
 /**
- * Dibuja el cuadro de eliminatoria con navegación por ronda: unos tabs
- * arriba (Octavos, Cuartos, Semifinal, Final según el tamaño) y las llaves
- * de la ronda elegida a lo ancho, con transición al cambiar. Cada equipo
- * puede expandir un detalle: quién lo pronosticó (modo pronóstico) o su
- * dueño (modo dueños). Solo pinta lo que recibe; no toca datos ni lógica.
+ * Dibuja el cuadro de eliminatoria con dos vistas:
+ *
+ *  · "Cuadro" (por defecto): el árbol completo con todas las rondas lado a
+ *    lado, conectores que unen cada par hacia la ronda siguiente y el
+ *    campeón coronado al final. Es la vista con impacto: se lee de un
+ *    vistazo cómo avanza cada rama del torneo. Con scroll horizontal en
+ *    pantallas chicas.
+ *
+ *  · "Por ronda": los tabs de antes (Octavos · Cuartos · Semifinal · Final),
+ *    útil cuando el cuadro es grande o en móvil.
+ *
+ * Cada equipo puede expandir un detalle: quién lo pronosticó (modo
+ * pronóstico) o su dueño (modo dueños). Solo pinta lo que recibe; no toca
+ * datos ni lógica de negocio.
  */
 @Component({
   selector: 'app-cuadro-bracket',
@@ -23,129 +33,233 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
   imports: [CommonModule, EscudoComponent],
   template: `
     <div class="cuadro">
-      <!-- Tabs de ronda: Octavos · Cuartos · Semifinal · Final -->
-      <div class="rondas-tabs" role="tablist">
-        @for (r of rondas(); track r) {
-          <button
-            class="tab"
-            role="tab"
-            [class.tab--activa]="rondaActiva() === r"
-            [attr.aria-selected]="rondaActiva() === r"
-            (click)="irARonda(r)"
-          >
-            {{ nombreCorto(r) }}
-          </button>
-        }
+      <!-- Selector de vista: Cuadro (árbol) / Por ronda -->
+      <div class="vista-switch" role="tablist" aria-label="Vista del cuadro">
+        <button
+          class="vista-op"
+          role="tab"
+          [class.vista-op--activa]="vista() === 'arbol'"
+          [attr.aria-selected]="vista() === 'arbol'"
+          (click)="vista.set('arbol')"
+        >
+          <i class="ti ti-sitemap"></i> Cuadro
+        </button>
+        <button
+          class="vista-op"
+          role="tab"
+          [class.vista-op--activa]="vista() === 'ronda'"
+          [attr.aria-selected]="vista() === 'ronda'"
+          (click)="vista.set('ronda')"
+        >
+          <i class="ti ti-layout-list"></i> Por ronda
+        </button>
       </div>
 
-      <!-- Una sola ronda a lo ancho. El track por ronda reinicia la animación. -->
-      @for (r of [rondaActiva()]; track r) {
-        <div class="ronda-cabecera">
-          <span class="ronda-titulo">{{ nombre(r) }}</span>
-          <span class="ronda-conteo">{{ llavesDe(r).length }} {{ llavesDe(r).length === 1 ? 'llave' : 'llaves' }}</span>
-        </div>
-        <div class="llaves">
-          @for (l of llavesDe(r); track l.id) {
-            <div class="llave" [class.llave--resuelta]="!!l.ganador">
-              <!-- Lado local -->
-              <div
-                class="lado"
-                [class.lado--gana]="esGanador(l, l.local?.nombre)"
-                [class.lado--acierto]="marcaMia(l, l.local?.nombre) === 'acierto'"
-                [class.lado--fallo]="marcaMia(l, l.local?.nombre) === 'fallo'"
-              >
-                @if (l.local) {
-                  <span class="siembra">{{ l.local.siembra }}</span>
-                  <app-escudo [equipo]="l.local.nombre" [size]="18" />
-                  <span class="equipo">{{ l.local.nombre }}</span>
-                  @if (esGanador(l, l.local.nombre)) {
-                    <span class="trofeo" title="Avanzó"><i class="ti ti-trophy"></i></span>
-                  }
-                  @if (elegiEste(l, l.local.nombre)) {
-                    <span class="mi-pick" title="Tu pronóstico"><i class="ti ti-user-check"></i></span>
-                  }
-                  @if (contarDetalle(l, l.local.nombre); as n) {
-                    <button class="detalle-btn" (click)="alternarDetalle(l.id + '-L')" [attr.aria-expanded]="abierto(l.id + '-L')">
-                      <i class="ti ti-users"></i> {{ n }}
-                      <i class="ti chev" [class.ti-chevron-down]="!abierto(l.id + '-L')" [class.ti-chevron-up]="abierto(l.id + '-L')"></i>
-                    </button>
-                  }
-                } @else {
-                  <span class="equipo por-definir">Por definir</span>
-                }
-                <span class="goles">{{ golLocal(l) }}</span>
-              </div>
-
-              @if (abierto(l.id + '-L') && l.local) {
-                <div class="detalle">
-                  <div class="detalle-fila">
-                    @for (nom of detalleDe(l, l.local.nombre); track nom) {
-                      <span class="chip-nom">{{ nom }}</span>
-                    }
-                  </div>
+      <!-- =================== VISTA ÁRBOL =================== -->
+      @if (vista() === 'arbol') {
+        <div class="arbol-scroll">
+          <div class="arbol" [style.--rondas]="totalRondas()">
+            @for (r of rondas(); track r) {
+              <div class="columna" [class.columna--final]="esRondaFinal(r)">
+                <div class="col-cabecera">
+                  <span class="col-titulo">{{ nombreCorto(r) }}</span>
                 </div>
-              }
-
-              <span class="vs">VS</span>
-
-              <!-- Lado visitante -->
-              <div
-                class="lado"
-                [class.lado--gana]="esGanador(l, l.visitante?.nombre)"
-                [class.lado--acierto]="marcaMia(l, l.visitante?.nombre) === 'acierto'"
-                [class.lado--fallo]="marcaMia(l, l.visitante?.nombre) === 'fallo'"
-              >
-                @if (l.visitante) {
-                  <span class="siembra">{{ l.visitante.siembra }}</span>
-                  <app-escudo [equipo]="l.visitante.nombre" [size]="18" />
-                  <span class="equipo">{{ l.visitante.nombre }}</span>
-                  @if (esGanador(l, l.visitante.nombre)) {
-                    <span class="trofeo" title="Avanzó"><i class="ti ti-trophy"></i></span>
+                <div class="col-llaves">
+                  @for (l of llavesDe(r); track l.id) {
+                    <div
+                      class="nodo"
+                      [class.nodo--resuelta]="!!l.ganador"
+                      [class.nodo--conector]="!esRondaFinal(r)"
+                    >
+                      <!-- Local -->
+                      <div
+                        class="fila"
+                        [class.fila--gana]="esGanador(l, l.local?.nombre)"
+                        [class.fila--acierto]="marcaMia(l, l.local?.nombre) === 'acierto'"
+                        [class.fila--fallo]="marcaMia(l, l.local?.nombre) === 'fallo'"
+                      >
+                        @if (l.local) {
+                          <span class="siembra">{{ l.local.siembra }}</span>
+                          <app-escudo [equipo]="l.local.nombre" [size]="18" />
+                          <span class="equipo">{{ l.local.nombre }}</span>
+                          @if (elegiEste(l, l.local.nombre)) {
+                            <span class="mi-pick" title="Tu pronóstico"><i class="ti ti-user-check"></i></span>
+                          }
+                          <span class="goles">{{ golLocal(l) }}</span>
+                        } @else {
+                          <span class="equipo por-definir">Por definir</span>
+                        }
+                      </div>
+                      <!-- Visitante -->
+                      <div
+                        class="fila"
+                        [class.fila--gana]="esGanador(l, l.visitante?.nombre)"
+                        [class.fila--acierto]="marcaMia(l, l.visitante?.nombre) === 'acierto'"
+                        [class.fila--fallo]="marcaMia(l, l.visitante?.nombre) === 'fallo'"
+                      >
+                        @if (l.visitante) {
+                          <span class="siembra">{{ l.visitante.siembra }}</span>
+                          <app-escudo [equipo]="l.visitante.nombre" [size]="18" />
+                          <span class="equipo">{{ l.visitante.nombre }}</span>
+                          @if (elegiEste(l, l.visitante.nombre)) {
+                            <span class="mi-pick" title="Tu pronóstico"><i class="ti ti-user-check"></i></span>
+                          }
+                          <span class="goles">{{ golVisitante(l) }}</span>
+                        } @else {
+                          <span class="equipo por-definir">Por definir</span>
+                        }
+                      </div>
+                    </div>
                   }
-                  @if (elegiEste(l, l.visitante.nombre)) {
-                    <span class="mi-pick" title="Tu pronóstico"><i class="ti ti-user-check"></i></span>
-                  }
-                  @if (contarDetalle(l, l.visitante.nombre); as n) {
-                    <button class="detalle-btn" (click)="alternarDetalle(l.id + '-V')" [attr.aria-expanded]="abierto(l.id + '-V')">
-                      <i class="ti ti-users"></i> {{ n }}
-                      <i class="ti chev" [class.ti-chevron-down]="!abierto(l.id + '-V')" [class.ti-chevron-up]="abierto(l.id + '-V')"></i>
-                    </button>
-                  }
-                } @else {
-                  <span class="equipo por-definir">Por definir</span>
-                }
-                <span class="goles">{{ golVisitante(l) }}</span>
-              </div>
-
-              @if (abierto(l.id + '-V') && l.visitante) {
-                <div class="detalle">
-                  <div class="detalle-fila">
-                    @for (nom of detalleDe(l, l.visitante.nombre); track nom) {
-                      <span class="chip-nom">{{ nom }}</span>
-                    }
-                  </div>
                 </div>
-              }
+              </div>
+            }
 
-              @if (l.resueltoPor && l.resueltoPor !== 'global') {
-                <span class="por">
-                  {{ l.resueltoPor === 'penales' ? 'Penales' : 'Mejor posicionado' }}
-                </span>
-              }
+            <!-- Columna del campeón: corona quien ganó la final -->
+            <div class="columna columna--trofeo">
+              <div class="col-cabecera">
+                <span class="col-titulo">Campeón</span>
+              </div>
+              <div class="col-llaves">
+                <div class="campeon" [class.campeon--listo]="!!campeon()">
+                  <div class="corona"><i class="ti ti-trophy"></i></div>
+                  @if (campeon(); as c) {
+                    <app-escudo [equipo]="c.nombre" [size]="34" />
+                    <span class="campeon-nombre">{{ c.nombre }}</span>
+                  } @else {
+                    <span class="campeon-nombre por-definir">Por definir</span>
+                  }
+                </div>
+              </div>
             </div>
+          </div>
+        </div>
+        <p class="arbol-pista">
+          <i class="ti ti-arrows-horizontal"></i>
+          Desliza para ver todas las rondas
+        </p>
+      }
+
+      <!-- =================== VISTA POR RONDA =================== -->
+      @if (vista() === 'ronda') {
+        <!-- Tabs de ronda: Octavos · Cuartos · Semifinal · Final -->
+        <div class="rondas-tabs" role="tablist">
+          @for (r of rondas(); track r) {
+            <button
+              class="tab"
+              role="tab"
+              [class.tab--activa]="rondaActiva() === r"
+              [attr.aria-selected]="rondaActiva() === r"
+              (click)="irARonda(r)"
+            >
+              {{ nombreCorto(r) }}
+            </button>
           }
         </div>
+
+        <!-- Una sola ronda a lo ancho. El track por ronda reinicia la animación. -->
+        @for (r of [rondaActiva()]; track r) {
+          <div class="ronda-cabecera">
+            <span class="ronda-titulo">{{ nombre(r) }}</span>
+            <span class="ronda-conteo">{{ llavesDe(r).length }} {{ llavesDe(r).length === 1 ? 'llave' : 'llaves' }}</span>
+          </div>
+          <div class="llaves">
+            @for (l of llavesDe(r); track l.id) {
+              <div class="llave" [class.llave--resuelta]="!!l.ganador">
+                <!-- Lado local -->
+                <div
+                  class="lado"
+                  [class.lado--gana]="esGanador(l, l.local?.nombre)"
+                  [class.lado--acierto]="marcaMia(l, l.local?.nombre) === 'acierto'"
+                  [class.lado--fallo]="marcaMia(l, l.local?.nombre) === 'fallo'"
+                >
+                  @if (l.local) {
+                    <span class="siembra">{{ l.local.siembra }}</span>
+                    <app-escudo [equipo]="l.local.nombre" [size]="18" />
+                    <span class="equipo">{{ l.local.nombre }}</span>
+                    @if (esGanador(l, l.local.nombre)) {
+                      <span class="trofeo" title="Avanzó"><i class="ti ti-trophy"></i></span>
+                    }
+                    @if (elegiEste(l, l.local.nombre)) {
+                      <span class="mi-pick" title="Tu pronóstico"><i class="ti ti-user-check"></i></span>
+                    }
+                    @if (contarDetalle(l, l.local.nombre); as n) {
+                      <button class="detalle-btn" (click)="alternarDetalle(l.id + '-L')" [attr.aria-expanded]="abierto(l.id + '-L')">
+                        <i class="ti ti-users"></i> {{ n }}
+                        <i class="ti chev" [class.ti-chevron-down]="!abierto(l.id + '-L')" [class.ti-chevron-up]="abierto(l.id + '-L')"></i>
+                      </button>
+                    }
+                  } @else {
+                    <span class="equipo por-definir">Por definir</span>
+                  }
+                  <span class="goles">{{ golLocal(l) }}</span>
+                </div>
+
+                @if (abierto(l.id + '-L') && l.local) {
+                  <div class="detalle">
+                    <div class="detalle-fila">
+                      @for (nom of detalleDe(l, l.local.nombre); track nom) {
+                        <span class="chip-nom">{{ nom }}</span>
+                      }
+                    </div>
+                  </div>
+                }
+
+                <span class="vs">VS</span>
+
+                <!-- Lado visitante -->
+                <div
+                  class="lado"
+                  [class.lado--gana]="esGanador(l, l.visitante?.nombre)"
+                  [class.lado--acierto]="marcaMia(l, l.visitante?.nombre) === 'acierto'"
+                  [class.lado--fallo]="marcaMia(l, l.visitante?.nombre) === 'fallo'"
+                >
+                  @if (l.visitante) {
+                    <span class="siembra">{{ l.visitante.siembra }}</span>
+                    <app-escudo [equipo]="l.visitante.nombre" [size]="18" />
+                    <span class="equipo">{{ l.visitante.nombre }}</span>
+                    @if (esGanador(l, l.visitante.nombre)) {
+                      <span class="trofeo" title="Avanzó"><i class="ti ti-trophy"></i></span>
+                    }
+                    @if (elegiEste(l, l.visitante.nombre)) {
+                      <span class="mi-pick" title="Tu pronóstico"><i class="ti ti-user-check"></i></span>
+                    }
+                    @if (contarDetalle(l, l.visitante.nombre); as n) {
+                      <button class="detalle-btn" (click)="alternarDetalle(l.id + '-V')" [attr.aria-expanded]="abierto(l.id + '-V')">
+                        <i class="ti ti-users"></i> {{ n }}
+                        <i class="ti chev" [class.ti-chevron-down]="!abierto(l.id + '-V')" [class.ti-chevron-up]="abierto(l.id + '-V')"></i>
+                      </button>
+                    }
+                  } @else {
+                    <span class="equipo por-definir">Por definir</span>
+                  }
+                  <span class="goles">{{ golVisitante(l) }}</span>
+                </div>
+
+                @if (abierto(l.id + '-V') && l.visitante) {
+                  <div class="detalle">
+                    <div class="detalle-fila">
+                      @for (nom of detalleDe(l, l.visitante.nombre); track nom) {
+                        <span class="chip-nom">{{ nom }}</span>
+                      }
+                    </div>
+                  </div>
+                }
+
+                @if (l.resueltoPor && l.resueltoPor !== 'global') {
+                  <span class="por">
+                    {{ l.resueltoPor === 'penales' ? 'Penales' : 'Mejor posicionado' }}
+                  </span>
+                }
+              </div>
+            }
+          </div>
+        }
       }
     </div>
   `,
   styles: [
     `
-      /*
-       * El cuadro se lee de izquierda a derecha, ronda por ronda.
-       * En móvil se desplaza horizontal: cada columna mantiene su
-       * ancho y las llaves se centran verticalmente respecto a la
-       * ronda anterior, que es lo que da la forma de árbol.
-       */
       .cuadro {
         display: flex;
         flex-direction: column;
@@ -153,7 +267,221 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         padding: 4px 0 12px;
       }
 
-      /* Tabs de ronda: pastillas con scroll propio si no caben. */
+      /* --- Selector de vista Cuadro / Por ronda --- */
+      .vista-switch {
+        display: inline-flex;
+        gap: 4px;
+        padding: 4px;
+        border-radius: 999px;
+        background: var(--surface-1);
+        border: 1px solid var(--border);
+        align-self: flex-start;
+      }
+      .vista-op {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 14px;
+        border-radius: 999px;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+      }
+      .vista-op i { font-size: 15px; }
+      .vista-op:hover { color: var(--text-primary); }
+      .vista-op--activa {
+        background: linear-gradient(135deg,
+          var(--accent-fill),
+          color-mix(in srgb, var(--accent-fill) 68%, #7c4dff));
+        color: #fff;
+        box-shadow: 0 3px 12px -4px color-mix(in srgb, var(--accent-fill) 80%, transparent);
+      }
+
+      /* ============================================================
+         VISTA ÁRBOL
+         El cuadro se despliega en columnas (una por ronda) más la
+         columna del campeón. Cada nodo dibuja conectores hacia la
+         ronda siguiente con pseudo-elementos, dando forma de llaves.
+         ============================================================ */
+      .arbol-scroll {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 4px 2px 10px;
+        scrollbar-width: thin;
+      }
+      .arbol {
+        display: flex;
+        gap: 0;
+        min-width: min-content;
+        align-items: stretch;
+      }
+      .columna {
+        display: flex;
+        flex-direction: column;
+        min-width: 190px;
+        flex-shrink: 0;
+      }
+      .col-cabecera {
+        text-align: center;
+        padding: 0 10px 12px;
+      }
+      .col-titulo {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--text-muted);
+        padding: 4px 12px;
+        border-radius: 999px;
+        background: var(--surface-1);
+        border: 1px solid var(--border);
+      }
+      .columna--final .col-titulo,
+      .columna--trofeo .col-titulo {
+        color: #fff;
+        background: linear-gradient(135deg,
+          var(--accent-fill),
+          color-mix(in srgb, var(--accent-fill) 60%, #7c4dff));
+        border-color: transparent;
+      }
+      /* Las llaves se reparten a lo alto para alinearse con el árbol. */
+      .col-llaves {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-around;
+        flex: 1;
+        gap: 0;
+        padding: 0 10px;
+      }
+
+      .nodo {
+        position: relative;
+        margin: 8px 0;
+        border-radius: 12px;
+        overflow: visible;
+        background: linear-gradient(180deg,
+          color-mix(in srgb, var(--surface-2) 92%, var(--accent-fill)) 0%,
+          var(--surface-2) 45%);
+        border: 1px solid var(--border);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+        transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+        animation: entra-nodo 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+      .nodo:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.55);
+        z-index: 2;
+      }
+      .nodo--resuelta {
+        border-color: color-mix(in srgb, var(--accent-fill) 45%, var(--border));
+      }
+      @keyframes entra-nodo {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      /* Conectores: una línea horizontal saliendo de cada nodo y una
+         vertical que une el par de nodos hacia la ronda siguiente. */
+      .nodo--conector::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 100%;
+        width: 10px;
+        height: 2px;
+        background: var(--border-strong, var(--border));
+      }
+      .nodo--conector.nodo--resuelta::after {
+        background: color-mix(in srgb, var(--accent-fill) 60%, var(--border));
+      }
+
+      .fila {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 10px;
+        font-size: 13px;
+      }
+      .fila + .fila { border-top: 1px solid var(--border); }
+      .fila--gana {
+        background: linear-gradient(90deg,
+          color-mix(in srgb, var(--accent-fill) 16%, transparent),
+          transparent 90%);
+      }
+      .fila--gana .equipo { font-weight: 800; color: var(--text-primary); }
+      .nodo--resuelta .fila:not(.fila--gana) .equipo { opacity: 0.5; }
+      .nodo--resuelta .fila:not(.fila--gana) .siembra { opacity: 0.5; }
+      .fila--acierto { box-shadow: inset 3px 0 0 0 var(--success-text); }
+      .fila--fallo { box-shadow: inset 3px 0 0 0 var(--danger-text); }
+
+      /* Columna del campeón: card grande, coronado y con brillo. */
+      .columna--trofeo { min-width: 170px; }
+      .campeon {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 20px 16px 18px;
+        margin: 8px 0;
+        border-radius: 16px;
+        text-align: center;
+        background: var(--surface-2);
+        border: 1px dashed var(--border);
+        color: var(--text-muted);
+      }
+      .campeon--listo {
+        background: linear-gradient(160deg,
+          color-mix(in srgb, #f1c40f 18%, var(--surface-2)),
+          var(--surface-2) 70%);
+        border: 1px solid color-mix(in srgb, #f1c40f 55%, var(--border));
+        box-shadow: 0 12px 30px -16px color-mix(in srgb, #f1c40f 80%, transparent);
+        color: var(--text-primary);
+        animation: brilla-campeon 0.4s ease both;
+      }
+      @keyframes brilla-campeon {
+        from { opacity: 0; transform: scale(0.94); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      .corona {
+        font-size: 26px;
+        color: var(--text-muted);
+        line-height: 1;
+      }
+      .campeon--listo .corona {
+        color: #f1c40f;
+        filter: drop-shadow(0 2px 6px color-mix(in srgb, #f1c40f 60%, transparent));
+      }
+      .campeon-nombre {
+        font-size: 14px;
+        font-weight: 800;
+        max-width: 140px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .arbol-pista {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        justify-content: center;
+        margin: 0;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+      }
+      @media (min-width: 900px) {
+        .arbol-pista { display: none; }
+      }
+
+      /* ============================================================
+         VISTA POR RONDA (tabs) — se conserva tal cual estaba.
+         ============================================================ */
       .rondas-tabs {
         display: flex;
         gap: 8px;
@@ -188,7 +516,6 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         transform: translateY(-1px);
       }
 
-      /* Cabecera de la ronda activa. */
       .ronda-cabecera {
         display: flex;
         align-items: baseline;
@@ -210,7 +537,6 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         color: var(--text-muted);
       }
 
-      /* Llaves de la ronda activa. Animación al cambiar de ronda. */
       .llaves {
         display: flex;
         flex-direction: column;
@@ -222,7 +548,7 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         to { opacity: 1; transform: translateX(0); }
       }
       @media (prefers-reduced-motion: reduce) {
-        .llaves { animation: none; }
+        .llaves, .nodo, .campeon--listo { animation: none; }
       }
 
       .llave {
@@ -241,7 +567,6 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         transform: translateY(-2px);
         box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.5);
       }
-      /* Resuelta: acento a la izquierda y borde teñido. */
       .llave--resuelta {
         border-color: color-mix(in srgb, var(--accent-fill) 45%, var(--border));
       }
@@ -262,7 +587,6 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         padding: 12px 12px;
         font-size: 14px;
       }
-      /* Ganador: fondo resaltado, texto fuerte y escudo un pelín mayor. */
       .lado--gana {
         background: linear-gradient(90deg,
           color-mix(in srgb, var(--accent-fill) 16%, transparent),
@@ -272,11 +596,9 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         font-weight: 800;
         color: var(--text-primary);
       }
-      /* Perdedor (llave ya resuelta): atenuado para que resalte el que pasó. */
       .llave--resuelta .lado:not(.lado--gana) .equipo { opacity: 0.55; }
       .llave--resuelta .lado:not(.lado--gana) .siembra { opacity: 0.55; }
 
-      /* Resaltado del pronóstico propio: verde acierto / rojo fallo. */
       .lado--acierto { box-shadow: inset 3px 0 0 0 var(--success-text); }
       .lado--fallo { box-shadow: inset 3px 0 0 0 var(--danger-text); }
 
@@ -291,7 +613,6 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
       .lado--acierto .mi-pick { color: var(--success-text); }
       .lado--fallo .mi-pick { color: var(--danger-text); }
 
-      /* Siembra: badge redondo con acento tenue. */
       .siembra {
         flex-shrink: 0;
         width: 22px;
@@ -306,7 +627,8 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         color: var(--accent-text);
         border: 1px solid color-mix(in srgb, var(--accent-fill) 25%, transparent);
       }
-      .lado--gana .siembra {
+      .lado--gana .siembra,
+      .fila--gana .siembra {
         background: var(--accent-fill);
         color: #fff;
         border-color: transparent;
@@ -323,7 +645,6 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         color: var(--text-muted);
         font-style: italic;
       }
-      /* Goles: badge circular con el marcador. */
       .goles {
         flex-shrink: 0;
         min-width: 26px;
@@ -338,12 +659,12 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         color: var(--text-primary);
         background: var(--surface-1);
       }
-      .lado--gana .goles {
+      .lado--gana .goles,
+      .fila--gana .goles {
         background: color-mix(in srgb, var(--accent-fill) 22%, var(--surface-1));
         color: var(--accent-text);
       }
 
-      /* Separador VS entre los dos lados: una fina línea con la etiqueta. */
       .vs {
         display: flex;
         align-items: center;
@@ -370,7 +691,6 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         background: color-mix(in srgb, var(--warning-text) 8%, transparent);
       }
 
-      /* Indicador de detalle (nº de pronósticos / dueño) junto al equipo. */
       .detalle-btn {
         flex-shrink: 0;
         display: inline-flex;
@@ -392,7 +712,6 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
         border-color: color-mix(in srgb, var(--accent-fill) 35%, var(--border));
       }
 
-      /* Panel colapsable: ancho fijo con scroll horizontal si hay muchos. */
       .detalle {
         position: relative;
         z-index: 1;
@@ -445,11 +764,21 @@ export class CuadroBracketComponent {
    */
   readonly pronosticos = input<PronosticoBracket[]>([]);
 
+  /** Vista activa: 'arbol' (cuadro completo) o 'ronda' (tabs). */
+  readonly vista = signal<'arbol' | 'ronda'>('arbol');
+
   readonly totalRondas = computed(() => rondasDe(this.bracket().config.equipos));
   readonly rondas = computed(() => Array.from({ length: this.totalRondas() }, (_, i) => i));
 
-  /** Ronda que se está viendo. Arranca en la última con ganador (lo más nuevo). */
+  /** Ronda que se está viendo en la vista por-ronda. Arranca en la última con ganador. */
   readonly rondaActiva = signal(0);
+
+  /** El campeón: el ganador de la última ronda (la final), si ya se resolvió. */
+  readonly campeon = computed<EquipoBracket | undefined>(() => {
+    const ult = this.totalRondas() - 1;
+    const final = this.bracket().llaves.find((l) => l.ronda === ult);
+    return final?.ganador;
+  });
 
   constructor() {
     // Coloca la ronda inicial en la más avanzada que ya tenga ganador, una
@@ -476,6 +805,11 @@ export class CuadroBracketComponent {
   /** Nombre compacto para el tab (Cuartos, Semifinal, Final, Octavos…). */
   nombreCorto(ronda: number): string {
     return nombreRonda(ronda, this.totalRondas()).replace(' de final', '');
+  }
+
+  /** ¿Es la última ronda (la final)? Sus nodos no dibujan conector. */
+  esRondaFinal(ronda: number): boolean {
+    return ronda === this.totalRondas() - 1;
   }
 
   /* --- Detalle colapsable por lado de llave --- */
