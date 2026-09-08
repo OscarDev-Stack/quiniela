@@ -232,7 +232,18 @@ import { Bracket } from '../../core/models/bracket.model';
   `,
   styles: [
     `
-      .screen { padding-bottom: 96px; }
+      /* Layout en columna a toda la altura útil: así la tarjeta de novedades
+         (con margin-top:auto) se pega al fondo cuando hay poco contenido, y
+         queda al final del scroll cuando hay más. */
+      .screen {
+        padding-bottom: 96px;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+        min-height: 100dvh;
+      }
+      /* La app de carga ocupa el hueco para centrarse verticalmente. */
+      app-cargando { flex: 1; }
 
       /* Saludo con avatar + stats compactos */
       .saludo {
@@ -260,7 +271,9 @@ import { Bracket } from '../../core/models/bracket.model';
       /* Acceso a novedades: fila con acento azul; pulsa solo si hay algo nuevo */
       .novedades {
         width: 100%; display: flex; align-items: center; gap: 12px; text-align: left;
-        margin: 0 0 16px; padding: 12px 14px; cursor: pointer;
+        /* margin-top:auto la empuja al fondo cuando sobra espacio; con
+           contenido de más, actúa como margen normal y queda al final. */
+        margin: auto 0 0; padding: 12px 14px; cursor: pointer;
         border: 1px solid rgba(55, 138, 221, 0.4); border-radius: var(--radius-lg);
         background: linear-gradient(
           135deg,
