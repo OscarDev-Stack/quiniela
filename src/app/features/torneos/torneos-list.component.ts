@@ -261,12 +261,13 @@ import { Bracket } from '../../core/models/bracket.model';
         color: var(--c-realce);
       }
 
-      /* Terminados: atenuados y con el acento en gris, para distinguirlos de
-         un vistazo de los que siguen activos. */
+      /* Terminados: atenuados pero conservan el color de SU tipo (apagado con
+         gris) en lugar de un gris genérico, así se sigue reconociendo qué eran
+         de un vistazo. */
       .card--terminado {
         opacity: 0.6;
         background: var(--surface-1);
-        border-left-color: var(--border-strong);
+        border-left-color: color-mix(in srgb, var(--c-realce) 45%, var(--text-muted));
       }
       .card--terminado:hover { opacity: 0.85; }
     `,
