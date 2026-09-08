@@ -1,4 +1,4 @@
-import { Component, DestroyRef, effect, inject, signal, untracked } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -35,7 +35,28 @@ import { ToastService } from '../../shared/toast.service';
       </div>
     </section>
 
-    @for (c of competiciones(); track c.id) {
+    <!-- Buscador de ligas: filtra la lista de abajo por nombre. Útil cuando
+         hay muchas competiciones y cuesta encontrar una concreta. Solo se
+         muestra cuando ya hay varias. -->
+    @if (competiciones().length > 5) {
+      <div class="buscador-ligas">
+        <i class="ti ti-search"></i>
+        <input
+          type="search"
+          [ngModel]="filtroLigas()"
+          (ngModelChange)="filtroLigas.set($event)"
+          placeholder="Buscar liga por nombre…"
+          aria-label="Buscar liga"
+        />
+        @if (filtroLigas()) {
+          <button class="limpiar" (click)="filtroLigas.set('')" aria-label="Limpiar búsqueda">
+            <i class="ti ti-x"></i>
+          </button>
+        }
+      </div>
+    }
+
+    @for (c of competicionesFiltradas(); track c.id) {
       <section class="panel">
         <button class="cab cab--boton" (click)="alternarLiga(c.id)">
           <i class="ti chevron" [class.ti-chevron-down]="!ligaAbierta(c.id)"
@@ -394,10 +415,42 @@ import { ToastService } from '../../shared/toast.service';
         }
         }
       </section>
+    } @empty {
+      @if (filtroLigas()) {
+        <p class="sin-resultados">Ninguna liga coincide con "{{ filtroLigas() }}".</p>
+      }
     }
   `,
   styles: [
     `
+      /* Buscador de la lista de ligas. */
+      .buscador-ligas {
+        position: relative; display: flex; align-items: center;
+        margin-bottom: 12px;
+      }
+      .buscador-ligas > .ti-search {
+        position: absolute; left: 12px; font-size: 16px;
+        color: var(--text-muted); pointer-events: none;
+      }
+      .buscador-ligas input {
+        width: 100%; box-sizing: border-box;
+        padding: 11px 38px 11px 36px; font-size: 14px;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface-1); color: var(--text-primary);
+      }
+      .buscador-ligas input::placeholder { color: var(--text-muted); }
+      .buscador-ligas input:focus { outline: none; border-color: var(--accent-fill); }
+      .buscador-ligas input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+      .buscador-ligas .limpiar {
+        position: absolute; right: 8px; display: inline-flex;
+        align-items: center; justify-content: center;
+        width: 26px; height: 26px; padding: 0; cursor: pointer;
+        border: none; border-radius: 50%;
+        background: var(--surface-2); color: var(--text-secondary);
+      }
+      .buscador-ligas .limpiar .ti { font-size: 15px; }
+      .sin-resultados { text-align: center; color: var(--text-muted); font-size: 14px; padding: 24px 0; }
+
       .msg { display: flex; align-items: center; gap: 8px; cursor: pointer;
         margin-bottom: 16px; font-size: 13px; padding: 11px 13px; border-radius: var(--radius);
         background: var(--success-bg); color: var(--success-text); }
@@ -621,6 +674,25 @@ export class AdminCompeticionesComponent {
     initialValue: [] as Competicion[],
   });
   readonly usuarios = toSignal(this.admin.getUsers(), { initialValue: [] as AppUser[] });
+
+  /** Texto del buscador de ligas (filtra la lista por nombre). */
+  readonly filtroLigas = signal('');
+
+  /** Lista de competiciones aplicando el buscador (sin acentos ni mayúsculas). */
+  readonly competicionesFiltradas = computed(() => {
+    const q = this.normalizarTexto(this.filtroLigas());
+    if (!q) return this.competiciones();
+    return this.competiciones().filter((c) => this.normalizarTexto(c.nombre).includes(q));
+  });
+
+  /** Normaliza para buscar sin distinguir mayúsculas ni acentos. */
+  private normalizarTexto(texto: string): string {
+    return texto
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+  }
 
   readonly resolviendo = signal(false);
   /** True mientras se consulta la API (traer jornada o resultados). */
