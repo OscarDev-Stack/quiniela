@@ -29,7 +29,6 @@ import { Bracket } from '../../core/models/bracket.model';
         </button>
       </div>
 
-      <section class="lista-panel">
       <nav class="filters">
         @for (f of filtros; track f) {
           <button class="chip" [class.chip--on]="filtro() === f" (click)="filtro.set(f)">
@@ -125,7 +124,6 @@ import { Bracket } from '../../core/models/bracket.model';
           </article>
         }
       }
-      </section>
 
       <!-- Diálogo: unirse con código (escanear QR o escribir el código) -->
       @if (mostrarUnirse()) {
@@ -209,15 +207,6 @@ import { Bracket } from '../../core/models/bracket.model';
         font-size: 11px; border-radius: 999px; background: rgba(128, 128, 128, 0.22);
       }
       .chip--on .chip-num { background: rgba(255, 255, 255, 0.25); }
-
-      /* Panel contenedor: agrupa pestañas, torneos y eliminatorias para que
-         no queden "volando" sueltos sobre el fondo. */
-      .lista-panel {
-        background: var(--surface-2); border: 1px solid var(--border);
-        border-radius: var(--radius-lg); padding: 14px 14px 4px; margin-bottom: 16px;
-      }
-      .lista-panel .card { background: var(--surface-1); }
-      .lista-panel .seccion { margin-top: 18px; }
 
       .card {
         background: var(--surface-2); border: 1px solid var(--border);

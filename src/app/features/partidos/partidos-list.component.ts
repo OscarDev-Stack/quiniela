@@ -22,7 +22,6 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
     <div class="screen">
       <app-nav title="Partidos" />
 
-      <section class="lista-panel">
       <div class="filtros-fila">
         <nav class="filters">
           @for (f of filtros; track f) {
@@ -173,7 +172,6 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
           }
         </article>
       }
-      </section>
 
       <!-- Modal estático: cómo se juega (mecánica de premios). -->
       @if (verAyuda()) {
@@ -271,16 +269,7 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
       }
       :host { display: block; }
 
-      /* Panel contenedor: envuelve filtros + tarjetas, igual que la vista de
-         Torneos, para que no queden "volando" sueltos sobre el fondo. */
-      .lista-panel {
-        background: var(--surface-2); border: 1px solid var(--border);
-        border-radius: var(--radius-lg); padding: 14px 14px 4px; margin-bottom: 16px;
-      }
-      .lista-panel .card { background: var(--surface-1); }
-      .lista-panel .card--dim { background: var(--surface-2); }
-
-      /* Fila de filtros dentro del panel: botones + botón de ayuda a la derecha. */
+      /* Fila de filtros: botones + botón de ayuda a la derecha. */
       .filtros-fila { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
       .filters { flex: 1; display: flex; gap: 6px; }
       .ayuda-btn {

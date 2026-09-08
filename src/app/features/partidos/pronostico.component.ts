@@ -7,6 +7,7 @@ import { Observable, of } from 'rxjs';
 import { tap, switchMap } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
 import { CargandoComponent } from '../../shared/cargando.component';
+import { EscudoComponent } from '../../shared/escudo.component';
 import { StatsService } from '../../shared/stats.service';
 import { apagarCargando } from '../../shared/cargando.util';
 import { UserService } from '../../core/services/user.service';
@@ -29,7 +30,7 @@ interface Opcion {
 @Component({
   selector: 'app-pronostico',
   standalone: true,
-  imports: [CommonModule, NavComponent, CargandoComponent],
+  imports: [CommonModule, NavComponent, CargandoComponent, EscudoComponent],
   template: `
     <div class="screen">
       <app-nav [back]="true" title="Confirmar pronóstico" />
@@ -43,9 +44,15 @@ interface Opcion {
             }
           </div>
           <div class="teams">
-            <span class="team team--home">{{ p.homeTeam }}</span>
+            <div class="team team--home">
+              <app-escudo [equipo]="p.homeTeam" [size]="48" />
+              <span class="team-name">{{ p.homeTeam }}</span>
+            </div>
             <span class="vs">VS</span>
-            <span class="team team--away">{{ p.awayTeam }}</span>
+            <div class="team team--away">
+              <app-escudo [equipo]="p.awayTeam" [size]="48" />
+              <span class="team-name">{{ p.awayTeam }}</span>
+            </div>
           </div>
 
           @if (formaLocalEfectiva() || formaVisitanteEfectiva()) {
@@ -161,15 +168,20 @@ interface Opcion {
       .closes { font-size: 11px; color: var(--text-muted); }
 
       .teams {
-        display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
-        gap: 12px; margin-bottom: 20px;
+        display: grid; grid-template-columns: 1fr auto 1fr; align-items: start;
+        gap: 10px; margin-bottom: 20px;
       }
-      .team { font-size: 18px; font-weight: 700; line-height: 1.2; }
-      .team--home { text-align: right; }
-      .team--away { text-align: left; }
+      .team {
+        display: flex; flex-direction: column; align-items: center; gap: 8px;
+        min-width: 0;
+      }
+      .team-name {
+        font-size: 15px; font-weight: 700; line-height: 1.25; text-align: center;
+        max-width: 100%;
+      }
       .vs {
         display: inline-flex; align-items: center; justify-content: center;
-        width: 30px; height: 30px; border-radius: 50%;
+        width: 30px; height: 30px; border-radius: 50%; margin-top: 9px;
         font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
         color: var(--text-muted); background: var(--surface-1);
         border: 1px solid var(--border);
