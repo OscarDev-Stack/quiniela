@@ -24,32 +24,82 @@ export class NovedadesService {
     readonly modo = this._modo.asReadonly();
 
     /**
-     * Se llama al arrancar la app. Muestra las novedades de esta versión
-     * solo si el dispositivo todavía no la había visto.
+     * ¿Es la primera vez que este dispositivo abre la app? Sirve para que el
+     * botón del login se muestre como "descubre qué puedes hacer" en lugar de
+     * "novedades". No escribe nada: solo consulta.
      */
-    revisarAlEntrar(): void {
+    esPrimeraVez(): boolean {
+        return this.leer() === null;
+    }
+
+    /**
+     * ¿Hay algo que valga la pena destacar con el badge "Nuevo" del botón?
+     * Es true en la primera visita (presentación) o cuando llegó una versión
+     * mayor/menor desde la última vista. No escribe nada: solo consulta, para
+     * que el badge desaparezca en cuanto se marque la versión como vista.
+     */
+    hayNuevo(): boolean {
+        const vista = this.leer();
+        if (!vista) return true;
+        return NOVEDADES.some((n) => this.mereceAviso(n.version, vista));
+    }
+
+    /**
+     * Se abre a petición del usuario, desde el botón del login o del inicio
+     * (ya no salta solo, era invasivo).
+     *
+     *  - Primera vez en el dispositivo → presentación completa ("qué puedes
+     *    hacer") en modo bienvenida.
+     *  - Ya lo usaba → carrusel con lo nuevo desde la última versión vista;
+     *    si no hay cambios que anunciar, muestra el historial de esta versión
+     *    (solo entradas MAYOR.MENOR de APP_VERSION) para que el botón nunca
+     *    quede "muerto".
+     *
+     * Al abrirlo se marca la versión actual como vista, así el badge/etiqueta
+     * de "nuevo" del botón desaparece en las siguientes visitas.
+     */
+    abrir(): void {
         const vista = this.leer();
         this.guardar(APP_VERSION);
 
-        // Primera vez en este dispositivo: se muestra todo, como presentación.
+        // Primera vez en este dispositivo: presentación completa.
         if (!vista) {
             this._modo.set('bienvenida');
             this._mostrando.set(NOVEDADES);
             return;
         }
-        if (vista === APP_VERSION) return;
 
-        // Solo se anuncian cambios mayores o menores. Los parches
-        // (el tercer número) son ajustes visuales y correcciones: se
-        // despliegan en silencio para que el aviso no pierda su valor.
+        // Solo se destacan cambios mayores o menores. Los parches (el tercer
+        // número) son ajustes visuales y correcciones sin impacto.
         const nuevas = NOVEDADES.filter((n) => this.mereceAviso(n.version, vista));
-        if (nuevas.length === 0) return;
+        if (nuevas.length > 0) {
+            this._modo.set('novedades');
+            this._mostrando.set(nuevas);
+            return;
+        }
 
-        this._modo.set('novedades');
-        this._mostrando.set(nuevas);
+        // Nada nuevo que anunciar: enseñamos el historial de esta versión para
+        // que el botón siempre muestre algo útil.
+        this._modo.set('historial');
+        this._mostrando.set(this.deEstaVersion());
     }
 
-    /** Abre el historial completo, desde el perfil. */
+    /**
+     * Novedades de la versión actual: solo las que comparten los dos primeros
+     * números (MAYOR.MENOR) con APP_VERSION. Ej. con 2.3.10 se muestran las
+     * entradas 2.3.x; las de 2.2.x y anteriores quedan fuera. Así el historial
+     * refleja "lo de esta versión" y no toda la trayectoria de la app.
+     */
+    private deEstaVersion(): Novedad[] {
+        return NOVEDADES.filter((n) => this.mismaMinor(n.version, APP_VERSION));
+    }
+
+    /**
+     * Abre el historial COMPLETO de versiones, desde el perfil: toda la
+     * trayectoria de la app, de la más reciente a la más antigua. A diferencia
+     * de los botones de login/inicio (que muestran solo lo de esta versión),
+     * aquí el usuario quiere repasarlo todo.
+     */
     abrirHistorial(): void {
         this._modo.set('historial');
         this._mostrando.set(NOVEDADES);
@@ -57,6 +107,16 @@ export class NovedadesService {
 
     cerrar(): void {
         this._mostrando.set(null);
+    }
+
+    /**
+     * ¿Dos versiones comparten MAYOR.MENOR (los dos primeros números)?
+     * Ej. 2.3.1 y 2.3.10 → true; 2.2.0 y 2.3.10 → false. Ignora el parche.
+     */
+    private mismaMinor(a: string, b: string): boolean {
+        const [mayorA = 0, menorA = 0] = a.split('.').map(Number);
+        const [mayorB = 0, menorB = 0] = b.split('.').map(Number);
+        return mayorA === mayorB && menorA === menorB;
     }
 
     /**

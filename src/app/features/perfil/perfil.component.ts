@@ -321,8 +321,8 @@ import { APP_VERSION } from '../../core/version';
         </button>
       }
 
-      <button class="version" (click)="verNovedades()">
-        v{{ version }} · Ver novedades
+      <button class="version" (click)="verHistorial()">
+        v{{ version }} · Historial de versiones
         <span class="marca-agua">Fut by AutomatePower</span>
       </button>
     </div>
@@ -783,8 +783,8 @@ export class PerfilComponent {
     }
   }
 
-  /** Abre el historial de novedades. */
-  verNovedades(): void {
+  /** Abre el historial completo de versiones. */
+  verHistorial(): void {
     this.novedadesSrv.abrirHistorial();
   }
 

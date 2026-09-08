@@ -6,6 +6,7 @@ import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
 import { CargandoComponent } from '../../shared/cargando.component';
+import { NovedadesService } from '../../shared/novedades.service';
 import { apagarCargando } from '../../shared/cargando.util';
 import { EscudoComponent } from '../../shared/escudo.component';
 import { ContextoService } from '../../shared/contexto.service';
@@ -201,6 +202,25 @@ import { Bracket } from '../../core/models/bracket.model';
             }
           </section>
         }
+
+        <!-- Acceso a las novedades de esta versión (mismo modal que el login).
+             Va al final: es informativo, no una acción del día a día. -->
+        <button
+          class="novedades"
+          [class.novedades--nuevo]="hayNovedades()"
+          (click)="verNovedades()"
+        >
+          <span class="novedades-ico"><i class="ti ti-sparkles"></i></span>
+          <span class="novedades-txt">
+            <span class="novedades-tit">Novedades</span>
+            <span class="novedades-sub">Descubre lo nuevo de esta versión</span>
+          </span>
+          @if (hayNovedades()) {
+            <span class="novedades-badge">Nuevo</span>
+          } @else {
+            <i class="ti ti-chevron-right"></i>
+          }
+        </button>
       }
     </div>
   `,
@@ -230,6 +250,40 @@ import { Bracket } from '../../core/models/bracket.model';
       .stat .ti-flame { color: var(--tipo-surv-fill); font-size: 13px; }
       .stat .ti-trophy { color: #c99a2e; font-size: 13px; }
       .saludo > .ti-chevron-right { color: var(--text-muted); flex-shrink: 0; }
+
+      /* Acceso a novedades: fila con acento azul; pulsa solo si hay algo nuevo */
+      .novedades {
+        width: 100%; display: flex; align-items: center; gap: 12px; text-align: left;
+        margin: 0 0 16px; padding: 12px 14px; cursor: pointer;
+        border: 1px solid rgba(55, 138, 221, 0.4); border-radius: var(--radius-lg);
+        background: linear-gradient(
+          135deg,
+          rgba(55, 138, 221, 0.14),
+          rgba(55, 138, 221, 0.04)
+        );
+      }
+      .novedades--nuevo { animation: novedades-pulso 2.4s ease-in-out infinite; }
+      .novedades-ico {
+        flex-shrink: 0; width: 38px; height: 38px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--accent-fill); color: #fff; font-size: 19px;
+      }
+      .novedades-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+      .novedades-tit { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+      .novedades-sub { font-size: 12px; color: var(--text-secondary); }
+      .novedades-badge {
+        flex-shrink: 0; font-size: 10px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase;
+        padding: 3px 8px; border-radius: 999px;
+        background: var(--accent-fill); color: #fff;
+      }
+      .novedades > .ti-chevron-right { color: var(--text-muted); flex-shrink: 0; }
+      @keyframes novedades-pulso {
+        0%, 100% { box-shadow: 0 0 0 0 transparent; }
+        50% { box-shadow: 0 0 0 3px rgba(55, 138, 221, 0.28); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .novedades--nuevo { animation: none; }
+      }
 
       /* Tarjeta destacada: fondo de color con texto blanco */
       .destacado {
@@ -336,6 +390,21 @@ export class InicioComponent {
   private readonly contexto = inject(ContextoService);
   private readonly gruposSrv = inject(GruposService);
   private readonly stats = inject(StatsService);
+  private readonly novedadesSrv = inject(NovedadesService);
+
+  /**
+   * ¿Hay novedades sin ver? Enciende el badge "Nuevo" y el pulso del acceso.
+   * Es signal para que, al abrir el modal (que marca la versión como vista),
+   * el badge desaparezca al instante sin recargar.
+   */
+  readonly hayNovedades = signal(this.novedadesSrv.hayNuevo());
+
+  /** Abre el modal de novedades (mismo que el login) y apaga el badge. */
+  verNovedades(): void {
+    this.stats.evento('novedades_abiertas', { origen: 'inicio' });
+    this.novedadesSrv.abrir();
+    this.hayNovedades.set(this.novedadesSrv.hayNuevo());
+  }
 
   // undefined = todavía no cargó de Firestore; [] = cargó y no tiene grupos.
   // Distinguirlos evita resolver el contexto con la lista vacía inicial (que

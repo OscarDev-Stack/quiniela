@@ -5,6 +5,7 @@ import { Firestore, doc, getDoc, setDoc, serverTimestamp } from '@angular/fire/f
 import { AuthCredential } from '@angular/fire/auth';
 import { AuthService } from '../../core/services/auth.service';
 import { StatsService } from '../../shared/stats.service';
+import { NovedadesService } from '../../shared/novedades.service';
 import { APP_VERSION } from '../../core/version';
 import { consumirInvitacion, rutaDeInvitacion } from '../../shared/invitacion.util';
 
@@ -41,6 +42,21 @@ import { consumirInvitacion, rutaDeInvitacion } from '../../shared/invitacion.ut
             <span class="marca-by">by AutomatePower</span>
           </div>
           <p class="hero-sub">Entra para hacer tus pronósticos</p>
+
+          <button
+            type="button"
+            class="btn-novedades"
+            [class.btn-novedades--nuevo]="hayNuevo()"
+            (click)="verNovedades()"
+          >
+            <span class="btn-novedades-ico"><i class="ti ti-sparkles"></i></span>
+            <span class="btn-novedades-txt">
+              {{ primeraVez() ? '¿Qué puedes hacer aquí?' : 'Ver novedades' }}
+            </span>
+            @if (hayNuevo()) {
+              <span class="btn-novedades-badge">Nuevo</span>
+            }
+          </button>
         </div>
 
         <div class="auth-card">
@@ -191,6 +207,46 @@ import { consumirInvitacion, rutaDeInvitacion } from '../../shared/invitacion.ut
       .marca-by { font-size: 12px; font-weight: 500; color: var(--accent-text); margin-top: 3px; }
       .hero-sub { font-size: 14px; color: var(--text-secondary); margin: 12px 0 0; }
 
+      /* Botón llamativo que abre las novedades / la presentación de bienvenida */
+      .btn-novedades {
+        display: inline-flex; align-items: center; gap: 9px;
+        margin-top: 18px; padding: 9px 16px 9px 12px; cursor: pointer;
+        border: 1px solid rgba(55, 138, 221, 0.45); border-radius: 999px;
+        background: linear-gradient(
+          135deg,
+          rgba(55, 138, 221, 0.22),
+          rgba(55, 138, 221, 0.08)
+        );
+        color: var(--text-primary); font-size: 14px; font-weight: 600;
+        box-shadow: 0 4px 18px rgba(55, 138, 221, 0.25);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      /* La animación de pulso solo mientras hay algo nuevo por descubrir. */
+      .btn-novedades--nuevo { animation: novedades-pulso 2.4s ease-in-out infinite; }
+      .btn-novedades:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 22px rgba(55, 138, 221, 0.35);
+      }
+      .btn-novedades:active { transform: translateY(0); }
+      .btn-novedades-ico {
+        display: flex; align-items: center; justify-content: center;
+        width: 26px; height: 26px; border-radius: 999px;
+        background: var(--accent-fill); color: #fff; font-size: 15px;
+      }
+      .btn-novedades-txt { line-height: 1; }
+      .btn-novedades-badge {
+        font-size: 10px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase;
+        padding: 3px 7px; border-radius: 999px;
+        background: var(--accent-fill); color: #fff;
+      }
+      @keyframes novedades-pulso {
+        0%, 100% { box-shadow: 0 4px 18px rgba(55, 138, 221, 0.22); }
+        50% { box-shadow: 0 4px 24px rgba(55, 138, 221, 0.42); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .btn-novedades--nuevo { animation: none; }
+      }
+
       .auth-card {
         width: 100%; background: var(--surface-2); border: 1px solid var(--border);
         border-radius: 18px; padding: 22px 20px;
@@ -286,11 +342,32 @@ export class LoginComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly db = inject(Firestore);
   private readonly stats = inject(StatsService);
+  private readonly novedadesSrv = inject(NovedadesService);
   readonly version = APP_VERSION;
+
+  /**
+   * Estado del botón de novedades, en signals para que la UI reaccione cuando
+   * se abre el modal (que marca la versión como vista):
+   *  - primeraVez → texto "¿Qué puedes hacer aquí?" vs "Ver novedades".
+   *  - hayNuevo   → muestra el badge "Nuevo" y la animación de pulso.
+   * Tras abrir el modal se refrescan, así el "Nuevo" desaparece al instante.
+   */
+  readonly primeraVez = signal(this.novedadesSrv.esPrimeraVez());
+  readonly hayNuevo = signal(this.novedadesSrv.hayNuevo());
 
   ngOnInit(): void {
     // Traza del embudo: cuánta gente llega a la pantalla de acceso.
     this.stats.evento('login_visto');
+  }
+
+  /** Abre el modal de novedades / presentación desde el botón del login. */
+  verNovedades(): void {
+    this.stats.evento('novedades_abiertas', { origen: 'login' });
+    this.novedadesSrv.abrir();
+    // abrirDesdeLogin() marcó la versión como vista: refrescamos el botón para
+    // que el badge "Nuevo" y la animación desaparezcan de inmediato.
+    this.primeraVez.set(this.novedadesSrv.esPrimeraVez());
+    this.hayNuevo.set(this.novedadesSrv.hayNuevo());
   }
 
   email = '';
