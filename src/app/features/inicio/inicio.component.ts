@@ -185,7 +185,13 @@ import { Bracket } from '../../core/models/bracket.model';
         @if (abiertosPublicos().length > 0) {
           <section class="bloque bloque--abiertos">
             <div class="bloque-cab">
-              <span class="bloque-tit"><i class="ti ti-door-enter"></i> Abiertos para unirse</span>
+              <span class="bloque-tit bloque-tit--abiertos">
+                <span class="bloque-tit-ico"><i class="ti ti-flame"></i></span>
+                <span class="bloque-tit-txt">
+                  <span class="bloque-tit-main">¡Únete a la acción!</span>
+                  <span class="bloque-tit-sub">Torneos y quinielas abiertos ahora</span>
+                </span>
+              </span>
               @if (totalAbiertosPublicos() > abiertosPublicos().length) {
                 <button class="bloque-ver" (click)="ir('/torneos')">Ver más</button>
               }
@@ -343,13 +349,36 @@ import { Bracket } from '../../core/models/bracket.model';
 
       /* Sección "Abiertos para unirse". El bloque no tiene color fijo: cada
          fila lleva el color de SU tipo en --c-fila, así no se mezclan. */
-      .bloque--abiertos { --c-fill: var(--text-muted); }
+      .bloque--abiertos { --c-fill: var(--text-secondary); }
+
+      /* Encabezado más llamativo para invitar a unirse. Sin color de tipo
+         (el rojo es exclusivo de survivor); usa el neutro del tema. */
+      .bloque-tit--abiertos { align-items: center; gap: 9px; }
+      .bloque-tit-ico {
+        flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        color: var(--c-fill);
+        animation: tit-late 1.8s ease-in-out infinite;
+      }
+      .bloque-tit-ico .ti { font-size: 22px; }
+      .bloque-tit-txt { display: flex; flex-direction: column; gap: 1px; line-height: 1.2; }
+      .bloque-tit-main { font-size: 15px; font-weight: 800; color: var(--text-primary); letter-spacing: 0.2px; }
+      .bloque-tit-sub { font-size: 11px; font-weight: 500; color: var(--text-secondary); }
+
+      @keyframes tit-late {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.12); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .bloque-tit-ico { animation: none; }
+      }
 
       .fila--unirse {
         --c-fila: var(--text-muted);
-        border-color: var(--c-fila);
-        animation: fila-pulso 2.2s ease-in-out infinite;
+        border-left: 4px solid var(--c-fila);
       }
+      /* Énfasis en el nombre de la fila que se puede unir. */
+      .fila--unirse .fila-nom { font-weight: 700; color: var(--text-primary); }
       .fila--surv { --c-fila: var(--tipo-surv-fill); }
       .fila--quin { --c-fila: var(--tipo-quin-fill); }
       .fila--elim { --c-fila: var(--tipo-elim-fill); }
@@ -364,18 +393,19 @@ import { Bracket } from '../../core/models/bracket.model';
       .unete-badge {
         flex-shrink: 0; font-size: 11px; font-weight: 700;
         padding: 3px 9px; border-radius: 999px;
-        background: color-mix(in srgb, var(--c-fila) 15%, transparent);
-        color: var(--c-fila);
+        background: var(--c-fila);
+        color: #fff;
+        animation: unete-pulso 2.2s ease-in-out infinite;
       }
 
-      @keyframes fila-pulso {
+      @keyframes unete-pulso {
         0%, 100% { box-shadow: 0 0 0 0 transparent; }
-        50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-fila) 30%, transparent); }
+        50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-fila) 35%, transparent); }
       }
       @media (prefers-reduced-motion: reduce) {
-        .fila--unirse {
+        .unete-badge {
           animation: none;
-          box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-fila) 28%, transparent);
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-fila) 30%, transparent);
         }
       }
     `,
@@ -565,13 +595,12 @@ export class InicioComponent {
   );
 
   /**
-   * En el hub mostramos solo un adelanto: UN torneo y UNA eliminatoria (uno de
-   * cada tipo). El resto se ve con "Ver más" en la lista completa de torneos.
+   * En el hub mostramos un adelanto de hasta 3 abiertos, de cualquier tipo.
+   * El resto se ve con "Ver más" en la lista completa de torneos.
    */
-  readonly abiertosPublicos = computed(() => [
-    ...this.torneosAbiertosPublicos().slice(0, 1),
-    ...this.bracketsAbiertosPublicos().slice(0, 1),
-  ]);
+  readonly abiertosPublicos = computed(() =>
+    [...this.torneosAbiertosPublicos(), ...this.bracketsAbiertosPublicos()].slice(0, 3),
+  );
 
   /** ¿Es un torneo público abierto en el que aún no participo? */
   esPublicoNoMioTorneo(t: Torneo): boolean {
