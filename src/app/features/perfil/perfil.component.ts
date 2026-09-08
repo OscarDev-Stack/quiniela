@@ -170,7 +170,7 @@ import { APP_VERSION } from '../../core/version';
 
           <!-- Canal 1: este dispositivo (push) -->
           <div class="canal">
-            <app-notificaciones-boton [pushActivo]="me()?.pushActivo === true" />
+            <app-notificaciones-boton [pushTokens]="me()?.pushTokens ?? []" />
           </div>
 
           <!-- Canal 2: Telegram -->

@@ -1,4 +1,4 @@
-import { Component, inject, input, signal } from '@angular/core';
+import { Component, effect, inject, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { PushService } from '../../shared/push.service';
 import { ToastService } from '../../shared/toast.service';
@@ -114,16 +114,37 @@ export class NotificacionesBotonComponent {
   private readonly stats = inject(StatsService);
   readonly instalar = inject(InstalarService);
 
-  /** Estado guardado en el usuario (pushActivo), que llega desde el perfil. */
-  readonly pushActivo = input(false);
+  /**
+   * Tokens de push del usuario (todos sus dispositivos), que llegan desde el
+   * perfil. El botón se pinta según si el token de ESTE dispositivo está en la
+   * lista, no según el pushActivo global (que puede estar activo por otro
+   * dispositivo).
+   */
+  readonly pushTokens = input<string[]>([]);
 
   readonly trabajando = signal(false);
   // Estado local que refleja lo guardado y los cambios en vivo.
   private readonly localActivo = signal<boolean | null>(null);
+  // ¿El token de ESTE dispositivo está en la lista? Se calcula async al
+  // recibir los tokens (getToken es asíncrono).
+  private readonly activoAqui = signal(false);
+
+  constructor() {
+    // Cada vez que cambian los tokens del usuario, recalculamos si este
+    // dispositivo está entre ellos.
+    effect(() => {
+      const tokens = this.pushTokens();
+      this.push
+        .estaActivoAqui(tokens)
+        .then((v) => this.activoAqui.set(v))
+        .catch(() => this.activoAqui.set(false));
+    });
+  }
 
   activo(): boolean {
     const l = this.localActivo();
-    return l === null ? this.pushActivo() : l;
+    // Un cambio en vivo (localActivo) manda sobre el estado calculado.
+    return l === null ? this.activoAqui() : l;
   }
 
   denegado(): boolean {
