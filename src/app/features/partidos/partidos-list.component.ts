@@ -53,11 +53,9 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
       }
 
       @for (m of visibles(); track m.id) {
-        <article class="card" [class.card--dim]="m.status !== 'abierto' && m.status !== 'cierra-pronto'"
-          [class.card--e-abierto]="m.status === 'abierto'"
-          [class.card--e-pronto]="m.status === 'cierra-pronto'"
-          [class.card--e-vivo]="m.status === 'en-juego'"
-          [class.card--e-cerrado]="m.status === 'cerrado'">
+        <article class="card"
+          [class.card--vivo]="m.status === 'en-juego'"
+          [class.card--terminado]="m.status === 'cerrado'">
           <div class="card-top">
             <span class="competition">{{ m.competition }}</span>
             @switch (m.status) {
@@ -292,11 +290,32 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
       .empty i { font-size: 36px; opacity: 0.5; }
       .empty p { font-size: 14px; margin: 10px 0 0; }
 
+      /* Las tarjetas de Partidos usan SIEMPRE su color de tipo (morado, el
+         mismo que la sección "Partidos" del inicio). El estado se comunica con
+         el badge y el borde superior; el color de tipo nunca cambia, solo se
+         atenúa al finalizar para no perder de vista de qué se trata. */
       .card {
         background: var(--surface-2); border: 1px solid var(--border);
+        border-left: 4px solid var(--tipo-pron-fill);
+        --c-realce: var(--tipo-pron-fill);
         border-radius: var(--radius-lg); padding: 15px; margin-bottom: 12px;
       }
-      .card--dim { background: var(--surface-1); }
+
+      /* En juego: realce sutil en el color de tipo para que salte a la vista. */
+      .card--vivo {
+        border-color: var(--c-realce);
+        border-left-color: var(--c-realce);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-realce) 22%, transparent);
+      }
+
+      /* Finalizado: se conserva el color de tipo pero apagado (morado grisáceo)
+         en lugar de un gris genérico, así se sigue reconociendo el tipo. */
+      .card--terminado {
+        background: var(--surface-1);
+        border-left-color: color-mix(in srgb, var(--tipo-pron-fill) 45%, var(--text-muted));
+      }
+      .card--terminado .competition,
+      .card--terminado .teams { opacity: 0.9; }
 
       .card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; }
       .competition { font-size: 12px; color: var(--text-muted); }
@@ -326,12 +345,6 @@ import { Partido, TipoPartido, textoRestante, fechaCierre, minutoVivoTexto } fro
         .live-dot { animation: none; }
       }
       .badge--done { color: var(--text-muted); background: var(--surface-2); }
-
-      /* Indicador visual de estado en la orilla de la tarjeta. */
-      .card--e-abierto { border-left: 4px solid var(--success-text); }
-      .card--e-pronto { border-left: 4px solid var(--warning-text); }
-      .card--e-vivo { border-left: 4px solid #d63b3b; }
-      .card--e-cerrado { border-left: 4px solid var(--border); }
 
       .teams {
         display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;

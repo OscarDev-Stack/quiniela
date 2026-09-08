@@ -8,7 +8,6 @@ import { ConfirmarDialogComponent } from './shared/confirmar-dialog.component';
 import { NovedadesComponent } from './shared/novedades.component';
 import { ToastsComponent } from './shared/toasts.component';
 import { CargandoComponent } from './shared/cargando.component';
-import { NovedadesService } from './shared/novedades.service';
 import { ActualizacionService } from './shared/actualizacion.service';
 import { limpiarInvitacion } from './shared/invitacion.util';
 import {
@@ -36,7 +35,6 @@ export class App {
 
   private readonly updates = inject(SwUpdate);
   private readonly actualizacion = inject(ActualizacionService);
-  private readonly novedades = inject(NovedadesService);
   private readonly router = inject(Router);
   private readonly users = inject(UserService);
   private readonly stats = inject(StatsService);
@@ -111,17 +109,10 @@ export class App {
         }
       });
 
-    // Las novedades NO deben aparecer sobre el portón de acceso (Turnstile).
-    // Esperamos a la primera navegación que salga de /acceso (login o dentro)
-    // y ahí sí revisamos si hay novedades que mostrar.
-    this.router.events
-      .pipe(
-        filter((e): e is NavigationEnd => e instanceof NavigationEnd),
-        filter((e) => !e.urlAfterRedirects.startsWith('/acceso')),
-        take(1),
-        takeUntilDestroyed(),
-      )
-      .subscribe(() => this.novedades.revisarAlEntrar());
+    // Las novedades ya NO se abren solas al entrar (era invasivo). Ahora se
+    // muestran solo cuando el usuario toca el botón "Novedades" del login o del
+    // inicio, que llaman a NovedadesService.abrir(). El componente app-novedades
+    // sigue montado aquí en el shell para renderizar el modal cuando toca.
 
     // Limpieza de un SW de messaging registrado por error en la raíz '/'
     // (versiones previas lo hacían). Ese registro compite con ngsw-worker.js

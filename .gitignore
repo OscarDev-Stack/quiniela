@@ -56,3 +56,6 @@ sonar-project.properties
 # test
 scripts/service-account-dev.json
 scripts/config-dev.json
+
+# Kiro (datos locales de ligas)
+.kiro/ligas/
