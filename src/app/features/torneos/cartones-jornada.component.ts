@@ -8,6 +8,14 @@ import { minutoVivoTexto } from '../../core/models/partido.model';
 const PUNTOS_EXACTO = 5;
 const PUNTOS_RESULTADO = 3;
 
+/** Un partido de la jornada con su índice original (para leer marcadores). */
+interface PartidoCarton {
+  partido: PartidoJornada;
+  /** Posición original en la jornada; los marcadores de cada cartón la usan. */
+  indice: number;
+  vivo: boolean;
+}
+
 /**
  * Cartones de la jornada, en vista POR PARTIDO: una tarjeta por encuentro
  * (con escudos y nombre completo, sin abreviaturas ambiguas), su marcador
@@ -46,9 +54,11 @@ const PUNTOS_RESULTADO = 3;
         </div>
 
         <div class="partidos">
-          @for (p of jornada().partidos; track $index; let iPartido = $index) {
-            <div class="match">
-              <div class="match-head">
+          @for (t of partidos(); track t.indice) {
+            @let p = t.partido;
+            @let iPartido = t.indice;
+            <div class="match" [class.match--vivo]="t.vivo">
+              <div class="match-head" [class.match-head--vivo]="t.vivo">
                 <span class="lado">
                   <app-escudo [equipo]="p.local" [size]="22" />
                   <span class="eq">{{ p.local }}</span>
@@ -134,11 +144,17 @@ const PUNTOS_RESULTADO = 3;
         border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
         background: var(--surface-1);
       }
+      /* Partido en vivo: resaltado en rojo (mismo tono del "en vivo" de quiniela). */
+      .match--vivo {
+        border-color: #d63b3b;
+        box-shadow: 0 0 0 1px #d63b3b;
+      }
       .match-head {
         display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
         gap: 8px; padding: 10px 12px; background: var(--surface-2);
         border-bottom: 1px solid var(--border);
       }
+      .match-head--vivo { background: color-mix(in srgb, #d63b3b 10%, var(--surface-2)); }
       .match-hora {
         display: flex; align-items: center; justify-content: center; gap: 4px;
         padding: 5px 12px; background: var(--surface-2);
@@ -218,9 +234,27 @@ export class CartonesJornadaComponent {
     }),
   );
 
+  /**
+   * Partidos de la jornada con su índice original. Los que están EN VIVO se
+   * muestran primero para que salten a la vista (homologado con survivor); el
+   * resto conserva el orden de la jornada. El índice original se preserva
+   * porque el pronóstico de cada cartón se lee por posición (marcadores[i]).
+   */
+  readonly partidos = computed<PartidoCarton[]>(() =>
+    this.jornada()
+      .partidos.map((partido, indice) => ({ partido, indice, vivo: this.enVivo(partido) }))
+      .sort((a, b) => Number(b.vivo) - Number(a.vivo) || a.indice - b.indice),
+  );
+
   /** ¿El partido tiene marcador en vivo para mostrar? */
   tieneVivo(p: PartidoJornada): boolean {
     return typeof p.vivoLocal === 'number' && typeof p.vivoVisitante === 'number';
+  }
+
+  /** ¿El partido está EN VIVO ahora? (con marcador y sin resultado final). */
+  private enVivo(p: PartidoJornada): boolean {
+    if (p.resultado && p.resultado !== 'pospuesto') return false; // ya tiene final
+    return this.tieneVivo(p);
   }
 
   /** Hora de inicio legible del partido, o '' si no hay. */
