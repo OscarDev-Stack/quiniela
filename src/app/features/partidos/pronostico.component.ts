@@ -7,6 +7,7 @@ import { Observable, of } from 'rxjs';
 import { tap, switchMap } from 'rxjs/operators';
 import { NavComponent } from '../../shared/nav.component';
 import { CargandoComponent } from '../../shared/cargando.component';
+import { EscudoComponent } from '../../shared/escudo.component';
 import { StatsService } from '../../shared/stats.service';
 import { apagarCargando } from '../../shared/cargando.util';
 import { UserService } from '../../core/services/user.service';
@@ -29,18 +30,29 @@ interface Opcion {
 @Component({
   selector: 'app-pronostico',
   standalone: true,
-  imports: [CommonModule, NavComponent, CargandoComponent],
+  imports: [CommonModule, NavComponent, CargandoComponent, EscudoComponent],
   template: `
     <div class="screen">
       <app-nav [back]="true" title="Confirmar pronóstico" />
 
       @if (partido(); as p) {
         <div class="card">
-          <div class="competition">{{ p.competition }} · {{ p.closesLabel }}</div>
+          <div class="matchup">
+            <span class="chip">{{ p.competition }}</span>
+            @if (p.closesLabel) {
+              <span class="closes">{{ p.closesLabel }}</span>
+            }
+          </div>
           <div class="teams">
-            <span class="team">{{ p.homeTeam }}</span>
-            <span class="vs">vs</span>
-            <span class="team">{{ p.awayTeam }}</span>
+            <div class="team team--home">
+              <app-escudo [equipo]="p.homeTeam" [size]="48" />
+              <span class="team-name">{{ p.homeTeam }}</span>
+            </div>
+            <span class="vs">VS</span>
+            <div class="team team--away">
+              <app-escudo [equipo]="p.awayTeam" [size]="48" />
+              <span class="team-name">{{ p.awayTeam }}</span>
+            </div>
           </div>
 
           @if (formaLocalEfectiva() || formaVisitanteEfectiva()) {
@@ -104,15 +116,25 @@ interface Opcion {
           <div class="summary">
             <div class="row">
               <span>Puntos en juego</span>
-              <strong>{{ apuesta() | number }}</strong>
+              <strong class="stake">{{ apuesta() | number }}</strong>
             </div>
-            <div class="row">
+            <div class="row row--divider">
               <span>Saldo después</span>
-              <strong>{{ saldo() | number }} → {{ saldo() - apuesta() | number }}</strong>
+              <span class="balance">
+                <span class="balance-from">{{ saldo() | number }}</span>
+                <span class="balance-arrow">→</span>
+                <strong
+                  class="balance-to"
+                  [class.balance-to--neg]="saldo() - apuesta() < 0"
+                >{{ saldo() - apuesta() | number }}</strong>
+              </span>
             </div>
           </div>
 
-          <div class="hint">El premio se revela al iniciar el partido.</div>
+          <div class="hint">
+            <span class="hint-dot"></span>
+            El premio se revela al iniciar el partido.
+          </div>
 
           <button class="confirm" [disabled]="!resultado() || saving()" (click)="confirmar(p)">
             {{ saving() ? 'Enviando…' : (editando() ? 'Actualizar pronóstico' : 'Confirmar pronóstico') }}
@@ -128,12 +150,42 @@ interface Opcion {
   `,
   styles: [
     `
-      .card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 16px; padding: 18px; }
+      .card {
+        background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); padding: 20px 18px 18px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+      }
 
-      .competition { font-size: 12px; color: var(--text-muted); text-align: center; margin-bottom: 6px; }
-      .teams { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 18px; }
-      .team { font-size: 18px; font-weight: 600; }
-      .vs { font-size: 13px; color: var(--text-muted); }
+      .matchup {
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+        margin-bottom: 12px; flex-wrap: wrap;
+      }
+      .chip {
+        font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
+        color: var(--accent-text); background: var(--accent-bg);
+        padding: 4px 10px; border-radius: 999px;
+      }
+      .closes { font-size: 11px; color: var(--text-muted); }
+
+      .teams {
+        display: grid; grid-template-columns: 1fr auto 1fr; align-items: start;
+        gap: 10px; margin-bottom: 20px;
+      }
+      .team {
+        display: flex; flex-direction: column; align-items: center; gap: 8px;
+        min-width: 0;
+      }
+      .team-name {
+        font-size: 15px; font-weight: 700; line-height: 1.25; text-align: center;
+        max-width: 100%;
+      }
+      .vs {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 30px; height: 30px; border-radius: 50%; margin-top: 9px;
+        font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+        color: var(--text-muted); background: var(--surface-1);
+        border: 1px solid var(--border);
+      }
 
       .forma {
         display: flex; align-items: center; justify-content: space-between;
@@ -157,41 +209,78 @@ interface Opcion {
         font-size: 13px; padding: 10px 12px; border-radius: var(--radius); margin-bottom: 14px;
       }
 
-      .label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
-      .options { display: flex; gap: 8px; margin-bottom: 18px; }
+      .label {
+        font-size: 12px; font-weight: 600; letter-spacing: 0.2px;
+        text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px;
+      }
+      .options { display: flex; gap: 8px; margin-bottom: 20px; }
       .option {
-        flex: 1; padding: 10px 4px; font-size: 14px; cursor: pointer;
-        border: 1px solid var(--border); border-radius: var(--radius);
+        flex: 1; padding: 14px 4px; font-size: 14px; font-weight: 600; cursor: pointer;
+        border: 1.5px solid var(--border); border-radius: var(--radius);
         background: var(--surface-2); color: var(--text-secondary);
+        transition: border-color 0.15s, background 0.15s, color 0.15s, transform 0.05s;
       }
+      .option:hover:not(.option--sel) { border-color: var(--border-strong); color: var(--text-primary); }
+      .option:active { transform: scale(0.98); }
       .option--sel {
-        border: 2px solid var(--accent); background: var(--accent-bg);
-        color: var(--accent-text); font-weight: 600;
+        border-color: var(--accent-fill); background: var(--accent-bg);
+        color: var(--accent-text); font-weight: 700;
+        box-shadow: inset 0 0 0 1px var(--accent-fill);
       }
 
-      .mults { display: flex; gap: 6px; margin-bottom: 16px; }
+      .mults { display: flex; gap: 6px; margin-bottom: 18px; }
       .mult {
-        flex: 1; padding: 11px 4px; font-size: 14px; cursor: pointer;
-        border: 1px solid var(--border); border-radius: var(--radius);
+        flex: 1; padding: 12px 4px; font-size: 14px; font-weight: 600; cursor: pointer;
+        border: 1.5px solid var(--border); border-radius: var(--radius);
         background: var(--surface-2); color: var(--text-secondary);
+        transition: border-color 0.15s, background 0.15s, color 0.15s, transform 0.05s;
       }
+      .mult:hover:not(.mult--sel):not(:disabled) { border-color: var(--border-strong); color: var(--text-primary); }
+      .mult:active:not(:disabled) { transform: scale(0.96); }
       .mult--sel {
-        border: 2px solid var(--accent); background: var(--accent-bg);
-        color: var(--accent-text); font-weight: 600;
+        border-color: var(--accent-fill); background: var(--accent-bg);
+        color: var(--accent-text); font-weight: 700;
+        box-shadow: inset 0 0 0 1px var(--accent-fill);
       }
-      .mult:disabled { opacity: 0.35; cursor: not-allowed; }
+      .mult:disabled { opacity: 0.3; cursor: not-allowed; }
 
-      .summary { background: var(--surface-1); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
-      .row { display: flex; justify-content: space-between; font-size: 14px; padding: 4px 0; }
+      .summary {
+        background: var(--surface-1); border: 1px solid var(--border);
+        border-radius: 12px; padding: 6px 14px; margin-bottom: 14px;
+      }
+      .row {
+        display: flex; align-items: center; justify-content: space-between;
+        font-size: 14px; padding: 10px 0;
+      }
       .row span { color: var(--text-secondary); }
+      .row--divider { border-top: 1px solid var(--border); }
+      .stake { font-size: 16px; font-weight: 700; color: var(--text-primary); }
 
-      .hint { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+      .balance { display: inline-flex; align-items: center; gap: 8px; }
+      .balance-from { color: var(--text-muted); }
+      .balance-arrow { color: var(--text-muted); font-size: 12px; }
+      .balance-to { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+      .balance-to--neg { color: var(--danger-text); }
+
+      .hint {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 12px; color: var(--text-muted); margin-bottom: 18px;
+      }
+      .hint-dot {
+        width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+        background: var(--warning-text);
+      }
 
       .confirm {
-        width: 100%; padding: 12px; border: none; border-radius: var(--radius);
-        background: var(--accent-fill); color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+        width: 100%; padding: 14px; border: none; border-radius: var(--radius);
+        background: var(--accent-fill); color: #fff; font-size: 15px; font-weight: 700;
+        letter-spacing: 0.2px; cursor: pointer;
+        transition: filter 0.15s, transform 0.05s, box-shadow 0.15s;
+        box-shadow: 0 2px 8px rgba(55, 138, 221, 0.3);
       }
-      .confirm:disabled { opacity: 0.6; cursor: default; }
+      .confirm:hover:not(:disabled) { filter: brightness(1.06); }
+      .confirm:active:not(:disabled) { transform: scale(0.99); }
+      .confirm:disabled { opacity: 0.55; cursor: default; box-shadow: none; }
       .back {
         width: 100%; padding: 10px; margin-top: 8px; font-size: 14px; cursor: pointer;
         border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface-2);

@@ -11,6 +11,10 @@ import { CargandoComponent } from './shared/cargando.component';
 import { NovedadesService } from './shared/novedades.service';
 import { ActualizacionService } from './shared/actualizacion.service';
 import { limpiarInvitacion } from './shared/invitacion.util';
+import {
+  puedeRecargarSinCiclar as puedeRecargarSinCiclarHelper,
+  CLAVE_OVERLAY_ACTUALIZANDO,
+} from './shared/recarga.util';
 import { UserService } from './core/services/user.service';
 import { StatsService } from './shared/stats.service';
 import { APP_VERSION } from './core/version';
@@ -57,6 +61,22 @@ export class App {
     } catch {
       // Sin storage confiable (modo privado, etc.): no pasa nada, el
       // auto-reparador simplemente no intervendrá.
+    }
+
+    // Si esta carga viene de recuperarnos de un chunk lazy que ya no existía
+    // (index.html viejo tras un deploy), el manejador del router dejó esta
+    // marca antes de recargar. Mostramos el overlay "Actualizando" un instante
+    // para que el usuario entienda qué pasó, en vez de un salto seco. La marca
+    // se consume (se borra) para que no reaparezca en cargas posteriores.
+    try {
+      if (sessionStorage.getItem(CLAVE_OVERLAY_ACTUALIZANDO)) {
+        sessionStorage.removeItem(CLAVE_OVERLAY_ACTUALIZANDO);
+        this.hayActualizacion.set(true);
+        this.actualizando.set(true);
+        setTimeout(() => this.actualizando.set(false), App.OVERLAY_MIN_MS);
+      }
+    } catch {
+      // Sin storage: no mostramos overlay, la app ya cargó bien de todos modos.
     }
 
     // Propiedades categóricas del usuario para segmentar Analytics (sin PII):
@@ -289,38 +309,12 @@ export class App {
   }
 
   /**
-   * Guarda anti-bucle ÚNICA para toda recarga automática. Autoriza como mucho
-   * MAX_RECARGAS recargas dentro de VENTANA_MS, sin importar la causa. Antes
-   * había una clave distinta por mecanismo y podían encadenarse varias recargas
-   * en segundos (cada una pasando su propia guarda) dejando al usuario en
-   * "cargando" infinito. Con un único contador global eso ya no puede pasar.
-   *
-   * La ventana está alineada con la del auto-reparador inline de index.html
-   * para que ambas capas sean coherentes.
-   *
-   * Si el storage no es confiable (modo privado, etc.), devuelve false:
-   * preferimos NO recargar automáticamente antes que arriesgar un ciclo. El
-   * usuario se recupera igual con el banner manual o al reabrir la app.
+   * Guarda anti-bucle ÚNICA para toda recarga automática. Delega en el helper
+   * compartido (shared/recarga.util) para que ESTE componente y el manejador
+   * de fallo de chunks del router usen el MISMO contador global. Ver ese
+   * archivo para el detalle de la ventana y el tope de recargas.
    */
   private puedeRecargarSinCiclar(): boolean {
-    const VENTANA_MS = 2 * 60 * 1000; // 2 min, alineada con el inline de index.html.
-    const MAX_RECARGAS = 3;
-    const CLAVE = 'recargasAutoTs';
-    const ahora = Date.now();
-    try {
-      const crudo = sessionStorage.getItem(CLAVE);
-      const marcas: number[] = crudo ? (JSON.parse(crudo) as number[]) : [];
-      const recientes = marcas.filter((t) => ahora - t < VENTANA_MS);
-      if (recientes.length >= MAX_RECARGAS) return false;
-
-      recientes.push(ahora);
-      sessionStorage.setItem(CLAVE, JSON.stringify(recientes));
-      // Confirmamos que de verdad quedó escrito (algunos navegadores en modo
-      // privado aceptan setItem pero no persisten).
-      return sessionStorage.getItem(CLAVE) !== null;
-    } catch {
-      // Sin storage confiable, no arriesgamos recarga automática.
-      return false;
-    }
+    return puedeRecargarSinCiclarHelper();
   }
 }

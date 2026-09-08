@@ -234,12 +234,25 @@ export const guardarPush = onCall(opcionesCall, async (req) => {
             pushActivo: true,
             pushTokens: FieldValue.arrayUnion(token),
         });
+    } else if (token) {
+        // Desactivar ESTE dispositivo: quitamos su token y recalculamos
+        // pushActivo desde el array resultante. Si quedan otros dispositivos,
+        // pushActivo sigue en true; si era el último, queda en false. La
+        // transacción evita que dos dispositivos desactivando a la vez dejen
+        // pushActivo incoherente con pushTokens.
+        await db.runTransaction(async (tx) => {
+            const snap = await tx.get(ref);
+            const actuales = (snap.get('pushTokens') ?? []) as string[];
+            const restantes = actuales.filter((t) => t !== token);
+            tx.update(ref, {
+                pushTokens: restantes,
+                pushActivo: restantes.length > 0,
+            });
+        });
     } else {
-        // Al desactivar, quitamos este dispositivo. Si mandó token, solo ese;
-        // si no, apagamos el switch (deja de recibir en todos).
-        const update: Record<string, unknown> = { pushActivo: false };
-        if (token) update['pushTokens'] = FieldValue.arrayRemove(token);
-        await ref.update(update);
+        // Sin token (fallback): apagamos el switch global. Deja de recibir en
+        // todos los dispositivos, pero conserva los tokens.
+        await ref.update({ pushActivo: false });
     }
     return { ok: true };
 });

@@ -138,23 +138,23 @@ import { APP_VERSION } from '../../core/version';
       }
 
       @if (trofeos().length > 0) {
-      <section class="panel">
-        <h2>Trofeos</h2>
+      <section class="panel panel--trofeos">
+        <h2><i class="ti ti-trophy"></i> Trofeos <span class="trofeos-conteo">{{ trofeos().length }}</span></h2>
+        <div class="trofeos-lista">
         @for (t of trofeos(); track t.id) {
           <div class="trofeo">
             <span class="copa"><i class="ti ti-trophy"></i></span>
-            <div class="trofeo-datos">
-              <div class="trofeo-nombre">{{ t.torneo }}</div>
-              <div class="trofeo-sub">
-                {{ t.competicion }}
-                @if (t.compartido) { · compartido }
-              </div>
+            <div class="trofeo-nombre">{{ t.torneo }}</div>
+            <div class="trofeo-sub">
+              {{ t.competicion }}
+              @if (t.compartido) { <span class="chip-compartido"><i class="ti ti-users"></i> compartido</span> }
             </div>
             @if (t.premio > 0) {
               <span class="trofeo-premio">+{{ t.premio | number }}</span>
             }
           </div>
         }
+        </div>
       </section>
       }
 
@@ -170,7 +170,7 @@ import { APP_VERSION } from '../../core/version';
 
           <!-- Canal 1: este dispositivo (push) -->
           <div class="canal">
-            <app-notificaciones-boton [pushActivo]="me()?.pushActivo === true" />
+            <app-notificaciones-boton [pushTokens]="me()?.pushTokens ?? []" />
           </div>
 
           <!-- Canal 2: Telegram -->
@@ -426,16 +426,60 @@ import { APP_VERSION } from '../../core/version';
       .act-tarjeta--premio .act-val { color: var(--success-text); }
       .act-val.neg { color: var(--danger-text); }
 
-      .trofeo { display: flex; align-items: center; gap: 12px; padding: 10px 0;
-        border-bottom: 1px solid var(--border); }
-      .trofeo:last-child { border-bottom: none; }
-      .copa { width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
-        background: var(--warning-bg); color: var(--warning-text);
-        display: flex; align-items: center; justify-content: center; font-size: 17px; }
-      .trofeo-datos { flex: 1; min-width: 0; }
-      .trofeo-nombre { font-size: 14px; font-weight: 600; }
-      .trofeo-sub { font-size: 12px; color: var(--text-muted); }
-      .trofeo-premio { font-size: 14px; font-weight: 600; color: var(--success-text); }
+      /* --- Trofeos: acabado dorado, cada logro como una tarjeta destacada --- */
+      .panel--trofeos h2 { display: flex; align-items: center; gap: 8px; }
+      .panel--trofeos h2 .ti-trophy { color: #c9a227; }
+      .trofeos-conteo { margin-left: auto; font-size: 12px; font-weight: 700;
+        line-height: 1; padding: 4px 9px; border-radius: 999px;
+        color: #6b5518; background: linear-gradient(180deg, #e6d6a8, #c9a227);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
+
+      .trofeos-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 10px; margin-top: 4px; }
+
+      /* Tarjeta de logro: copa arriba al centro, nombre debajo, luego el resto */
+      .trofeo { position: relative; display: flex; flex-direction: column; align-items: center;
+        text-align: center; gap: 8px; padding: 16px 12px; border-radius: 14px; overflow: hidden;
+        border: 1px solid rgba(201, 162, 39, 0.28);
+        background:
+          radial-gradient(120% 90% at 50% 0%, rgba(201, 162, 39, 0.10), transparent 60%),
+          var(--surface-2, var(--card-bg, rgba(255, 255, 255, 0.03)));
+        transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
+      /* Franja dorada superior que marca el logro */
+      .trofeo::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 4px;
+        background: linear-gradient(90deg, #d8c690, #c9a227, #a8842a); }
+      .trofeo:hover { transform: translateY(-1px);
+        border-color: rgba(201, 162, 39, 0.45);
+        box-shadow: 0 6px 18px rgba(168, 132, 42, 0.14); }
+
+      .copa { position: relative; width: 52px; height: 52px; border-radius: 50%;
+        flex-shrink: 0; color: #fff; font-size: 24px; margin-top: 4px;
+        display: flex; align-items: center; justify-content: center;
+        background: radial-gradient(circle at 30% 25%, #ded1a5, #c9a227 48%, #a8842a 100%);
+        box-shadow: 0 2px 6px rgba(168, 132, 42, 0.32),
+          inset 0 1px 2px rgba(255, 255, 255, 0.45); }
+      /* Anillo suave alrededor de la copa */
+      .copa::after { content: ''; position: absolute; inset: -4px; border-radius: 50%;
+        border: 2px solid rgba(201, 162, 39, 0.28); }
+
+      .trofeo-nombre { font-size: 15px; font-weight: 700; letter-spacing: 0.2px;
+        line-height: 1.25; }
+      .trofeo-sub { font-size: 12px; color: var(--text-muted); display: flex;
+        flex-direction: column; align-items: center; gap: 6px; }
+      .chip-compartido { display: inline-flex; align-items: center; gap: 4px;
+        font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+        color: var(--text-secondary); background: var(--chip-bg, rgba(127, 127, 127, 0.14)); }
+      .chip-compartido .ti { font-size: 12px; }
+
+      .trofeo-premio { font-size: 14px; font-weight: 700;
+        color: var(--success-text);
+        padding: 4px 12px; border-radius: 999px;
+        background: color-mix(in srgb, var(--success-text) 14%, transparent); }
+
+      @media (prefers-reduced-motion: reduce) {
+        .trofeo { transition: none; }
+        .trofeo:hover { transform: none; }
+      }
       .ayuda-tg { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; line-height: 1.5; }
       .ayuda-tg strong { color: var(--text-primary); }
       .ayuda-tg--chica { font-size: 12px; color: var(--text-muted); margin: 8px 0 0; }

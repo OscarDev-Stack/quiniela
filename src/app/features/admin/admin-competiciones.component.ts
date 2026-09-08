@@ -146,7 +146,7 @@ import { ToastService } from '../../shared/toast.service';
             <div class="grid">
               <label class="field">
                 <span>Liga</span>
-                <select [(ngModel)]="apiCfg(c.id).ligaId">
+                <select [(ngModel)]="apiCfg(c.id).ligaId" (ngModelChange)="alCambiarLiga(c.id)">
                   <option [ngValue]="null">Sin conexión</option>
                   @for (l of ligasApi; track l.id) {
                     <option [ngValue]="l.id">{{ l.nombre }}</option>
@@ -155,9 +155,9 @@ import { ToastService } from '../../shared/toast.service';
               </label>
               <label class="field">
                 <span>Temporada</span>
-                <select [(ngModel)]="apiCfg(c.id).temporada">
-                  <option value="">Elige…</option>
-                  @for (t of temporadasApi; track t) {
+                <select [(ngModel)]="apiCfg(c.id).temporada" [disabled]="!apiCfg(c.id).ligaId">
+                  <option value="">{{ apiCfg(c.id).ligaId ? 'Elige…' : 'Elige una liga primero' }}</option>
+                  @for (t of temporadasParaLiga(apiCfg(c.id).ligaId); track t) {
                     <option [value]="t">{{ t }}</option>
                   }
                 </select>
@@ -662,10 +662,38 @@ export class AdminCompeticionesComponent {
     { id: 4391, nombre: 'NFL' },
   ];
   /**
-   * Temporadas elegibles (formato de la API). La más reciente primero.
-   * Fútbol usa "2026-2027"; la NFL usa el año simple ("2026").
+   * Temporadas elegibles POR FORMATO. La más reciente primero.
+   * El fútbol usa temporada de dos años ("2026-2027"); la NFL (y otras
+   * ligas de EE.UU.) usan el año simple ("2026"). Se muestran solo las
+   * que corresponden a la liga elegida, para no ofrecer combinaciones
+   * inválidas (ej. NFL 2026-2027).
    */
-  readonly temporadasApi: string[] = ['2026-2027', '2025-2026', '2024-2025', '2026', '2025'];
+  private readonly temporadasFutbol: string[] = ['2026-2027', '2025-2026', '2024-2025'];
+  private readonly temporadasNfl: string[] = ['2026', '2025'];
+
+  /** Ligas que usan el año simple como temporada (formato EE.UU.). */
+  private readonly ligasAnioSimple = new Set<number>([4391]); // NFL
+
+  /**
+   * Temporadas válidas para la liga elegida. Si aún no se elige liga,
+   * no ofrecemos temporadas (primero hay que elegir la liga).
+   */
+  temporadasParaLiga(ligaId: number | null): string[] {
+    if (!ligaId) return [];
+    return this.ligasAnioSimple.has(ligaId) ? this.temporadasNfl : this.temporadasFutbol;
+  }
+
+  /**
+   * Al cambiar de liga, si la temporada ya elegida no aplica al nuevo
+   * formato, la limpiamos para no dejar una combinación inválida.
+   */
+  alCambiarLiga(competicionId: string): void {
+    const cfg = this.apiCfg(competicionId);
+    const validas = this.temporadasParaLiga(cfg.ligaId);
+    if (!validas.includes(cfg.temporada)) {
+      cfg.temporada = '';
+    }
+  }
 
   private readonly apiPanel = signal<string[]>([]);
   private readonly apiCfgMap: Record<string, { ligaId: number | null; temporada: string }> = {};
