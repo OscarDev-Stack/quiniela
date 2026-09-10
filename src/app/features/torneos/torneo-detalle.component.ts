@@ -53,7 +53,8 @@ import { StatsService } from '../../shared/stats.service';
       }
 
       @if (torneo(); as t) {
-        <div class="flujo" [class.flujo--cerrada]="revelarPicks()">
+        <div class="flujo" [class.flujo--cerrada]="revelarPicks()"
+          [class.flujo--inscripcion]="t.estado === 'inscripcion'">
         <div class="franja">
           <span class="pill" [class.pill--vivo]="t.estado === 'en-curso'">
             {{ etiquetaEstado(t.estado) }}
@@ -96,6 +97,60 @@ import { StatsService } from '../../shared/stats.service';
             </span>
           }
         </div>
+
+        @if (t.estado === 'inscripcion') {
+          <section class="panel panel--arranque p-inscripcion">
+            <div class="panel-head">
+              <h3><i class="ti ti-hourglass-high"></i> Inscripciones abiertas</h3>
+            </div>
+
+            <p class="ayuda">
+              El torneo arranca en la jornada <strong>{{ t.jornadaInicial }}</strong>
+              de {{ t.competicionNombre }}.
+              @if (esQuiniela()) {
+                Hasta entonces no hay nada que pronosticar.
+              } @else {
+                Hasta entonces no hay que elegir equipo.
+              }
+            </p>
+
+            @if (cierreInscripcion(); as ci) {
+              <div class="arranque-dato plazo">
+                <span class="etq">Se puede entrar hasta</span>
+                <span class="val">{{ ci | date: "dd 'de' MMMM, h:mm a" }}</span>
+                @if (restanteInscripcion(); as r) {
+                  <span class="falta">Faltan {{ r }} · después arranca solo</span>
+                } @else {
+                  <span class="falta falta--vencida">Plazo vencido</span>
+                }
+              </div>
+            }
+
+            @if (jornadaActual(); as j) {
+              <div class="arranque">
+                <div class="arranque-dato">
+                  <span class="etq">Primera jornada</span>
+                  <span class="val">Jornada {{ j.numero }}</span>
+                </div>
+                @if (cierre(j); as c) {
+                  <div class="arranque-dato">
+                    <span class="etq">Cierra</span>
+                    <span class="val">{{ c | date: "dd 'de' MMMM, h:mm a" }}</span>
+                    @if (restante(j); as r) {
+                      <span class="falta">Faltan {{ r }}</span>
+                    } @else {
+                      <span class="falta falta--vencida">Ya cerró</span>
+                    }
+                  </div>
+                }
+              </div>
+            } @else {
+              <p class="sin-catalogo">
+                Esa jornada todavía no se publica en {{ t.competicionNombre }}.
+              </p>
+            }
+          </section>
+        }
 
 
         @if (t.estado === 'finalizado' && yo()) {
@@ -161,70 +216,6 @@ import { StatsService } from '../../shared/stats.service';
             Tu elección de la jornada {{ p.jornada }} (<strong>{{ p.equipo }}</strong>)
             quedó en espera: ese partido se aplazó. Se definirá cuando se juegue.
           </div>
-        }
-
-        @if (t.estado === 'inscripcion') {
-          <section class="panel panel--arranque">
-            <div class="panel-head">
-              <h3><i class="ti ti-hourglass-high"></i> Inscripciones abiertas</h3>
-            </div>
-
-            <p class="ayuda">
-              El torneo arranca en la jornada <strong>{{ t.jornadaInicial }}</strong>
-              de {{ t.competicionNombre }}.
-              @if (esQuiniela()) {
-                Hasta entonces no hay nada que pronosticar.
-              } @else {
-                Hasta entonces no hay que elegir equipo.
-              }
-            </p>
-
-            @if (cierreInscripcion(); as ci) {
-              <div class="arranque-dato plazo">
-                <span class="etq">Se puede entrar hasta</span>
-                <span class="val">{{ ci | date: "dd 'de' MMMM, h:mm a" }}</span>
-                @if (restanteInscripcion(); as r) {
-                  <span class="falta">Faltan {{ r }} · después arranca solo</span>
-                } @else {
-                  <span class="falta falta--vencida">Plazo vencido</span>
-                }
-              </div>
-            }
-
-            @if (jornadaActual(); as j) {
-              <div class="arranque">
-                <div class="arranque-dato">
-                  <span class="etq">Primera jornada</span>
-                  <span class="val">Jornada {{ j.numero }}</span>
-                </div>
-                @if (cierre(j); as c) {
-                  <div class="arranque-dato">
-                    <span class="etq">Cierra</span>
-                    <span class="val">{{ c | date: "dd 'de' MMMM, h:mm a" }}</span>
-                    @if (restante(j); as r) {
-                      <span class="falta">Faltan {{ r }}</span>
-                    } @else {
-                      <span class="falta falta--vencida">Ya cerró</span>
-                    }
-                  </div>
-                }
-              </div>
-
-              <p class="listado-partidos">
-                @for (p of j.partidos; track $index) {
-                  <span class="mini">
-                    <app-escudo [equipo]="p.local" [size]="18" />
-                    {{ p.local }} vs {{ p.visitante }}
-                    <app-escudo [equipo]="p.visitante" [size]="18" />
-                  </span>
-                }
-              </p>
-            } @else {
-              <p class="sin-catalogo">
-                Esa jornada todavía no se publica en {{ t.competicionNombre }}.
-              </p>
-            }
-          </section>
         }
 
         @if (t.estado === 'en-curso' && !jornadaActual()) {
@@ -336,7 +327,7 @@ import { StatsService } from '../../shared/stats.service';
             @if (puedeElegir()) {
               @if (!miPick()) {
                 <p class="ayuda">
-                  Elige un equipo que gane. El empate te cuesta la vida y la derrota te elimina.
+                  Elige, en los enfrentamientos de abajo, al equipo que crees que gana su partido.
                 </p>
               } @else {
                 <p class="ayuda">
@@ -348,20 +339,6 @@ import { StatsService } from '../../shared/stats.service';
                 <div class="aviso">
                   <i class="ti ti-alert-circle"></i>
                   Ya usaste a todos los equipos que juegan en esta jornada.
-                </div>
-              } @else {
-                <div class="equipos">
-                  @for (e of disponibles(); track e) {
-                    <button
-                      class="equipo"
-                      [class.equipo--activo]="e === miPick()?.equipo"
-                      [disabled]="guardando()"
-                      (click)="elegir(e)"
-                    >
-                      <app-escudo [equipo]="e" [size]="20" />
-                      {{ e }}
-                    </button>
-                  }
                 </div>
               }
 
@@ -503,6 +480,13 @@ import { StatsService } from '../../shared/stats.service';
           />
         }
 
+        <!-- En inscripción (quiniela o survivor): los enfrentamientos de la
+             primera jornada, solo como referencia. Todavía no se puede elegir
+             ni pronosticar; eso se habilita al arrancar el torneo. -->
+        @if (t.estado === 'inscripcion' && jornadaActual(); as j) {
+          <app-partidos-jornada class="p-partidos" [jornada]="j" />
+        }
+
         @if (esQuiniela()) {
           <app-tabla-posiciones
             class="p-jugadores"
@@ -511,13 +495,24 @@ import { StatsService } from '../../shared/stats.service';
           />
         } @else {
         <section class="panel p-jugadores">
-          <div class="panel-head">
+          <!-- Los participantes siempre van colapsados por defecto: con la
+               jornada abierta lo importante es elegir equipo, y al cerrarla
+               van después de las tarjetas de juego con los resultados. -->
+          <button
+            class="panel-head panel-head--boton"
+            (click)="verParticipantes.set(!verParticipantes())"
+          >
+            <i class="ti chevron"
+              [class.ti-chevron-down]="!verParticipantes()"
+              [class.ti-chevron-up]="verParticipantes()"></i>
             <h3>Participantes</h3>
             <span class="resumen-vivos">
               <i class="ti ti-heart-filled"></i>
               {{ enPie().length }} de {{ participantes().length }} en pie
             </span>
-          </div>
+          </button>
+
+          @if (mostrarParticipantes()) {
 
           <!-- EN PIE -->
           @if (enPie().length > 0) {
@@ -608,6 +603,7 @@ import { StatsService } from '../../shared/stats.service';
             }
             }
           }
+          }
         </section>
         }
 
@@ -620,6 +616,11 @@ import { StatsService } from '../../shared/stats.service';
             class="p-partidos"
             [jornada]="j"
             [miEquipo]="miPick()?.equipo ?? null"
+            [interactivo]="true"
+            [disponibles]="disponibles()"
+            [seleccionado]="miPick()?.equipo ?? null"
+            [guardando]="guardando()"
+            (elegir)="elegir($event)"
           />
         }
 
@@ -655,23 +656,35 @@ import { StatsService } from '../../shared/stats.service';
       /* Hero de la elección (survivor): justo bajo la franja. */
       .flujo > .hero-pick { order: 1; }
       .flujo > .p-jornada { order: 2; }
-      .flujo > .p-equipos { order: 3; }
+      /* Jornada abierta (survivor, en juego): tras el encabezado de la jornada
+         van los enfrentamientos, donde se elige al equipo tocándolo. Luego
+         "Mis equipos" y al final los participantes (colapsados por defecto). */
+      .flujo > .p-partidos { order: 3; }
+      .flujo > .p-equipos { order: 4; }
       /* Tarjetas de juego (survivor): al cerrar la jornada, tras los participantes. */
       .flujo > .p-cartones { order: 6; }
       .flujo > .p-jugadores { order: 6; }
-      /* Partidos de la jornada: al final, como contexto de consulta. */
-      .flujo > .p-partidos { order: 7; }
       .flujo > .reglas-panel { order: 9; }
       /* El resultado final (ganaste / terminó) siempre justo bajo la franja. */
       .flujo > .p-final { order: 0; }
       .flujo--cerrada > .p-final { order: 0; }
 
-      /* Jornada cerrada: participantes primero, luego las tarjetas de juego. */
-      .flujo--cerrada > .p-jugadores { order: 2; }
-      .flujo--cerrada > .p-cartones { order: 3; }
-      .flujo--cerrada > .p-jornada { order: 4; }
-      .flujo--cerrada > .p-equipos { order: 5; }
-      .flujo--cerrada > .p-partidos { order: 7; }
+      /* Durante la inscripción el orden es: primero el panel de inscripción,
+         luego los partidos de la jornada, tus equipos, los participantes y al
+         final cómo se juega. */
+      .flujo--inscripcion > .p-inscripcion { order: 1; }
+      .flujo--inscripcion > .p-partidos { order: 2; }
+      .flujo--inscripcion > .p-equipos { order: 3; }
+      .flujo--inscripcion > .p-jugadores { order: 4; }
+      .flujo--inscripcion > .reglas-panel { order: 5; }
+
+      /* Jornada cerrada: primero las tarjetas de juego (resultados) y los
+         partidos, y después los participantes (colapsados por defecto). */
+      .flujo--cerrada > .p-cartones { order: 2; }
+      .flujo--cerrada > .p-partidos { order: 3; }
+      .flujo--cerrada > .p-jugadores { order: 4; }
+      .flujo--cerrada > .p-jornada { order: 5; }
+      .flujo--cerrada > .p-equipos { order: 6; }
 
       .franja {
         display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;
@@ -795,7 +808,7 @@ import { StatsService } from '../../shared/stats.service';
 
       /* --- Sección de participantes (supervivencia) rediseñada --- */
       .resumen-vivos {
-        display: inline-flex; align-items: center; gap: 5px;
+        display: inline-flex; align-items: center; gap: 5px; margin-left: auto;
         font-size: 12px; font-weight: 700; color: var(--success-text);
       }
       .grupo-titulo {
@@ -865,21 +878,6 @@ import { StatsService } from '../../shared/stats.service';
       }
       .guion { color: var(--text-muted); }
 
-      .equipos { display: flex; flex-wrap: wrap; gap: 8px; }
-      .equipo--activo {
-        border-color: var(--accent-fill);
-        background: var(--accent-bg);
-        color: var(--accent-text);
-        font-weight: 700;
-      }
-      .equipo {
-        flex: 1 1 calc(50% - 4px); padding: 12px 10px; cursor: pointer;
-        border: 1px solid var(--border); border-radius: var(--radius);
-        background: transparent; font-size: 14px; font-weight: 600;
-        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-      }
-      .equipo:hover:not(:disabled) { border-color: var(--accent-fill); background: var(--accent-bg); }
-      .equipo:disabled { opacity: 0.5; }
       .usados { font-size: 11px; color: var(--text-muted); margin: 12px 0 0; }
 
       /* Hero de la elección (survivor): escudo grande y destacado. */
@@ -921,12 +919,6 @@ import { StatsService } from '../../shared/stats.service';
       .plazo { margin-bottom: 12px; }
       .falta { display: block; font-size: 11px; color: var(--warning-text); margin-top: 2px; }
       .falta--vencida { color: var(--danger-text); }
-      .listado-partidos { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
-      .mini {
-        display: inline-flex; align-items: center; gap: 5px;
-        font-size: 11px; padding: 4px 9px; border-radius: 999px;
-        background: var(--surface-1); color: var(--text-muted);
-      }
 
       .panel--gestion { border-color: var(--accent-fill); }
       .etiqueta {
@@ -1310,6 +1302,16 @@ export class TorneoDetalleComponent {
   /** Eliminados colapsados por defecto en la lista de participantes. */
   readonly verEliminados = signal(false);
 
+  /**
+   * Mientras la jornada sigue abierta (survivor en juego), la lista de
+   * participantes va al final y colapsada por defecto: lo importante es
+   * elegir equipo y ver los partidos. Al cerrar la jornada deja de colapsarse
+   * y se muestra siempre, porque pasa a ser el contenido principal.
+   */
+  readonly verParticipantes = signal(false);
+  /** ¿Mostrar el cuerpo de la lista de participantes? Colapsada por defecto. */
+  readonly mostrarParticipantes = computed(() => this.verParticipantes());
+
   /* ---- Historial de jornadas ---- */
   readonly verHistorial = signal(false);
   readonly jornadaHistorial = signal<number | null>(null);
@@ -1517,7 +1519,15 @@ export class TorneoDetalleComponent {
   readonly puedeElegir = computed(() => {
     const j = this.jornadaActual();
     const f = fechaJornada(j);
-    return !!this.yo()?.vivo && j?.estado === 'abierta' && (!f || f.getTime() > Date.now());
+    // Solo se puede elegir con el torneo ya en curso: durante la inscripción el
+    // backend rechaza la elección, así que aquí ni se ofrece. Coherente con la
+    // validación de Cloud Functions (estado === 'en-curso').
+    return (
+      this.torneo()?.estado === 'en-curso' &&
+      !!this.yo()?.vivo &&
+      j?.estado === 'abierta' &&
+      (!f || f.getTime() > Date.now())
+    );
   });
 
   cierre(j: Jornada): Date | null {

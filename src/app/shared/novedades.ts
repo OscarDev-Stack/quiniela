@@ -27,7 +27,7 @@ export interface Novedad {
 
 export const NOVEDADES: Novedad[] = [
     {
-        version: '2.3.1',
+        version: '2.3.0',
         fecha: 'Septiembre 2026',
         resumen: 'Rediseñamos las notificaciones: ahora tú eliges qué avisos recibir.',
         puntos: [
