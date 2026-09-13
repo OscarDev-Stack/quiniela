@@ -1070,8 +1070,14 @@ export class TorneoDetalleComponent {
     let jornadaPicks = -1;
 
     effect(() => {
+      // Ambas lecturas son dependencias reactivas: si la jornada llega
+      // DESPUÉS de que 'revelarPicks' ya pasó a true (carga inicial de un
+      // torneo en juego), el cambio de 'numero' vuelve a disparar el effect
+      // y sí suscribe a los picks. Leer 'numero' con untracked provocaba que
+      // se perdiera esa segunda emisión y la lista quedara vacía hasta
+      // salir y reentrar.
       const abierta = this.revelarPicks();
-      const numero = untracked(() => this.jornadaActual()?.numero ?? -1);
+      const numero = this.jornadaActual()?.numero ?? -1;
 
       if (!abierta || numero < 0) {
         subPicks?.unsubscribe();
@@ -1082,11 +1088,13 @@ export class TorneoDetalleComponent {
       }
       if (numero === jornadaPicks) return;
 
-      jornadaPicks = numero;
-      subPicks?.unsubscribe();
-      subPicks = this.service
-        .picksJornada(this.id, numero)
-        .subscribe((lista) => this.picksJornada.set(lista));
+      untracked(() => {
+        jornadaPicks = numero;
+        subPicks?.unsubscribe();
+        subPicks = this.service
+          .picksJornada(this.id, numero)
+          .subscribe((lista) => this.picksJornada.set(lista));
+      });
     });
 
     // Los cartones ajenos solo se piden cuando la jornada ya cerró.
@@ -1094,8 +1102,11 @@ export class TorneoDetalleComponent {
     let jornadaCartones = -1;
 
     effect(() => {
+      // Igual que con los picks: 'numero' debe ser dependencia reactiva para
+      // no perder la emisión de la jornada cuando llega después de que
+      // 'revelarQuinielas' ya pasó a true en la primera carga.
       const visible = this.revelarQuinielas();
-      const numero = untracked(() => this.jornadaActual()?.numero ?? -1);
+      const numero = this.jornadaActual()?.numero ?? -1;
 
       if (!visible || numero < 0) {
         subCartones?.unsubscribe();
@@ -1108,11 +1119,13 @@ export class TorneoDetalleComponent {
       }
       if (numero === jornadaCartones) return;
 
-      jornadaCartones = numero;
-      subCartones?.unsubscribe();
-      subCartones = this.service.quinielasJornada(this.id, numero).subscribe((lista) => {
-        this.quinielasSignal.set(lista);
-        this.cartonesListos.set(true);
+      untracked(() => {
+        jornadaCartones = numero;
+        subCartones?.unsubscribe();
+        subCartones = this.service.quinielasJornada(this.id, numero).subscribe((lista) => {
+          this.quinielasSignal.set(lista);
+          this.cartonesListos.set(true);
+        });
       });
     });
 
