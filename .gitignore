@@ -59,3 +59,7 @@ scripts/config-dev.json
 
 # Kiro (datos locales de ligas)
 .kiro/ligas/
+# Sondeos y scripts de exploración de la API (datos locales, no versionar)
+docs/sondeo-sportsdb/
+scripts/prueba-sportsdb-jugadores.js
+scripts/sondeo-ligamx-draft.js
