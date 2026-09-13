@@ -416,8 +416,32 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
       .fila--gana .equipo { font-weight: 800; color: var(--text-primary); }
       .nodo--resuelta .fila:not(.fila--gana) .equipo { opacity: 0.5; }
       .nodo--resuelta .fila:not(.fila--gana) .siembra { opacity: 0.5; }
-      .fila--acierto { box-shadow: inset 3px 0 0 0 var(--success-text); }
-      .fila--fallo { box-shadow: inset 3px 0 0 0 var(--danger-text); }
+      /* Barra vertical de acierto/fallo. Se pinta con un pseudo-elemento en
+         vez de inset box-shadow para poder redondear las esquinas y que
+         acompañe el border-radius del nodo (primera fila arriba, última abajo). */
+      .fila--acierto,
+      .fila--fallo { position: relative; }
+      .fila--acierto::before,
+      .fila--fallo::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 3px;
+      }
+      .fila--acierto::before { background: var(--success-text); }
+      .fila--fallo::before { background: var(--danger-text); }
+      /* Primera fila del nodo: redondea la esquina superior de la barra. */
+      .nodo > .fila:first-child.fila--acierto::before,
+      .nodo > .fila:first-child.fila--fallo::before {
+        border-top-left-radius: 12px;
+      }
+      /* Última fila del nodo: redondea la esquina inferior de la barra. */
+      .nodo > .fila:last-child.fila--acierto::before,
+      .nodo > .fila:last-child.fila--fallo::before {
+        border-bottom-left-radius: 12px;
+      }
 
       /* Columna del campeón: card grande, coronado y con brillo. */
       .columna--trofeo { min-width: 170px; }
@@ -599,8 +623,19 @@ import { globalDeLlave } from '../../core/services/bracket-cuadro';
       .llave--resuelta .lado:not(.lado--gana) .equipo { opacity: 0.55; }
       .llave--resuelta .lado:not(.lado--gana) .siembra { opacity: 0.55; }
 
-      .lado--acierto { box-shadow: inset 3px 0 0 0 var(--success-text); }
-      .lado--fallo { box-shadow: inset 3px 0 0 0 var(--danger-text); }
+      /* Barra de acierto/fallo con pseudo-elemento: el overflow:hidden de
+         .llave recorta sus esquinas siguiendo el border-radius del contenedor. */
+      .lado--acierto::before,
+      .lado--fallo::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 3px;
+      }
+      .lado--acierto::before { background: var(--success-text); }
+      .lado--fallo::before { background: var(--danger-text); }
 
       .mi-pick, .trofeo {
         flex-shrink: 0;

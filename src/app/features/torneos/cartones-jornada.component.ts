@@ -89,11 +89,22 @@ interface PartidoCarton {
 
               <div class="picks">
                 @for (c of cartones(); track c.id) {
-                  <div class="pick" [class.pick--yo]="c.uid === miUid()">
+                  @let ptsPick = yaResuelto(p) && c.marcadores[iPartido] ? acierto(p, c.marcadores[iPartido]) : -1;
+                  <div
+                    class="pick"
+                    [class.pick--yo]="c.uid === miUid()"
+                    [class.pick--orilla-5]="ptsPick === 5"
+                    [class.pick--orilla-3]="ptsPick === 3"
+                    [class.pick--orilla-0]="ptsPick === 0"
+                  >
                     <span class="pick-alias">{{ c.uid === miUid() ? 'Tú' : c.alias }}</span>
                     @if (c.marcadores[iPartido]; as m) {
-                      <span class="pick-marca" [class]="'pick-marca--' + acierto(p, m)">
-                        {{ m.local }}-{{ m.visitante }}
+                      @let pts = acierto(p, m);
+                      <span class="pick-marca" [class]="'pick-marca--' + pts">
+                        <span class="pick-num">{{ m.local }}-{{ m.visitante }}</span>
+                        @if (yaResuelto(p)) {
+                          <span class="pick-pts">+{{ pts }} pts</span>
+                        }
                       </span>
                     } @else {
                       <span class="pick-marca pick-marca--vacio">–</span>
@@ -195,20 +206,46 @@ interface PartidoCarton {
       }
       .pick + .pick { border-top: 1px solid var(--border); }
       .pick--yo { background: color-mix(in srgb, var(--accent-fill) 8%, transparent); }
+      /* Orilla izquierda del color del acierto, para leer el resultado de un vistazo. */
+      .pick--orilla-5 { box-shadow: inset 3px 0 0 0 var(--success-text); }
+      .pick--orilla-3 { box-shadow: inset 3px 0 0 0 var(--accent-text); }
+      .pick--orilla-0 { box-shadow: inset 3px 0 0 0 var(--border); }
       .pick-alias {
         color: var(--text-secondary); min-width: 0;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       .pick--yo .pick-alias { color: var(--accent-text); font-weight: 600; }
       .pick-marca {
-        flex-shrink: 0; padding: 2px 9px; border-radius: 6px; font-weight: 600;
+        flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+        padding: 3px 9px; border-radius: 999px; font-weight: 600;
+        border: 1px solid var(--border);
         background: var(--surface-2); color: var(--text-secondary);
         font-variant-numeric: tabular-nums;
       }
-      .pick-marca--5 { background: var(--success-bg); color: var(--success-text); font-weight: 700; }
-      .pick-marca--3 { background: var(--accent-bg); color: var(--accent-text); }
-      .pick-marca--0 { opacity: 0.5; }
+      .pick-num { line-height: 1; }
+      /* Puntos ganados como texto simple, un poco más pequeño que el marcador. */
+      .pick-pts { font-size: 10px; font-weight: 700; line-height: 1; opacity: 0.85; }
+      /* Exacto: verde fuerte, con borde. */
+      .pick-marca--5 {
+        background: var(--success-bg); color: var(--success-text);
+        border-color: color-mix(in srgb, var(--success-text) 55%, transparent);
+        font-weight: 800;
+      }
+      /* Resultado: azul del acento, con borde. */
+      .pick-marca--3 {
+        background: var(--accent-bg); color: var(--accent-text);
+        border-color: color-mix(in srgb, var(--accent-text) 45%, transparent);
+        font-weight: 700;
+      }
+      /* Sin acierto: gris tenue. */
+      .pick-marca--0 {
+        background: var(--surface-1); color: var(--text-muted);
+        border-color: var(--border); opacity: 0.85;
+      }
       .pick-marca--vacio { opacity: 0.3; }
+      /* Resalta un poco más mi propia marca acertada. */
+      .pick--yo .pick-marca--5,
+      .pick--yo .pick-marca--3 { box-shadow: 0 0 0 1px currentColor inset; }
     `,
   ],
 })
@@ -265,6 +302,12 @@ export class CartonesJornadaComponent {
   /** Texto del minuto/estado en vivo, traducido al español. */
   minutoTexto(min: string): string {
     return minutoVivoTexto(min);
+  }
+
+  /** ¿El partido ya tiene resultado final? (no pospuesto). Solo entonces
+   *  mostramos el ícono/puntos de acierto, para no prejuzgar en vivo. */
+  yaResuelto(partido: PartidoJornada): boolean {
+    return !!partido.resultado && partido.resultado !== 'pospuesto';
   }
 
   /** Cuánto vale un pronóstico contra el resultado real. */
