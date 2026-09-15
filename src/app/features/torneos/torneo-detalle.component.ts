@@ -1,4 +1,13 @@
-import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  ElementRef,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Auth, user } from '@angular/fire/auth';
@@ -997,6 +1006,7 @@ export class TorneoDetalleComponent {
   private readonly toast = inject(ToastService);
   private readonly ocupado = inject(OcupadoService);
   private readonly stats = inject(StatsService);
+  private readonly host: ElementRef<HTMLElement> = inject(ElementRef);
 
   private readonly id = this.route.snapshot.paramMap.get('id')!;
 
@@ -1612,26 +1622,70 @@ export class TorneoDetalleComponent {
   }
 
   async elegir(equipo: string): Promise<void> {
+    const anterior = this.miPick();
     const ok = await this.confirmar.pedir({
-      titulo: this.miPick() ? `Cambiar a ${equipo}` : `Elegir a ${equipo}`,
+      titulo: anterior ? `Cambiar a ${equipo}` : `Elegir a ${equipo}`,
       mensaje: 'No podrás usarlo de nuevo en el resto del torneo.',
       aceptar: 'Confirmar',
     });
     if (!ok) return;
-    const yaTenia = !!this.miPick();
+    const yaTenia = !!anterior;
+
+    // Actualización OPTIMISTA: reflejamos la elección de inmediato para que la
+    // UI reaccione al toque, no al final del guardado. Esto hace que el panel
+    // de enfrentamientos colapse y el "hero pick" se actualice ya, mientras la
+    // Cloud Function guarda en segundo plano. Firestore confirmará (o corregirá
+    // si algo falla) cuando reemita el pick real. Si el guardado truena,
+    // revertimos al pick anterior.
+    const uid = this.miUid();
+    const jornada = this.torneo()?.jornadaActual;
+    if (uid && typeof jornada === 'number') {
+      this.pickSignal.set({
+        id: `${uid}_${jornada}`,
+        uid,
+        alias: this.yo()?.alias ?? '',
+        jornada,
+        equipo,
+        estado: 'pendiente',
+      });
+    }
+
+    // Animación breve: el escudo del equipo elegido hace un "pop" y aterriza.
+    // Se dispara YA (no tras el guardado). Reiniciamos a null primero para
+    // forzar que el componente se recree y la animación vuelva a reproducirse
+    // aunque sea el mismo equipo.
+    this.celebrando.set(null);
+    setTimeout(() => this.celebrando.set(equipo));
+
+    // Tras pintar el hero pick actualizado, lo traemos a la vista para que el
+    // usuario vea el resultado de su elección sin tener que buscarlo.
+    this.enfocarHeroPick();
+
     this.guardando.set(true);
     try {
       await this.service.elegir(this.id, equipo);
-      // Animación breve: el escudo del equipo elegido hace un "pop" y aterriza.
-      // Reiniciamos a null primero para forzar que el componente se recree y la
-      // animación vuelva a reproducirse aunque sea el mismo equipo.
-      this.celebrando.set(null);
-      setTimeout(() => this.celebrando.set(equipo));
       this.toast.exito(yaTenia ? `Cambiaste a ${equipo}.` : `Elegiste ${equipo}.`);
     } catch (e: unknown) {
+      // Revertimos la actualización optimista: la elección no se guardó.
+      this.pickSignal.set(anterior);
+      this.celebrando.set(null);
       this.toast.error((e as Error)?.message ?? 'No se pudo guardar tu elección.');
     } finally {
       this.guardando.set(false);
     }
+  }
+
+  /**
+   * Lleva el "hero pick" a la vista tras un cambio de elección. El hero se
+   * pinta de forma condicional (@if miPick()), así que esperamos dos cuadros
+   * para asegurar que ya está en el DOM antes de hacer scroll suave.
+   */
+  private enfocarHeroPick(): void {
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const hero = this.host.nativeElement.querySelector<HTMLElement>('.hero-pick');
+        hero?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }),
+    );
   }
 }
