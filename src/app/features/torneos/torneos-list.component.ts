@@ -10,6 +10,7 @@ import { InvitacionPendiente } from '../../shared/invitacion.util';
 import { apagarCargando } from '../../shared/cargando.util';
 import { TorneosService } from '../../core/services/torneos.service';
 import { BracketsService } from '../../core/services/brackets.service';
+import { OcupadoService } from '../../shared/ocupado.service';
 import { ContextoService } from '../../shared/contexto.service';
 import { ToastService } from '../../shared/toast.service';
 import { Torneo } from '../../core/models/torneo.model';
@@ -412,6 +413,7 @@ export class TorneosListComponent {
   private readonly router = inject(Router);
   private readonly contexto = inject(ContextoService);
   private readonly toast = inject(ToastService);
+  private readonly ocupadoSrv = inject(OcupadoService);
 
   /* Filtro por estado, mismas pastillas que la vista de Partidos. 'Abiertos'
      agrupa lo que está en juego y lo abierto a inscripción. Arranca en 'Todos'. */
@@ -478,7 +480,9 @@ export class TorneosListComponent {
     }
 
     try {
-      const r = await this.bracketsService.unirse(codigo);
+      const r = await this.ocupadoSrv.mientras('Uniéndote', () =>
+        this.bracketsService.unirse(codigo),
+      );
       this.cerrarUnirse();
       this.router.navigate(['/eliminatorias', r.id]);
     } catch (e: unknown) {

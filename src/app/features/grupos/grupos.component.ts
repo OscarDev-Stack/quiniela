@@ -8,6 +8,7 @@ import { CargandoComponent } from '../../shared/cargando.component';
 import { EscanerQrComponent } from '../../shared/escaner-qr.component';
 import { InvitacionPendiente } from '../../shared/invitacion.util';
 import { GruposService } from '../../core/services/grupos.service';
+import { OcupadoService } from '../../shared/ocupado.service';
 import { UserService } from '../../core/services/user.service';
 import { ToastService } from '../../shared/toast.service';
 import { ContextoService } from '../../shared/contexto.service';
@@ -217,6 +218,7 @@ export class GruposComponent {
   private readonly contexto = inject(ContextoService);
   private readonly users = inject(UserService);
   private readonly toast = inject(ToastService);
+  private readonly ocupadoSrv = inject(OcupadoService);
   private readonly router = inject(Router);
 
   readonly emojis = EMOJIS;
@@ -261,7 +263,9 @@ export class GruposComponent {
     const nombre = this.nombre.trim();
     const icono = this.icono;
     try {
-      const r = await this.gruposSrv.crear(nombre, icono);
+      const r = await this.ocupadoSrv.mientras('Creando grupo', () =>
+        this.gruposSrv.crear(nombre, icono),
+      );
       this.toast.exito(`Grupo creado. Código: ${r.codigo}`);
       // El grupo recién creado se vuelve el contexto activo.
       this.contexto.cambiar({ grupoId: r.grupoId, nombre, icono });
@@ -299,7 +303,9 @@ export class GruposComponent {
 
     this.ocupado.set(true);
     try {
-      const r = await this.gruposSrv.unirse(codigo);
+      const r = await this.ocupadoSrv.mientras('Uniéndote al grupo', () =>
+        this.gruposSrv.unirse(codigo),
+      );
       this.toast.exito(`Te uniste a ${r.nombre}.`);
       // El grupo al que te unes se vuelve el contexto activo.
       this.contexto.cambiar({ grupoId: r.grupoId, nombre: r.nombre, icono: r.icono });
@@ -315,7 +321,9 @@ export class GruposComponent {
     ev.stopPropagation();
     const nuevo = !this.esFavorito(g.id);
     try {
-      await this.gruposSrv.marcarFavorito(g.id, nuevo);
+      await this.ocupadoSrv.mientras('Actualizando favorito', () =>
+        this.gruposSrv.marcarFavorito(g.id, nuevo),
+      );
     } catch {
       this.toast.error('No se pudo actualizar el favorito.');
     }

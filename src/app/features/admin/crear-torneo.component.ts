@@ -12,6 +12,7 @@ import { GruposService } from '../../core/services/grupos.service';
 import { ToastService } from '../../shared/toast.service';
 import { StatsService } from '../../shared/stats.service';
 import { NavComponent } from '../../shared/nav.component';
+import { OcupadoService } from '../../shared/ocupado.service';
 
 /**
  * Pantalla dedicada SOLO a crear un torneo (quiniela o supervivencia).
@@ -333,6 +334,7 @@ export class CrearTorneoComponent {
   private readonly gruposSrv = inject(GruposService);
   private readonly competicionesSrv = inject(CompeticionesService);
   private readonly toast = inject(ToastService);
+  private readonly ocupado = inject(OcupadoService);
   private readonly router = inject(Router);
   private readonly stats = inject(StatsService);
 
@@ -416,22 +418,24 @@ export class CrearTorneoComponent {
     }
     this.guardando.set(true);
     try {
-      await this.service.crearTorneo({
-        nombre: this.form.nombre.trim(),
-        competicionId: comp.id,
-        competicionNombre: comp.nombre,
-        jornadaInicial: Number(this.form.jornadaInicial) || 1,
-        costoEntrada: Number(this.form.costoEntrada),
-        porcentajeBote: Number(this.form.porcentajeBote),
-        cierreInscripcion: cierre,
-        modo: this.form.modo,
-        jornadas: this.form.modo === 'quiniela' ? Number(this.form.jornadas) || 1 : 0,
-        vidas: this.form.modo === 'supervivencia' ? Number(this.form.vidas) : 0,
-        vidaCubre: this.form.vidaCubre,
-        permiteRevivir: this.form.modo === 'supervivencia' && this.form.permiteRevivir,
-        publico: this.form.publico,
-        grupoId: this.form.grupoId || null,
-      });
+      await this.ocupado.mientras('Creando torneo', () =>
+        this.service.crearTorneo({
+          nombre: this.form.nombre.trim(),
+          competicionId: comp.id,
+          competicionNombre: comp.nombre,
+          jornadaInicial: Number(this.form.jornadaInicial) || 1,
+          costoEntrada: Number(this.form.costoEntrada),
+          porcentajeBote: Number(this.form.porcentajeBote),
+          cierreInscripcion: cierre,
+          modo: this.form.modo,
+          jornadas: this.form.modo === 'quiniela' ? Number(this.form.jornadas) || 1 : 0,
+          vidas: this.form.modo === 'supervivencia' ? Number(this.form.vidas) : 0,
+          vidaCubre: this.form.vidaCubre,
+          permiteRevivir: this.form.modo === 'supervivencia' && this.form.permiteRevivir,
+          publico: this.form.publico,
+          grupoId: this.form.grupoId || null,
+        }),
+      );
       this.stats.evento('torneo_creado', {
         modo: this.form.modo,
         es_grupo: this.form.grupoId ? 'si' : 'no',

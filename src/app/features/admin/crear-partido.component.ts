@@ -9,6 +9,7 @@ import { EscudoComponent } from '../../shared/escudo.component';
 import { SelectorEquipoComponent } from '../../shared/selector-equipo.component';
 import { TipoPartido } from '../../core/models/partido.model';
 import { ToastService } from '../../shared/toast.service';
+import { OcupadoService } from '../../shared/ocupado.service';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { GruposService } from '../../core/services/grupos.service';
 import { Grupo } from '../../core/models/grupo.model';
@@ -331,6 +332,7 @@ export class CrearPartidoComponent {
   private readonly admin = inject(AdminService);
   private readonly gruposSrv = inject(GruposService);
   private readonly toast = inject(ToastService);
+  private readonly ocupado = inject(OcupadoService);
   private readonly router = inject(Router);
 
   readonly misGrupos = toSignal(this.gruposSrv.misGrupos(), { initialValue: [] as Grupo[] });
@@ -478,18 +480,20 @@ export class CrearPartidoComponent {
     }
     const grupoSel = this.grupoParaCrear();
     if (grupoSel) {
-      await this.admin.crearPartidoGrupo({
-        grupoId: grupoSel,
-        competition: f.competition,
-        homeTeam: nombreOficial(f.homeTeam),
-        awayTeam: nombreOficial(f.awayTeam),
-        type: this.busqueda.type,
-        closesAtMs: inicio.getTime(),
-        porcentajeBote: Number(this.busqueda.porcentajeBote),
-        ...(f.apiFixtureId ? { apiFixtureId: f.apiFixtureId } : {}),
-        ...(f.apiEventId ? { apiEventId: f.apiEventId } : {}),
-        ...(f.apiLigaId ? { apiLigaId: f.apiLigaId } : {}),
-      });
+      await this.ocupado.mientras('Creando partido', () =>
+        this.admin.crearPartidoGrupo({
+          grupoId: grupoSel,
+          competition: f.competition,
+          homeTeam: nombreOficial(f.homeTeam),
+          awayTeam: nombreOficial(f.awayTeam),
+          type: this.busqueda.type,
+          closesAtMs: inicio.getTime(),
+          porcentajeBote: Number(this.busqueda.porcentajeBote),
+          ...(f.apiFixtureId ? { apiFixtureId: f.apiFixtureId } : {}),
+          ...(f.apiEventId ? { apiEventId: f.apiEventId } : {}),
+          ...(f.apiLigaId ? { apiLigaId: f.apiLigaId } : {}),
+        }),
+      );
     } else {
       // Forma reciente (solo football-data, que da ids numéricos de equipo).
       // Se captura una sola vez aquí y se guarda; si no hay, queda vacía.
@@ -505,21 +509,23 @@ export class CrearPartidoComponent {
         }
       }
 
-      await this.admin.crearPartido({
-        competition: f.competition,
-        homeTeam: nombreOficial(f.homeTeam),
-        awayTeam: nombreOficial(f.awayTeam),
-        type: this.busqueda.type,
-        status: 'abierto',
-        closesAt: Timestamp.fromDate(inicio),
-        porcentajeBote: Number(this.busqueda.porcentajeBote),
-        ...(f.apiFixtureId ? { apiFixtureId: f.apiFixtureId } : {}),
-        ...(f.apiEventId ? { apiEventId: f.apiEventId } : {}),
-        ...(f.apiLigaId ? { apiLigaId: f.apiLigaId } : {}),
-        ...(formaLocal ? { formaLocal } : {}),
-        ...(formaVisitante ? { formaVisitante } : {}),
-        grupoId: null,
-      });
+      await this.ocupado.mientras('Creando partido', () =>
+        this.admin.crearPartido({
+          competition: f.competition,
+          homeTeam: nombreOficial(f.homeTeam),
+          awayTeam: nombreOficial(f.awayTeam),
+          type: this.busqueda.type,
+          status: 'abierto',
+          closesAt: Timestamp.fromDate(inicio),
+          porcentajeBote: Number(this.busqueda.porcentajeBote),
+          ...(f.apiFixtureId ? { apiFixtureId: f.apiFixtureId } : {}),
+          ...(f.apiEventId ? { apiEventId: f.apiEventId } : {}),
+          ...(f.apiLigaId ? { apiLigaId: f.apiLigaId } : {}),
+          ...(formaLocal ? { formaLocal } : {}),
+          ...(formaVisitante ? { formaVisitante } : {}),
+          grupoId: null,
+        }),
+      );
     }
     this.encontrados.set(this.encontrados().filter((x) => x.clave !== f.clave));
     this.toast.exito(`Partido creado: ${f.homeTeam} vs ${f.awayTeam}.`);
@@ -545,26 +551,30 @@ export class CrearPartidoComponent {
 
       const grupoSel = this.grupoParaCrear();
       if (grupoSel) {
-        await this.admin.crearPartidoGrupo({
-          grupoId: grupoSel,
-          competition: this.form.competition.trim() || 'Partido',
-          homeTeam: nombreOficial(this.form.homeTeam),
-          awayTeam: nombreOficial(this.form.awayTeam),
-          type: this.form.type,
-          closesAtMs: cierre.getTime(),
-          porcentajeBote: Number(this.form.porcentajeBote),
-        });
+        await this.ocupado.mientras('Creando partido', () =>
+          this.admin.crearPartidoGrupo({
+            grupoId: grupoSel,
+            competition: this.form.competition.trim() || 'Partido',
+            homeTeam: nombreOficial(this.form.homeTeam),
+            awayTeam: nombreOficial(this.form.awayTeam),
+            type: this.form.type,
+            closesAtMs: cierre.getTime(),
+            porcentajeBote: Number(this.form.porcentajeBote),
+          }),
+        );
       } else {
-        await this.admin.crearPartido({
-          competition: this.form.competition.trim() || 'Partido',
-          homeTeam: nombreOficial(this.form.homeTeam),
-          awayTeam: nombreOficial(this.form.awayTeam),
-          type: this.form.type,
-          status: 'abierto',
-          closesAt: Timestamp.fromDate(cierre),
-          porcentajeBote: Number(this.form.porcentajeBote),
-          grupoId: null,
-        });
+        await this.ocupado.mientras('Creando partido', () =>
+          this.admin.crearPartido({
+            competition: this.form.competition.trim() || 'Partido',
+            homeTeam: nombreOficial(this.form.homeTeam),
+            awayTeam: nombreOficial(this.form.awayTeam),
+            type: this.form.type,
+            status: 'abierto',
+            closesAt: Timestamp.fromDate(cierre),
+            porcentajeBote: Number(this.form.porcentajeBote),
+            grupoId: null,
+          }),
+        );
       }
       this.form = { homeTeam: '', awayTeam: '', competition: '', closesAt: '', type: '1x2', porcentajeBote: 0 };
       this.toast.exito('Partido creado.');

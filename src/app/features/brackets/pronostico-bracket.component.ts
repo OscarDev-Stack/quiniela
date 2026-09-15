@@ -6,6 +6,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { Auth, user } from '@angular/fire/auth';
 import { map } from 'rxjs/operators';
 import { BracketsService } from '../../core/services/brackets.service';
+import { OcupadoService } from '../../shared/ocupado.service';
 import {
   Bracket,
   Llave,
@@ -189,6 +190,7 @@ export class PronosticoBracketComponent {
   readonly bracket = input.required<Bracket>();
 
   private readonly service = inject(BracketsService);
+  private readonly ocupado = inject(OcupadoService);
   private readonly auth = inject(Auth);
   private readonly uid = toSignal(user(this.auth).pipe(map((u) => u?.uid ?? null)), {
     initialValue: null,
@@ -281,7 +283,9 @@ export class PronosticoBracketComponent {
     this.error.set(false);
     try {
       // Fase 3: solo avances. Los marcadores llegan después.
-      await this.service.guardarPronostico(this.bracket().id, this.avances(), null);
+      await this.ocupado.mientras('Guardando pronóstico', () =>
+        this.service.guardarPronostico(this.bracket().id, this.avances(), null),
+      );
       this.mensaje.set('¡Listo! Tu pronóstico quedó guardado.');
     } catch (e: unknown) {
       this.error.set(true);

@@ -10,6 +10,7 @@ import { ConfirmarService } from '../../shared/confirmar.service';
 import { ToastService } from '../../shared/toast.service';
 import { ContextoService } from '../../shared/contexto.service';
 import { CodigoInvitarComponent } from '../../shared/codigo-invitar.component';
+import { OcupadoService } from '../../shared/ocupado.service';
 
 /**
  * Pantalla dedicada SOLO a gestionar torneos ya creados (iniciar, cerrar,
@@ -761,6 +762,7 @@ export class GestionarTorneosComponent {
     private readonly confirmar = inject(ConfirmarService);
     private readonly toast = inject(ToastService);
     private readonly contexto = inject(ContextoService);
+    private readonly ocupado = inject(OcupadoService);
 
     private readonly todos = toSignal(this.service.torneos(), { initialValue: [] as Torneo[] });
 
@@ -930,7 +932,9 @@ export class GestionarTorneosComponent {
             });
             if (!ok) return;
         }
-        await this.service.cambiarGestor(t.id, uid, agregar);
+        await this.ocupado.mientras('Actualizando permiso', () =>
+            this.service.cambiarGestor(t.id, uid, agregar),
+        );
         this.toast.exito(agregar ? 'Ahora administra el torneo.' : 'Permiso retirado.');
     }
 
@@ -948,7 +952,9 @@ export class GestionarTorneosComponent {
             aceptar: 'Iniciar',
         });
         if (!ok) return;
-        await this.service.cambiarEstado(t.id, 'en-curso');
+        await this.ocupado.mientras('Iniciando torneo', () =>
+            this.service.cambiarEstado(t.id, 'en-curso'),
+        );
         this.toast.exito('Torneo iniciado.');
     }
 

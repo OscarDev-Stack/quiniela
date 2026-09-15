@@ -16,6 +16,7 @@ import { AppUser } from '../../core/models/user.model';
 import { nombreOficial } from '../../core/models/equipos-liga-mx';
 import { ConfirmarService } from '../../shared/confirmar.service';
 import { ToastService } from '../../shared/toast.service';
+import { OcupadoService } from '../../shared/ocupado.service';
 
 @Component({
   selector: 'app-admin-competiciones',
@@ -669,6 +670,7 @@ export class AdminCompeticionesComponent {
   private readonly admin = inject(AdminService);
   private readonly confirmar = inject(ConfirmarService);
   private readonly toast = inject(ToastService);
+  private readonly ocupado = inject(OcupadoService);
 
   readonly competiciones = toSignal(this.service.competiciones(), {
     initialValue: [] as Competicion[],
@@ -804,7 +806,9 @@ export class AdminCompeticionesComponent {
       return;
     }
     try {
-      await this.service.guardarConfigApi(c.id, ligaId, temporada);
+      await this.ocupado.mientras('Guardando conexión API', () =>
+        this.service.guardarConfigApi(c.id, ligaId, temporada),
+      );
       this.avisar('Conexión con la API guardada.');
     } catch (e: unknown) {
       this.toast.error((e as Error)?.message ?? 'No se pudo guardar.');
@@ -820,7 +824,9 @@ export class AdminCompeticionesComponent {
     }
     this.trayendo.set(true);
     try {
-      const r = await this.service.traerJornadaApi(c.id, bor.numero);
+      const r = await this.ocupado.mientras('Trayendo jornada de la API', () =>
+        this.service.traerJornadaApi(c.id, bor.numero),
+      );
       bor.filas = r.partidos.map((p) => ({
         local: p.local,
         visitante: p.visitante,
@@ -892,7 +898,9 @@ export class AdminCompeticionesComponent {
   async refrescarTabla(c: Competicion): Promise<void> {
     this.refrescandoTabla.set(true);
     try {
-      const r = await this.service.refrescarTabla(c.id);
+      const r = await this.ocupado.mientras('Actualizando tabla', () =>
+        this.service.refrescarTabla(c.id),
+      );
       this.avisar(`Tabla actualizada: ${r.filas} equipos.`);
     } catch (e: unknown) {
       this.toast.error((e as Error)?.message ?? 'No se pudo actualizar la tabla.');
@@ -905,7 +913,9 @@ export class AdminCompeticionesComponent {
   async importarEquipos(c: Competicion): Promise<void> {
     this.importandoEquipos.set(true);
     try {
-      const r = await this.service.importarEquipos(c.id);
+      const r = await this.ocupado.mientras('Importando equipos', () =>
+        this.service.importarEquipos(c.id),
+      );
       this.avisar(
         r.agregados > 0
           ? `${r.agregados} equipo(s) agregados (${r.total} en total).`
@@ -922,7 +932,9 @@ export class AdminCompeticionesComponent {
   async traerResultados(c: Competicion, j: Jornada): Promise<void> {
     this.trayendo.set(true);
     try {
-      const r = await this.service.traerResultadosApi(c.id, j.id);
+      const r = await this.ocupado.mientras('Trayendo resultados de la API', () =>
+        this.service.traerResultadosApi(c.id, j.id),
+      );
       j.partidos = r.partidos;
       this.avisar(
         `${r.conResultado} resultado(s) traídos. Revisa y guarda antes de publicar.`,
@@ -942,7 +954,9 @@ export class AdminCompeticionesComponent {
   async completarFechas(c: Competicion, j: Jornada): Promise<void> {
     this.trayendo.set(true);
     try {
-      const r = await this.service.completarFechasJornadaApi(c.id, j.id);
+      const r = await this.ocupado.mientras('Completando fechas desde la API', () =>
+        this.service.completarFechasJornadaApi(c.id, j.id),
+      );
       j.partidos = r.partidos;
       this.avisar(
         r.completados > 0
@@ -1054,7 +1068,7 @@ export class AdminCompeticionesComponent {
       this.avisar('Escribe al menos dos equipos.');
       return;
     }
-    await this.service.guardarEquipos(c.id, lista);
+    await this.ocupado.mientras('Guardando equipos', () => this.service.guardarEquipos(c.id, lista));
     this.avisar(`${lista.length} equipos guardados.`);
   }
 
@@ -1271,8 +1285,10 @@ export class AdminCompeticionesComponent {
 
     this.resolviendo.set(true);
     try {
-      await this.service.guardarResultados(c.id, j.id, j.partidos);
-      const r = await this.service.resolverPendientes(c.id, j.id);
+      const r = await this.ocupado.mientras('Definiendo elecciones en espera', async () => {
+        await this.service.guardarResultados(c.id, j.id, j.partidos);
+        return this.service.resolverPendientes(c.id, j.id);
+      });
       this.avisar(
         `${r.resueltos} elección(es) definida(s), ${r.eliminados} eliminado(s).` +
         (r.cerrados.length ? ` Cerrados: ${r.cerrados.join(', ')}.` : ''),
@@ -1330,7 +1346,7 @@ export class AdminCompeticionesComponent {
       this.avisar('Ponle nombre a la competición.');
       return;
     }
-    await this.service.crear(this.nombre);
+    await this.ocupado.mientras('Creando competición', () => this.service.crear(this.nombre));
     this.nombre = '';
     this.avisar('Competición creada.');
   }
@@ -1365,7 +1381,9 @@ export class AdminCompeticionesComponent {
       ...(p.apiEventId ? { apiEventId: p.apiEventId } : {}),
       fechaInicio: this.localInputAIso(p.fechaInicio),
     }));
-    const r = await this.service.crearJornada(c.id, numero, cierre, conFecha);
+    const r = await this.ocupado.mientras(`Guardando jornada ${numero}`, () =>
+      this.service.crearJornada(c.id, numero, cierre, conFecha),
+    );
     this.borrador[c.id] = { numero: numero + 1, cierra: '', filas: [] };
     this.avisar(
       r.sobrescrita
@@ -1375,16 +1393,18 @@ export class AdminCompeticionesComponent {
   }
 
   async guardar(c: Competicion, j: Jornada): Promise<void> {
-    await this.service.guardarResultados(c.id, j.id, j.partidos);
-    // Recalcula la previa de las quinielas con lo capturado hasta ahora, para
-    // que los jugadores vean sus puntos parciales (incluidos los empates que
-    // se acaban de capturar) sin esperar a que se publique la jornada. Si
-    // falla, no bloquea: los resultados ya quedaron guardados.
-    try {
-      await this.service.previsualizarQuiniela(c.id, j.id);
-    } catch {
-      // La previa es un extra; si falla, los resultados ya están guardados.
-    }
+    await this.ocupado.mientras('Guardando resultados', async () => {
+      await this.service.guardarResultados(c.id, j.id, j.partidos);
+      // Recalcula la previa de las quinielas con lo capturado hasta ahora, para
+      // que los jugadores vean sus puntos parciales (incluidos los empates que
+      // se acaban de capturar) sin esperar a que se publique la jornada. Si
+      // falla, no bloquea: los resultados ya quedaron guardados.
+      try {
+        await this.service.previsualizarQuiniela(c.id, j.id);
+      } catch {
+        // La previa es un extra; si falla, los resultados ya están guardados.
+      }
+    });
     this.avisar('Resultados guardados.');
   }
 
@@ -1407,8 +1427,10 @@ export class AdminCompeticionesComponent {
 
     this.resolviendo.set(true);
     try {
-      await this.service.guardarResultados(c.id, j.id, j.partidos);
-      const r = await this.service.resolver(c.id, j.id);
+      const r = await this.ocupado.mientras(`Publicando jornada ${j.numero}`, async () => {
+        await this.service.guardarResultados(c.id, j.id, j.partidos);
+        return this.service.resolver(c.id, j.id);
+      });
       this.avisar(
         `Aplicado a ${r.torneos} torneo(s): ${r.sobreviven} siguen, ${r.eliminados} fuera` +
         (r.pendientes ? `, ${r.pendientes} en espera` : '') +

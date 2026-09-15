@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { BracketsService } from '../../core/services/brackets.service';
+import { OcupadoService } from '../../shared/ocupado.service';
 import { GruposService } from '../../core/services/grupos.service';
 import { Grupo } from '../../core/models/grupo.model';
 import { ToastService } from '../../shared/toast.service';
@@ -324,6 +325,7 @@ import { NavComponent } from '../../shared/nav.component';
 export class CrearBracketComponent {
   private readonly service = inject(BracketsService);
   private readonly gruposSrv = inject(GruposService);
+  private readonly ocupado = inject(OcupadoService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
   private readonly stats = inject(StatsService);
@@ -376,28 +378,30 @@ export class CrearBracketComponent {
 
     this.creando.set(true);
     try {
-      await this.service.crear({
-        nombre: this.nuevo.nombre.trim(),
-        modo: this.nuevo.modo,
-        config: {
-          equipos: this.nuevo.equipos,
-          armado: this.nuevo.armado,
-          avance: this.nuevo.avance,
-          formatoRondas: this.nuevo.formatoRondas,
-          formatoFinal: this.nuevo.formatoFinal,
-          desempateRondas: this.nuevo.desempateRondas,
-          desempateFinal: this.nuevo.desempateFinal,
-          reparto:
-            this.nuevo.modo === 'duenos' ? [100] : this.nuevo.reparto.split(',').map(Number),
-        },
-        puntaje: this.puntajeDeEscala(),
-        equipos,
-        costoEntrada: Number(this.nuevo.costoEntrada),
-        porcentajeBote: Number(this.nuevo.porcentajeBote),
-        cierraAt: this.nuevo.cierre ? new Date(this.nuevo.cierre) : null,
-        publico: this.nuevo.publico,
-        grupoId: this.nuevo.grupoId || null,
-      });
+      await this.ocupado.mientras('Creando eliminatoria', () =>
+        this.service.crear({
+          nombre: this.nuevo.nombre.trim(),
+          modo: this.nuevo.modo,
+          config: {
+            equipos: this.nuevo.equipos,
+            armado: this.nuevo.armado,
+            avance: this.nuevo.avance,
+            formatoRondas: this.nuevo.formatoRondas,
+            formatoFinal: this.nuevo.formatoFinal,
+            desempateRondas: this.nuevo.desempateRondas,
+            desempateFinal: this.nuevo.desempateFinal,
+            reparto:
+              this.nuevo.modo === 'duenos' ? [100] : this.nuevo.reparto.split(',').map(Number),
+          },
+          puntaje: this.puntajeDeEscala(),
+          equipos,
+          costoEntrada: Number(this.nuevo.costoEntrada),
+          porcentajeBote: Number(this.nuevo.porcentajeBote),
+          cierraAt: this.nuevo.cierre ? new Date(this.nuevo.cierre) : null,
+          publico: this.nuevo.publico,
+          grupoId: this.nuevo.grupoId || null,
+        }),
+      );
       this.stats.evento('bracket_creado', {
         modo: this.nuevo.modo,
         equipos: Number(this.nuevo.equipos),

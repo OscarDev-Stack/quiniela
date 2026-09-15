@@ -30,6 +30,7 @@ import { Jornada, fechaJornada, equiposDeJornada } from '../../core/models/compe
 import { CompeticionesService } from '../../core/services/competiciones.service';
 import { ConfirmarService } from '../../shared/confirmar.service';
 import { ToastService } from '../../shared/toast.service';
+import { OcupadoService } from '../../shared/ocupado.service';
 import { StatsService } from '../../shared/stats.service';
 
 @Component({
@@ -994,6 +995,7 @@ export class TorneoDetalleComponent {
   private readonly competiciones = inject(CompeticionesService);
   private readonly confirmar = inject(ConfirmarService);
   private readonly toast = inject(ToastService);
+  private readonly ocupado = inject(OcupadoService);
   private readonly stats = inject(StatsService);
 
   private readonly id = this.route.snapshot.paramMap.get('id')!;
@@ -1261,7 +1263,9 @@ export class TorneoDetalleComponent {
       aceptar: 'Iniciar',
     });
     if (!ok) return;
-    await this.service.cambiarEstado(this.id, 'en-curso');
+    await this.ocupado.mientras('Iniciando torneo', () =>
+      this.service.cambiarEstado(this.id, 'en-curso'),
+    );
     this.toast.exito('Torneo iniciado.');
   }
 
@@ -1447,12 +1451,14 @@ export class TorneoDetalleComponent {
 
     this.guardando.set(true);
     try {
-      await this.service.guardarQuiniela(
-        this.id,
-        lista.slice(0, j.partidos.length).map((m) => ({
-          local: Number(m.local),
-          visitante: Number(m.visitante),
-        })),
+      await this.ocupado.mientras('Guardando pronósticos', () =>
+        this.service.guardarQuiniela(
+          this.id,
+          lista.slice(0, j.partidos.length).map((m) => ({
+            local: Number(m.local),
+            visitante: Number(m.visitante),
+          })),
+        ),
       );
       this.stats.evento('quiniela_guardada', { partidos: j.partidos.length });
       this.toast.exito('Pronósticos guardados.');
@@ -1559,7 +1565,7 @@ export class TorneoDetalleComponent {
     this.mensajeRevivir.set('');
     this.errorRevivir.set(false);
     try {
-      await this.service.revivir(this.id);
+      await this.ocupado.mientras('Reviviendo', () => this.service.revivir(this.id));
       this.mensajeRevivir.set('¡Estás de vuelta! Elige con cuidado.');
     } catch (e: unknown) {
       this.errorRevivir.set(true);

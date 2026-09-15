@@ -4,6 +4,7 @@ import { PushService } from '../../shared/push.service';
 import { ToastService } from '../../shared/toast.service';
 import { StatsService } from '../../shared/stats.service';
 import { InstalarService } from '../../shared/instalar.service';
+import { OcupadoService } from '../../shared/ocupado.service';
 
 /**
  * Interruptor de notificaciones push para el perfil. Refleja el estado
@@ -113,6 +114,7 @@ export class NotificacionesBotonComponent {
   private readonly toast = inject(ToastService);
   private readonly stats = inject(StatsService);
   readonly instalar = inject(InstalarService);
+  private readonly ocupado = inject(OcupadoService);
 
   /**
    * Tokens de push del usuario (todos sus dispositivos), que llegan desde el
@@ -156,12 +158,12 @@ export class NotificacionesBotonComponent {
     this.trabajando.set(true);
     try {
       if (quiere) {
-        await this.push.activar();
+        await this.ocupado.mientras('Activando notificaciones', () => this.push.activar());
         this.localActivo.set(true);
         this.stats.evento('push_activado');
         this.toast.exito('Notificaciones activadas en este dispositivo.');
       } else {
-        await this.push.desactivar();
+        await this.ocupado.mientras('Desactivando notificaciones', () => this.push.desactivar());
         this.localActivo.set(false);
         this.toast.exito('Notificaciones desactivadas.');
       }

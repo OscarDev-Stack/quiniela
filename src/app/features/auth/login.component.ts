@@ -6,6 +6,7 @@ import { AuthCredential } from '@angular/fire/auth';
 import { AuthService } from '../../core/services/auth.service';
 import { StatsService } from '../../shared/stats.service';
 import { NovedadesService } from '../../shared/novedades.service';
+import { OcupadoService } from '../../shared/ocupado.service';
 import { APP_VERSION } from '../../core/version';
 import { consumirInvitacion, rutaDeInvitacion } from '../../shared/invitacion.util';
 
@@ -343,6 +344,7 @@ export class LoginComponent implements OnInit {
   private readonly db = inject(Firestore);
   private readonly stats = inject(StatsService);
   private readonly novedadesSrv = inject(NovedadesService);
+  private readonly ocupado = inject(OcupadoService);
   readonly version = APP_VERSION;
 
   /**
@@ -476,13 +478,12 @@ export class LoginComponent implements OnInit {
    */
   async confirmarVinculo(): Promise<void> {
     if (!this.credGooglePendiente || !this.passwordVincular) return;
+    const credGoogle = this.credGooglePendiente;
     this.error.set('');
     this.loading.set(true);
     try {
-      const cred = await this.auth.vincularConContrasena(
-        this.correoVincular(),
-        this.passwordVincular,
-        this.credGooglePendiente,
+      const cred = await this.ocupado.mientras('Conectando cuentas', () =>
+        this.auth.vincularConContrasena(this.correoVincular(), this.passwordVincular, credGoogle),
       );
       this.mostrarVinculo.set(false);
       this.credGooglePendiente = null;

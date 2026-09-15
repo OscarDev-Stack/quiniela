@@ -4,6 +4,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { AdminService } from '../../core/services/admin.service';
 import { AppUser } from '../../core/models/user.model';
 import { ConfirmarService } from '../../shared/confirmar.service';
+import { OcupadoService } from '../../shared/ocupado.service';
 import { ToastService } from '../../shared/toast.service';
 
 @Component({
@@ -224,6 +225,7 @@ export class AdminUsuariosComponent {
   private readonly admin = inject(AdminService);
   private readonly confirmar = inject(ConfirmarService);
   private readonly toast = inject(ToastService);
+  private readonly ocupado = inject(OcupadoService);
 
   readonly users = toSignal(this.admin.getUsers(), { initialValue: [] as AppUser[] });
   readonly calculandoTotales = signal(false);
@@ -293,7 +295,9 @@ export class AdminUsuariosComponent {
     });
     if (!ok) return;
     try {
-      const r = await this.admin.eliminarUsuarios([u.id]);
+      const r = await this.ocupado.mientras('Eliminando usuario', () =>
+        this.admin.eliminarUsuarios([u.id]),
+      );
       if (r.borrados > 0) {
         this.eliminados.set([...this.eliminados(), u.id]);
         this.toast.exito('Cuenta eliminada.');
@@ -320,7 +324,9 @@ export class AdminUsuariosComponent {
     });
     if (!ok) return;
     try {
-      const r = await this.admin.eliminarUsuarios(sinValidar.map((u) => u.id));
+      const r = await this.ocupado.mientras('Eliminando usuarios', () =>
+        this.admin.eliminarUsuarios(sinValidar.map((u) => u.id)),
+      );
       if (r.borrados > 0) {
         this.eliminados.set([...this.eliminados(), ...sinValidar.map((u) => u.id)]);
       }

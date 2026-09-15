@@ -8,6 +8,7 @@ import { UserService } from '../../core/services/user.service';
 import { ToastService } from '../../shared/toast.service';
 import { StatsService } from '../../shared/stats.service';
 import { NavComponent } from '../../shared/nav.component';
+import { OcupadoService } from '../../shared/ocupado.service';
 import { guardarInvitacion } from '../../shared/invitacion.util';
 
 /**
@@ -229,6 +230,7 @@ export class UnirseElimComponent {
   private readonly stats = inject(StatsService);
   private readonly auth = inject(Auth);
   private readonly users = inject(UserService);
+  private readonly ocupado = inject(OcupadoService);
 
   readonly codigo = (this.route.snapshot.paramMap.get('codigo') ?? '').toUpperCase();
   readonly sesion = toSignal(user(this.auth), { initialValue: null });
@@ -274,7 +276,7 @@ export class UnirseElimComponent {
     this.uniendo.set(true);
     this.error.set('');
     try {
-      const r = await this.brackets.unirse(this.codigo);
+      const r = await this.ocupado.mientras('Uniéndote', () => this.brackets.unirse(this.codigo));
       this.stats.evento('bracket_union');
       this.toast.exito('¡Listo! Ya estás dentro.');
       this.router.navigate(['/eliminatorias', r.id]);

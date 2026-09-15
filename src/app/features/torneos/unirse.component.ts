@@ -8,6 +8,7 @@ import { StatsService } from '../../shared/stats.service';
 import { ToastService } from '../../shared/toast.service';
 import { ModoTorneo } from '../../core/models/torneo.model';
 import { UserService } from '../../core/services/user.service';
+import { OcupadoService } from '../../shared/ocupado.service';
 import { guardarInvitacion, limpiarInvitacion } from '../../shared/invitacion.util';
 import { ReglasTorneoComponent } from './reglas-torneo.component';
 
@@ -208,6 +209,7 @@ export class UnirseComponent {
   private readonly stats = inject(StatsService);
   private readonly toast = inject(ToastService);
   private readonly users = inject(UserService);
+  private readonly ocupado = inject(OcupadoService);
 
   readonly codigo = (this.route.snapshot.paramMap.get('codigo') ?? '').toUpperCase();
   readonly sesion = toSignal(user(this.auth), { initialValue: null });
@@ -273,7 +275,9 @@ export class UnirseComponent {
     this.error.set('');
     this.cargando.set(true);
     try {
-      const r = await this.torneos.unirse(this.codigo);
+      const r = await this.ocupado.mientras('Uniéndote al torneo', () =>
+        this.torneos.unirse(this.codigo),
+      );
       this.stats.evento('torneo_union');
       limpiarInvitacion();
       if (r.costo > 0) {

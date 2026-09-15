@@ -7,6 +7,7 @@ import { GruposService } from '../../core/services/grupos.service';
 import { ContextoService } from '../../shared/contexto.service';
 import { ToastService } from '../../shared/toast.service';
 import { NavComponent } from '../../shared/nav.component';
+import { OcupadoService } from '../../shared/ocupado.service';
 import { guardarInvitacion, limpiarInvitacion } from '../../shared/invitacion.util';
 
 /**
@@ -162,6 +163,7 @@ export class UnirseGrupoComponent {
   private readonly contexto = inject(ContextoService);
   private readonly toast = inject(ToastService);
   private readonly auth = inject(Auth);
+  private readonly ocupado = inject(OcupadoService);
 
   readonly codigo = (this.route.snapshot.paramMap.get('codigo') ?? '').toUpperCase();
   readonly sesion = toSignal(user(this.auth), { initialValue: null });
@@ -178,7 +180,9 @@ export class UnirseGrupoComponent {
     this.uniendo.set(true);
     this.error.set('');
     try {
-      const r = await this.gruposSrv.unirse(this.codigo);
+      const r = await this.ocupado.mientras('Uniéndote al grupo', () =>
+        this.gruposSrv.unirse(this.codigo),
+      );
       limpiarInvitacion();
       this.toast.exito(`Te uniste a ${r.nombre}.`);
       // El grupo al que te unes se vuelve el contexto activo.

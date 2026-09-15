@@ -8,6 +8,7 @@ import { NavComponent } from '../../shared/nav.component';
 import { CargandoComponent } from '../../shared/cargando.component';
 import { CodigoInvitarComponent } from '../../shared/codigo-invitar.component';
 import { GruposService } from '../../core/services/grupos.service';
+import { OcupadoService } from '../../shared/ocupado.service';
 import { UserService } from '../../core/services/user.service';
 import { ToastService } from '../../shared/toast.service';
 import { Grupo, MiembroGrupo } from '../../core/models/grupo.model';
@@ -244,6 +245,7 @@ export class GrupoDetalleComponent {
   private readonly gruposSrv = inject(GruposService);
   private readonly users = inject(UserService);
   private readonly toast = inject(ToastService);
+  private readonly ocupadoSrv = inject(OcupadoService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
@@ -284,7 +286,9 @@ export class GrupoDetalleComponent {
   async hacerAdmin(m: MiembroGrupo): Promise<void> {
     this.ocupado.set(true);
     try {
-      await this.gruposSrv.hacerAdmin(this.id, m.uid);
+      await this.ocupadoSrv.mientras('Nombrando administrador', () =>
+        this.gruposSrv.hacerAdmin(this.id, m.uid),
+      );
       this.toast.exito(`${m.alias} ahora es administrador.`);
     } catch (e: unknown) {
       this.toast.error((e as Error)?.message ?? 'No se pudo nombrar administrador.');
@@ -297,7 +301,9 @@ export class GrupoDetalleComponent {
   async quitarAdmin(m: MiembroGrupo): Promise<void> {
     this.ocupado.set(true);
     try {
-      await this.gruposSrv.quitarAdmin(this.id, m.uid);
+      await this.ocupadoSrv.mientras('Quitando permiso', () =>
+        this.gruposSrv.quitarAdmin(this.id, m.uid),
+      );
       this.toast.exito(`${m.alias} ya no es administrador.`);
     } catch (e: unknown) {
       this.toast.error((e as Error)?.message ?? 'No se pudo quitar el rol.');
@@ -363,7 +369,9 @@ export class GrupoDetalleComponent {
   async agregar(uid: string): Promise<void> {
     this.ocupado.set(true);
     try {
-      await this.gruposSrv.agregarMiembro(this.id, uid);
+      await this.ocupadoSrv.mientras('Agregando miembro', () =>
+        this.gruposSrv.agregarMiembro(this.id, uid),
+      );
       this.toast.exito('Miembro agregado.');
       this.resultados.update((lista) => lista.filter((u) => u.uid !== uid));
     } catch (e: unknown) {
@@ -388,7 +396,9 @@ export class GrupoDetalleComponent {
   private async salir(nuevoAdminUid?: string): Promise<void> {
     this.ocupado.set(true);
     try {
-      const r = await this.gruposSrv.salir(this.id, nuevoAdminUid);
+      const r = await this.ocupadoSrv.mientras('Saliendo del grupo', () =>
+        this.gruposSrv.salir(this.id, nuevoAdminUid),
+      );
       this.toast.exito(r.eliminado ? 'Saliste. El grupo quedó vacío y se eliminó.' : 'Saliste del grupo.');
       this.router.navigate(['/grupos']);
     } catch (e: unknown) {

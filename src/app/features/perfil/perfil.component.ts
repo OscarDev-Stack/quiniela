@@ -18,6 +18,7 @@ import { UserService } from '../../core/services/user.service';
 import { NovedadesService } from '../../shared/novedades.service';
 import { RankingService, RankingDoc } from '../../core/services/ranking.service';
 import { PerfilService } from '../../core/services/perfil.service';
+import { OcupadoService } from '../../shared/ocupado.service';
 import { Trofeo } from '../../core/models/trofeo.model';
 import { APP_VERSION } from '../../core/version';
 
@@ -624,6 +625,7 @@ export class PerfilComponent {
   private readonly ranking = inject(RankingService);
   private readonly perfil = inject(PerfilService);
   private readonly authService = inject(AuthService);
+  private readonly ocupado = inject(OcupadoService);
   private readonly router = inject(Router);
 
   verMovimientos(): void {
@@ -700,7 +702,7 @@ export class PerfilComponent {
 
     this.guardandoAlias.set(true);
     try {
-      await this.perfil.cambiarAlias(nuevo);
+      await this.ocupado.mientras('Guardando alias', () => this.perfil.cambiarAlias(nuevo));
       this.stats.evento('alias_cambiado');
       this.stats.evento('perfil_editado', { campo: 'alias' });
       this.toast.exito('Nombre actualizado.');
@@ -808,7 +810,9 @@ export class PerfilComponent {
     this.enlaceTg.set('');
 
     try {
-      const enlace = await this.perfil.vincularTelegram();
+      const enlace = await this.ocupado.mientras('Vinculando Telegram', () =>
+        this.perfil.vincularTelegram(),
+      );
       // Guardamos el enlace para ofrecer un botón directo de respaldo.
       this.enlaceTg.set(enlace);
 
@@ -840,7 +844,7 @@ export class PerfilComponent {
 
     try {
       const chatId = this.me()?.telegramChatId ?? '';
-      await this.perfil.guardarTelegram(chatId, valor);
+      await this.ocupado.mientras('Guardando', () => this.perfil.guardarTelegram(chatId, valor));
       this.toast.exito(valor ? 'Avisos activados.' : 'Avisos en pausa.');
     } catch (e: unknown) {
       this.activo = !valor;
@@ -890,7 +894,9 @@ export class PerfilComponent {
     };
 
     try {
-      await this.perfil.guardarPrefsNotif(prefs);
+      await this.ocupado.mientras('Guardando preferencias', () =>
+        this.perfil.guardarPrefsNotif(prefs),
+      );
       this.toast.exito('Preferencias guardadas.');
     } catch (e: unknown) {
       // Revertimos el override de esa categoría.

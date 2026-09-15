@@ -7,6 +7,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ConfirmarDialogComponent } from './shared/confirmar-dialog.component';
 import { NovedadesComponent } from './shared/novedades.component';
 import { ToastsComponent } from './shared/toasts.component';
+import { OcupadoComponent } from './shared/ocupado.component';
 import { CargandoComponent } from './shared/cargando.component';
 import { ActualizacionService } from './shared/actualizacion.service';
 import { limpiarInvitacion } from './shared/invitacion.util';
@@ -25,6 +26,7 @@ import { APP_VERSION } from './core/version';
     ConfirmarDialogComponent,
     NovedadesComponent,
     ToastsComponent,
+    OcupadoComponent,
     CargandoComponent,
   ],
   templateUrl: './app.html',

@@ -20,6 +20,7 @@ import {
 import { Partido, TipoPartido, fechaCierre } from '../../core/models/partido.model';
 import { ResultadoPronostico } from '../../core/models/pronostico.model';
 import { CompeticionesService } from '../../core/services/competiciones.service';
+import { OcupadoService } from '../../shared/ocupado.service';
 import { Competicion } from '../../core/models/competicion.model';
 
 interface Opcion {
@@ -297,6 +298,7 @@ export class PronosticoComponent {
   private readonly service = inject(PronosticosService);
   private readonly users = inject(UserService);
   private readonly competiciones = inject(CompeticionesService);
+  private readonly ocupado = inject(OcupadoService);
 
   readonly multiplicadores = Array.from({ length: MULTIPLICADOR_MAX }, (_, i) => i + 1);
 
@@ -433,7 +435,9 @@ export class PronosticoComponent {
     this.error.set('');
     this.saving.set(true);
     try {
-      await this.service.crear(p, r, this.multiplicador());
+      await this.ocupado.mientras('Guardando pronóstico', () =>
+        this.service.crear(p, r, this.multiplicador()),
+      );
       this.stats.evento('pronostico_hecho', { multiplicador: this.multiplicador() });
       this.router.navigate(['/mis-pronosticos']);
     } catch (e: unknown) {

@@ -10,6 +10,7 @@ import { UserService } from '../../core/services/user.service';
 import { CompeticionesService } from '../../core/services/competiciones.service';
 import { ConfirmarService } from '../../shared/confirmar.service';
 import { ToastService } from '../../shared/toast.service';
+import { OcupadoService } from '../../shared/ocupado.service';
 import { Jornada, PartidoJornada } from '../../core/models/competicion.model';
 
 /**
@@ -175,6 +176,7 @@ export class LigaPanelComponent {
   private readonly service = inject(CompeticionesService);
   private readonly confirmar = inject(ConfirmarService);
   private readonly toast = inject(ToastService);
+  private readonly ocupado = inject(OcupadoService);
 
   readonly ligas = toSignal(this.users.misLigas$, { initialValue: [] as Array<{ id: string; nombre: string }> });
 
@@ -244,7 +246,9 @@ export class LigaPanelComponent {
 
   async guardar(competicionId: string, j: Jornada): Promise<void> {
     try {
-      await this.service.guardarResultados(competicionId, j.id, this.limpiar(j.partidos));
+      await this.ocupado.mientras('Guardando resultados', () =>
+        this.service.guardarResultados(competicionId, j.id, this.limpiar(j.partidos)),
+      );
       // Recalcula la previa de las quinielas con lo capturado hasta ahora,
       // para que los jugadores vean sus puntos parciales sin esperar a que
       // se publique toda la jornada. Si falla, no bloquea el guardado.
@@ -288,8 +292,10 @@ export class LigaPanelComponent {
 
     this.publicando.set(true);
     try {
-      await this.service.guardarResultados(competicionId, j.id, this.limpiar(j.partidos));
-      await this.service.resolver(competicionId, j.id);
+      await this.ocupado.mientras(`Publicando jornada ${j.numero}`, async () => {
+        await this.service.guardarResultados(competicionId, j.id, this.limpiar(j.partidos));
+        await this.service.resolver(competicionId, j.id);
+      });
       this.toast.exito(`Jornada ${j.numero} publicada y aplicada a los torneos.`);
     } catch {
       this.toast.error('No se pudo publicar.');
