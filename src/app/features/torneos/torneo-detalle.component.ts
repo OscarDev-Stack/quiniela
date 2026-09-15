@@ -1617,7 +1617,10 @@ export class TorneoDetalleComponent {
     try {
       await this.service.elegir(this.id, equipo);
       // Animación breve: el escudo del equipo elegido hace un "pop" y aterriza.
-      this.celebrando.set(equipo);
+      // Reiniciamos a null primero para forzar que el componente se recree y la
+      // animación vuelva a reproducirse aunque sea el mismo equipo.
+      this.celebrando.set(null);
+      setTimeout(() => this.celebrando.set(equipo));
       this.toast.exito(yaTenia ? `Cambiaste a ${equipo}.` : `Elegiste ${equipo}.`);
     } catch (e: unknown) {
       this.toast.error((e as Error)?.message ?? 'No se pudo guardar tu elección.');

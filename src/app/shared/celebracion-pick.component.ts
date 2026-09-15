@@ -1,4 +1,11 @@
-import { Component, input, output, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  OnInit,
+  inject,
+  input,
+  output,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { EscudoComponent } from './escudo.component';
 
@@ -13,15 +20,16 @@ import { EscudoComponent } from './escudo.component';
  *     <app-celebracion-pick [equipo]="eq" (fin)="celebrando.set(null)" />
  *   }
  *
- * Respeta `prefers-reduced-motion`: si el usuario lo prefiere, no anima y se
- * cierra de inmediato.
+ * El cierre se maneja con un temporizador de duración fija (no con
+ * `animationend`, que en producción puede traer nombres de animación
+ * minificados y no coincidir). Respeta `prefers-reduced-motion`.
  */
 @Component({
   selector: 'app-celebracion-pick',
   standalone: true,
   imports: [CommonModule, EscudoComponent],
   template: `
-    <div class="capa" (animationend)="alTerminar($event)">
+    <div class="capa">
       <div class="destello" aria-hidden="true"></div>
       <div class="escudo-pop">
         <app-escudo [equipo]="equipo()" [size]="160" />
@@ -79,22 +87,22 @@ import { EscudoComponent } from './escudo.component';
     `,
   ],
 })
-export class CelebracionPickComponent {
+export class CelebracionPickComponent implements OnInit {
   /** Nombre del equipo elegido, para mostrar su escudo. */
   readonly equipo = input.required<string>();
 
   /** Se emite cuando la animación termina, para que el padre la descarte. */
   readonly fin = output<void>();
 
-  /** Evita emitir el fin más de una vez (varias animaciones terminan juntas). */
-  private readonly terminado = signal(false);
+  private readonly destroyRef = inject(DestroyRef);
 
-  alTerminar(e: AnimationEvent): void {
-    // Solo reaccionamos a la animación de la capa (la más larga), no a las
-    // internas, para cerrar una sola vez cuando todo acaba.
-    if (e.animationName.startsWith('capa-fade') && !this.terminado()) {
-      this.terminado.set(true);
-      this.fin.emit();
-    }
+  /** Duración total de la animación (debe coincidir con los keyframes). */
+  private static readonly DURACION_MS = 1300;
+
+  ngOnInit(): void {
+    // Cierre por temporizador: robusto ante nombres de animación minificados
+    // en producción. Se limpia si el componente se destruye antes.
+    const t = setTimeout(() => this.fin.emit(), CelebracionPickComponent.DURACION_MS);
+    this.destroyRef.onDestroy(() => clearTimeout(t));
   }
 }

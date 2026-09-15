@@ -344,9 +344,16 @@ import { Jornada, PartidoJornada, horaPartido } from '../../core/models/competic
       .lado--btn {
         border: none; background: transparent;
         font: inherit; cursor: pointer; padding: 8px 6px;
-        border-radius: 10px; transition: color 0.14s ease;
+        border-radius: 10px; transition: color 0.14s ease, transform 0.1s ease;
         height: 100%;
+        -webkit-tap-highlight-color: transparent; /* sin recuadro gris en móvil */
+        -webkit-touch-callout: none; user-select: none;
+        outline: none;
       }
+      /* Feedback táctil en móvil (no hay hover): al presionar, el nombre se
+         tiñe de acento y el lado se hunde un poco. */
+      .lado--disp:not(.lado--elegido):active:not(:disabled) .nom { color: var(--accent); }
+      .lado--disp:not(.lado--elegido):active:not(:disabled) { transform: scale(0.97); }
 
       /* Marca de estado (check o candado) al costado. */
       .marca { flex-shrink: 0; }
@@ -357,13 +364,16 @@ import { Jornada, PartidoJornada, horaPartido } from '../../core/models/competic
          acento. El elegido no reacciona al hover. */
       .lado--disp:not(.lado--elegido):hover:not(:disabled) .nom { color: var(--accent); }
 
-      /* Hover sobre un lado disponible no elegido: crece el escudo de fondo de
-         ese mismo lado, dando el efecto de "zoom" sin recuadros. */
-      .duelo:has(.lado:not(.lado--der).lado--disp:not(.lado--elegido):hover:not(:disabled)) .escudo-fondo--izq:not(.escudo-fondo--activo) {
+      /* Hover/tap sobre un lado disponible no elegido: crece el escudo de fondo
+         de ese mismo lado, dando el efecto de "zoom" sin recuadros. Se incluye
+         :active para tener feedback en móvil (donde no hay hover). */
+      .duelo:has(.lado:not(.lado--der).lado--disp:not(.lado--elegido):hover:not(:disabled)) .escudo-fondo--izq:not(.escudo-fondo--activo),
+      .duelo:has(.lado:not(.lado--der).lado--disp:not(.lado--elegido):active:not(:disabled)) .escudo-fondo--izq:not(.escudo-fondo--activo) {
         opacity: 0.34; filter: blur(0) grayscale(0.05);
         transform: translateY(-50%) scale(1.05);
       }
-      .duelo:has(.lado--der.lado--disp:not(.lado--elegido):hover:not(:disabled)) .escudo-fondo--der:not(.escudo-fondo--activo) {
+      .duelo:has(.lado--der.lado--disp:not(.lado--elegido):hover:not(:disabled)) .escudo-fondo--der:not(.escudo-fondo--activo),
+      .duelo:has(.lado--der.lado--disp:not(.lado--elegido):active:not(:disabled)) .escudo-fondo--der:not(.escudo-fondo--activo) {
         opacity: 0.34; filter: blur(0) grayscale(0.05);
         transform: translateY(-50%) scale(1.05);
       }
