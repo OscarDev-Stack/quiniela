@@ -9,4 +9,4 @@
  *
  * Súbela a mano al desplegar.
  */
-export const APP_VERSION = '2.3.16';
+export const APP_VERSION = '2.3.17';
