@@ -358,6 +358,28 @@ export class LoginComponent implements OnInit {
   ngOnInit(): void {
     // Traza del embudo: cuánta gente llega a la pantalla de acceso.
     this.stats.evento('login_visto');
+    // PWA: si el usuario vuelve del login por redirección de Google, aquí
+    // recogemos el resultado y completamos la sesión.
+    void this.recogerRedireccionGoogle();
+  }
+
+  /**
+   * Recoge el resultado del login con Google por redirección (PWA). Si hay una
+   * sesión recién autenticada, completa el alta/entrada; si no había
+   * redirección pendiente, no hace nada. Los errores se manejan igual que el
+   * popup (p. ej. vinculación con cuenta de correo existente).
+   */
+  private async recogerRedireccionGoogle(): Promise<void> {
+    try {
+      const cred = await this.auth.resultadoRedireccionGoogle();
+      if (!cred) return;
+      this.loading.set(true);
+      await this.trasAutenticar(cred);
+    } catch (e: unknown) {
+      this.manejarErrorGoogle(e);
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   /** Abre el modal de novedades / presentación desde el botón del login. */
@@ -413,31 +435,38 @@ export class LoginComponent implements OnInit {
     this.loading.set(true);
     try {
       const cred = await this.auth.loginConGoogle();
+      // En PWA (redirección) cred es null: la página se está redirigiendo a
+      // Google y el resultado se recogerá al volver, en ngOnInit. Dejamos el
+      // loading encendido para que no parpadee mientras navega.
+      if (!cred) return;
       await this.trasAutenticar(cred);
     } catch (e: unknown) {
-      const code = (e as { code?: string })?.code;
-      // El correo ya existe con contraseña: pedimos la contraseña para
-      // vincular Google a esa misma cuenta en vez de bloquear.
-      if (code === 'auth/account-exists-with-different-credential') {
-        const credencial = this.auth.credencialGoogleDeError(e);
-        const correo =
-          (e as { customData?: { email?: string } })?.customData?.email ?? '';
-        if (credencial && correo) {
-          this.credGooglePendiente = credencial;
-          this.correoVincular.set(correo);
-          this.passwordVincular = '';
-          this.mostrarVinculo.set(true);
-        } else {
-          this.stats.evento('login_fallido', { metodo: 'google', motivo: code ?? 'desconocido' });
-          this.error.set(this.mapErrorGoogle(code));
-        }
-      } else {
-        this.stats.evento('login_fallido', { metodo: 'google', motivo: code ?? 'desconocido' });
-        this.error.set(this.mapErrorGoogle(code));
-      }
+      this.manejarErrorGoogle(e);
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /**
+   * Manejo común de errores del login con Google (popup o redirección). Si el
+   * correo ya existe con contraseña, abre el flujo de vinculación; si no,
+   * muestra el mensaje correspondiente.
+   */
+  private manejarErrorGoogle(e: unknown): void {
+    const code = (e as { code?: string })?.code;
+    if (code === 'auth/account-exists-with-different-credential') {
+      const credencial = this.auth.credencialGoogleDeError(e);
+      const correo = (e as { customData?: { email?: string } })?.customData?.email ?? '';
+      if (credencial && correo) {
+        this.credGooglePendiente = credencial;
+        this.correoVincular.set(correo);
+        this.passwordVincular = '';
+        this.mostrarVinculo.set(true);
+        return;
+      }
+    }
+    this.stats.evento('login_fallido', { metodo: 'google', motivo: code ?? 'desconocido' });
+    this.error.set(this.mapErrorGoogle(code));
   }
 
   /**

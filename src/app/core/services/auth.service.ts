@@ -6,6 +6,8 @@ import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
     signInWithPopup,
+    signInWithRedirect,
+    getRedirectResult,
     GoogleAuthProvider,
     AuthCredential,
     linkWithCredential,
@@ -31,16 +33,52 @@ export class AuthService {
     }
 
     /**
-     * Inicia sesión (o registra) con la cuenta de Google mediante un popup.
-     * Devuelve la credencial completa: el llamador decide si es la primera
-     * vez del usuario para crear su documento en Firestore.
+     * ¿La app corre instalada como PWA (modo standalone)? En ese entorno el
+     * popup de Google no funciona de forma fiable (se bloquea o pierde el
+     * contexto), así que ahí usamos el flujo por redirección.
      */
-    loginConGoogle(): Promise<UserCredential> {
+    private esStandalone(): boolean {
+        try {
+            return (
+                window.matchMedia?.('(display-mode: standalone)')?.matches === true ||
+                // iOS marca la PWA instalada con esta propiedad no estándar.
+                (window.navigator as unknown as { standalone?: boolean }).standalone === true
+            );
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Inicia sesión (o registra) con la cuenta de Google.
+     *
+     * En navegador normal usa un popup y devuelve la credencial de inmediato.
+     * En PWA instalada usa redirección: navega a Google, y al volver la app se
+     * recarga; el resultado se recoge con `resultadoRedireccionGoogle()` al
+     * arrancar. En ese caso este método devuelve `null` (no hay credencial que
+     * entregar en el mismo tick porque la página se va a redirigir).
+     */
+    async loginConGoogle(): Promise<UserCredential | null> {
         const provider = new GoogleAuthProvider();
         // Fuerza a elegir cuenta cada vez, en lugar de reusar la sesión activa
         // del navegador sin preguntar.
         provider.setCustomParameters({ prompt: 'select_account' });
+
+        if (this.esStandalone()) {
+            await signInWithRedirect(this.auth, provider);
+            return null; // el resultado llega tras recargar (getRedirectResult)
+        }
         return signInWithPopup(this.auth, provider);
+    }
+
+    /**
+     * Recoge el resultado del login por redirección (PWA). Se llama al cargar
+     * la pantalla de login. Devuelve la credencial si el usuario acaba de
+     * volver de Google, o `null` si no había redirección pendiente. Puede
+     * lanzar el mismo error de `account-exists-with-different-credential`.
+     */
+    resultadoRedireccionGoogle(): Promise<UserCredential | null> {
+        return getRedirectResult(this.auth);
     }
 
     /**
