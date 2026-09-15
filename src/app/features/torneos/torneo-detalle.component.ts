@@ -17,6 +17,7 @@ import { CartonesJornadaComponent } from './cartones-jornada.component';
 import { PicksJornadaComponent } from './picks-jornada.component';
 import { TablaLigaComponent } from './tabla-liga.component';
 import { CelebracionVictoriaComponent } from '../../shared/celebracion-victoria.component';
+import { CelebracionPickComponent } from '../../shared/celebracion-pick.component';
 import { TorneosService } from '../../core/services/torneos.service';
 import {
   Torneo,
@@ -43,8 +44,12 @@ import { StatsService } from '../../shared/stats.service';
     CargandoComponent,
     EscudoComponent,
     CelebracionVictoriaComponent,
+    CelebracionPickComponent,
   ],
   template: `
+    @if (celebrando(); as eq) {
+      <app-celebracion-pick [equipo]="eq" (fin)="celebrando.set(null)" />
+    }
     <div class="screen">
       <app-nav [back]="true" [title]="torneo()?.nombre ?? 'Torneo'" />
 
@@ -297,8 +302,12 @@ import { StatsService } from '../../shared/stats.service';
         <!-- SURVIVOR: tu elección de la jornada, destacada arriba con el escudo grande. -->
         @if (!esQuiniela() && t.estado === 'en-curso' && miPick(); as p) {
           <section class="hero-pick">
-            <span class="hero-pick-etq">Tu elección · Jornada {{ p.jornada }}</span>
-            <app-escudo class="hero-pick-escudo" [equipo]="p.equipo" [size]="72" />
+            <!-- Escudo gigante de fondo, integrado como marca de agua. -->
+            <span class="hero-pick-marca" aria-hidden="true">
+              <app-escudo [equipo]="p.equipo" [size]="180" />
+            </span>
+            <span class="hero-pick-etq"><i class="ti ti-trophy"></i> Tu elección · Jornada {{ p.jornada }}</span>
+            <app-escudo class="hero-pick-escudo" [equipo]="p.equipo" [size]="80" />
             <span class="hero-pick-eq">{{ p.equipo }}</span>
             @if (puedeElegir()) {
               <span class="hero-pick-nota">Puedes cambiarla mientras la jornada siga abierta.</span>
@@ -880,24 +889,49 @@ import { StatsService } from '../../shared/stats.service';
 
       .usados { font-size: 11px; color: var(--text-muted); margin: 12px 0 0; }
 
-      /* Hero de la elección (survivor): escudo grande y destacado. */
+      /* Hero de la elección (survivor): tarjeta destacada con el mismo lenguaje
+         que los enfrentamientos: degradado, borde de acento, sombra y el
+         escudo gigante integrado de fondo. */
       .hero-pick {
-        display: flex; flex-direction: column; align-items: center; gap: 8px;
-        text-align: center; margin-bottom: 16px; padding: 20px 16px;
-        border: 1px solid var(--accent-fill);
-        border-radius: 16px;
-        background: linear-gradient(180deg,
-          color-mix(in srgb, var(--accent-fill) 14%, transparent),
-          var(--surface-2));
+        position: relative; overflow: hidden;
+        display: flex; flex-direction: column; align-items: center; gap: 10px;
+        text-align: center; margin-bottom: 16px; padding: 22px 18px 24px;
+        border: 1px solid var(--accent);
+        border-radius: 18px;
+        background: linear-gradient(160deg,
+          color-mix(in srgb, var(--accent) 26%, transparent),
+          var(--surface-2) 72%);
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28), 0 0 0 1px var(--accent) inset;
       }
+      /* Franja de acento superior, como en las tarjetas de enfrentamiento. */
+      .hero-pick::before {
+        content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
+        background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      }
+      /* Escudo gigante de fondo, difuminado e integrado. */
+      .hero-pick-marca {
+        position: absolute; right: -30px; top: 50%; z-index: 0;
+        transform: translateY(-50%);
+        opacity: 0.12; filter: grayscale(0.15);
+        pointer-events: none; user-select: none;
+      }
+      .hero-pick-etq,
+      .hero-pick-escudo,
+      .hero-pick-eq,
+      .hero-pick-nota { position: relative; z-index: 1; }
       .hero-pick-etq {
-        font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+        display: inline-flex; align-items: center; gap: 6px;
+        font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
         color: var(--accent-text);
       }
+      .hero-pick-etq .ti { font-size: 13px; }
       .hero-pick-escudo {
-        filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.18));
+        filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.35));
       }
-      .hero-pick-eq { font-size: 20px; font-weight: 800; color: var(--text-primary); }
+      .hero-pick-eq {
+        font-size: 24px; font-weight: 800; color: var(--text-primary);
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+      }
       .hero-pick-nota { font-size: 12px; color: var(--text-secondary); }
 
       /* Botón para plegar/desplegar los eliminados. */
@@ -1038,6 +1072,12 @@ export class TorneoDetalleComponent {
 
   private readonly pickSignal = signal<Pick | null>(null);
   readonly miPick = computed(() => this.pickSignal());
+
+  /**
+   * Equipo que se está celebrando ahora mismo (animación breve al elegir).
+   * null cuando no hay animación en curso.
+   */
+  readonly celebrando = signal<string | null>(null);
 
   constructor() {
     const reloj = setInterval(() => this.ahora.set(Date.now()), 30000);
@@ -1576,6 +1616,8 @@ export class TorneoDetalleComponent {
     this.guardando.set(true);
     try {
       await this.service.elegir(this.id, equipo);
+      // Animación breve: el escudo del equipo elegido hace un "pop" y aterriza.
+      this.celebrando.set(equipo);
       this.toast.exito(yaTenia ? `Cambiaste a ${equipo}.` : `Elegiste ${equipo}.`);
     } catch (e: unknown) {
       this.toast.error((e as Error)?.message ?? 'No se pudo guardar tu elección.');
