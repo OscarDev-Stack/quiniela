@@ -8,6 +8,7 @@ import { ConfirmarDialogComponent } from './shared/confirmar-dialog.component';
 import { NovedadesComponent } from './shared/novedades.component';
 import { ToastsComponent } from './shared/toasts.component';
 import { OcupadoComponent } from './shared/ocupado.component';
+import { OcupadoService } from './shared/ocupado.service';
 import { CargandoComponent } from './shared/cargando.component';
 import { ActualizacionService } from './shared/actualizacion.service';
 import { limpiarInvitacion } from './shared/invitacion.util';
@@ -40,6 +41,7 @@ export class App {
   private readonly router = inject(Router);
   private readonly users = inject(UserService);
   private readonly stats = inject(StatsService);
+  private readonly ocupado = inject(OcupadoService);
 
   /** Hay una versión nueva descargada y lista para usarse. */
   readonly hayActualizacion = signal(false);
@@ -110,6 +112,18 @@ export class App {
           limpiarInvitacion();
         }
       });
+
+    // Red de seguridad para el overlay bloqueante de acciones: si por lo que
+    // sea quedó encendido (una acción que se colgó en iOS PWA, por ejemplo) y
+    // el usuario logra navegar, lo apagamos al completar cualquier navegación
+    // para no dejar la pantalla secuestrada. El servicio ya tiene un tope de
+    // tiempo propio; esto es una salvaguarda adicional atada a la navegación.
+    this.router.events
+      .pipe(
+        filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => this.ocupado.ocultar());
 
     // Las novedades ya NO se abren solas al entrar (era invasivo). Ahora se
     // muestran solo cuando el usuario toca el botón "Novedades" del login o del

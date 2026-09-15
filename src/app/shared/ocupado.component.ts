@@ -18,8 +18,14 @@ import { OcupadoService } from './ocupado.service';
     standalone: true,
     template: `
     @if (ocupado.activo()) {
-      <div class="capa" role="status" aria-live="assertive" aria-busy="true">
-        <div class="tarjeta">
+      <div
+        class="capa"
+        role="status"
+        aria-live="assertive"
+        aria-busy="true"
+        (click)="ocupado.ocultar()"
+      >
+        <div class="tarjeta" (click)="$event.stopPropagation()">
           <span class="spinner" aria-hidden="true"></span>
           <p>{{ ocupado.texto() }}…</p>
         </div>
