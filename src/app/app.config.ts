@@ -32,6 +32,27 @@ import { environment } from '../environments/environment';
 // Fechas, números y monedas en español de México.
 registerLocaleData(localeEsMx, 'es-MX');
 
+/**
+ * Devuelve la config de Firebase con el `authDomain` ajustado al dominio real
+ * desde el que corre la app, si ese dominio es un hosting de Firebase. Esto
+ * hace que el login con Google sea first-party (mismo dominio) y funcione en
+ * la PWA instalada de iOS/Safari. Ver comentario en `provideFirebaseApp`.
+ */
+function resolverConfigFirebase() {
+  const base = environment.firebase;
+  try {
+    const host = window.location.hostname;
+    // Solo confiamos en dominios de Firebase Hosting del propio proyecto.
+    const esHostingFirebase = host.endsWith('.web.app') || host.endsWith('.firebaseapp.com');
+    if (esHostingFirebase && host !== base.authDomain) {
+      return { ...base, authDomain: host };
+    }
+  } catch {
+    // Sin window (SSR/prerender) o cualquier fallo: usamos el authDomain base.
+  }
+  return base;
+}
+
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
@@ -74,7 +95,20 @@ export const appConfig: ApplicationConfig = {
       }),
     ),
 
-    provideFirebaseApp(() => initializeApp(environment.firebase)),
+    /**
+     * Inicializa Firebase usando como `authDomain` el MISMO dominio desde el
+     * que se abrió la app, cuando ese dominio es un hosting de Firebase
+     * (*.web.app / *.firebaseapp.com). Motivo: el login con Google en la PWA
+     * instalada de iOS/Safari falla si el `authDomain` es cross-domain
+     * (el storage particionado de WebKit pierde el estado entre ida y vuelta).
+     * Al forzar el authDomain al propio dominio de hosting, el flujo queda
+     * first-party y funciona. Firebase Hosting sirve /__/auth/ en ambos
+     * dominios, así que cualquiera de los dos es válido.
+     *
+     * En local o en un dominio no reconocido, se conserva el authDomain del
+     * environment.
+     */
+    provideFirebaseApp(() => initializeApp(resolverConfigFirebase())),
 
     /**
      * Lista de almacenamientos en orden de preferencia.
